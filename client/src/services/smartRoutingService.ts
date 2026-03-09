@@ -8,6 +8,8 @@
  * - Lets users choose when prices are similar
  */
 
+import { validateLagosConnection, toSmartRouteMode } from './lagosRouteRules';
+
 // Haversine formula to calculate distance between two coordinates
 function calculateDistance(
   lat1: number,
@@ -205,10 +207,23 @@ function isValidLeg(mode: TransportMode, distanceKm: number, isFirstOrLastLeg: b
 }
 
 /**
- * Choose the best transport mode for a given distance and leg position.
- * Returns the most practical mode for Lagos conditions.
+ * Choose the best transport mode for a given distance, leg position, and location names.
+ * Checks Lagos connection rules to prevent impractical walking directions.
  */
-function chooseBestMode(distanceKm: number, isFirstOrLastLeg: boolean): TransportMode {
+function chooseBestMode(
+  distanceKm: number,
+  isFirstOrLastLeg: boolean,
+  fromName?: string,
+  toName?: string
+): TransportMode {
+  // Check Lagos-specific connection rules (e.g. no walking Lekki Phase 1 → VI)
+  if (fromName && toName) {
+    const connectionCheck = validateLagosConnection(fromName, toName);
+    if (!connectionCheck.isValid && connectionCheck.suggestedMode) {
+      return toSmartRouteMode(connectionCheck.suggestedMode);
+    }
+  }
+  
   // Walk if close enough
   if (distanceKm <= CONFIG.TRANSPORT_RULES.walk.maxKm) {
     return 'walk';
@@ -455,9 +470,9 @@ function buildSegmentedRoute(
     nearestOriginStop.latitude, nearestOriginStop.longitude
   );
   
-  // First mile: choose best mode based on distance
+  // First mile: choose best mode based on distance and location
   if (distanceToFirstStop >= CONFIG.MIN_LEG_DISTANCE_KM) {
-    const firstMode = chooseBestMode(distanceToFirstStop, true);
+    const firstMode = chooseBestMode(distanceToFirstStop, true, origin.name, nearestOriginStop.name);
     legs.push(buildLeg(firstMode, origin, nearestOriginStop));
   }
   
@@ -470,19 +485,19 @@ function buildSegmentedRoute(
   if (stopToStopDistance >= CONFIG.TRANSPORT_RULES.danfo.minKm) {
     legs.push(buildLeg('danfo', nearestOriginStop, nearestDestStop));
   } else if (stopToStopDistance >= CONFIG.MIN_LEG_DISTANCE_KM) {
-    // Too short for danfo, use keke between stops
-    const midMode = chooseBestMode(stopToStopDistance, false);
+    // Too short for danfo, use best mode
+    const midMode = chooseBestMode(stopToStopDistance, false, nearestOriginStop.name, nearestDestStop.name);
     legs.push(buildLeg(midMode, nearestOriginStop, nearestDestStop));
   }
   
-  // Last mile: choose best mode based on distance
+  // Last mile: choose best mode based on distance and location
   const distanceFromLastStop = calculateDistance(
     nearestDestStop.latitude, nearestDestStop.longitude,
     destination.latitude, destination.longitude
   );
   
   if (distanceFromLastStop >= CONFIG.MIN_LEG_DISTANCE_KM) {
-    const lastMode = chooseBestMode(distanceFromLastStop, true);
+    const lastMode = chooseBestMode(distanceFromLastStop, true, nearestDestStop.name, destination.name);
     legs.push(buildLeg(lastMode, nearestDestStop, destination));
   }
   
