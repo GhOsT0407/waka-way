@@ -224,6 +224,11 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                         { id: 'origin', coordinate: activeRoute.origin_coords, title: 'Start', icon: 'location' },
                         { id: 'destination', coordinate: activeRoute.destination_coords, title: 'Destination', icon: 'flag' }
                     ]}
+                    routePolyline={
+                        activeRoute.origin_coords && activeRoute.destination_coords
+                            ? [activeRoute.origin_coords, activeRoute.destination_coords]
+                            : undefined
+                    }
                     directions={{
                         origin: activeRoute.origin_coords,
                         destination: activeRoute.destination_coords,

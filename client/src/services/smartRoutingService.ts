@@ -99,7 +99,13 @@ export interface SmartRouteResult {
 const CONFIG = {
   // Walking thresholds
   MAX_COMFORTABLE_WALK_KM: 0.5,
-  MAX_WALK_TO_BUS_STOP_KM: 1.2,
+  MAX_WALK_TO_BUS_STOP_KM: 1.0,
+  
+  // Minimum distance to bother adding a leg (50 meters)
+  MIN_LEG_DISTANCE_KM: 0.05,
+  
+  // Maximum distance a bus stop can be from the destination to be useful
+  MAX_BUS_STOP_DISTANCE_KM: 5,
   
   // Speed estimates (km/h)
   SPEEDS: {
@@ -136,6 +142,16 @@ const CONFIG = {
   
   // Similar price threshold (percentage)
   SIMILAR_PRICE_THRESHOLD: 15, // If prices are within 15%, let user choose
+  
+  // Transport rules: realistic distance constraints per mode
+  TRANSPORT_RULES: {
+    walk:  { minKm: 0.0, maxKm: 0.5,  firstOrLastLegOnly: true  },
+    keke:  { minKm: 0.5, maxKm: 5.0,  firstOrLastLegOnly: true  },
+    okada: { minKm: 0.5, maxKm: 8.0,  firstOrLastLegOnly: true  },
+    danfo: { minKm: 3.0, maxKm: 50.0, firstOrLastLegOnly: false },
+    brt:   { minKm: 5.0, maxKm: 60.0, firstOrLastLegOnly: false },
+    ferry: { minKm: 2.0, maxKm: 30.0, firstOrLastLegOnly: false },
+  } as Record<TransportMode, { minKm: number; maxKm: number; firstOrLastLegOnly: boolean }>,
 };
 
 // ============================================================
@@ -174,6 +190,53 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 11);
 }
 
+/**
+ * Validate a route leg against transport rules
+ * Ensures modes are only used at practical distances and positions
+ */
+function isValidLeg(mode: TransportMode, distanceKm: number, isFirstOrLastLeg: boolean): boolean {
+  const rule = CONFIG.TRANSPORT_RULES[mode];
+  if (!rule) return false;
+  
+  const withinDistance = distanceKm >= rule.minKm && distanceKm <= rule.maxKm;
+  const positionOk = rule.firstOrLastLegOnly ? isFirstOrLastLeg : true;
+  
+  return withinDistance && positionOk;
+}
+
+/**
+ * Choose the best transport mode for a given distance and leg position.
+ * Returns the most practical mode for Lagos conditions.
+ */
+function chooseBestMode(distanceKm: number, isFirstOrLastLeg: boolean): TransportMode {
+  // Walk if close enough
+  if (distanceKm <= CONFIG.TRANSPORT_RULES.walk.maxKm) {
+    return 'walk';
+  }
+  
+  // For first/last mile connectors
+  if (isFirstOrLastLeg) {
+    // Keke for short connector trips (0.5-5km)
+    if (distanceKm <= CONFIG.TRANSPORT_RULES.keke.maxKm) {
+      return 'keke';
+    }
+    // Okada for slightly longer connectors (5-8km)
+    if (distanceKm <= CONFIG.TRANSPORT_RULES.okada.maxKm) {
+      return 'okada';
+    }
+    // Beyond okada range — still use keke (cap at max, it's the safest bet)
+    return 'keke';
+  }
+  
+  // For main transit legs
+  if (distanceKm >= CONFIG.TRANSPORT_RULES.danfo.minKm) {
+    return 'danfo';
+  }
+  
+  // Short mid-route gap (< 3km) — use keke as connector
+  return 'keke';
+}
+
 function findNearestBusStop(lat: number, lng: number): Location | null {
   let nearest: Location | null = null;
   let minDistance = Infinity;
@@ -195,6 +258,7 @@ function findBusStopsNearDestination(lat: number, lng: number, maxResults = 3): 
       ...stop,
       distance: calculateDistance(lat, lng, stop.latitude, stop.longitude)
     }))
+    .filter(stop => stop.distance <= CONFIG.MAX_BUS_STOP_DISTANCE_KM)
     .sort((a, b) => a.distance - b.distance)
     .slice(0, maxResults);
 }
@@ -391,34 +455,35 @@ function buildSegmentedRoute(
     nearestOriginStop.latitude, nearestOriginStop.longitude
   );
   
-  // First mile: Walk or Keke to bus stop
-  if (distanceToFirstStop <= CONFIG.MAX_COMFORTABLE_WALK_KM) {
-    legs.push(buildLeg('walk', origin, nearestOriginStop));
-  } else if (distanceToFirstStop <= CONFIG.MAX_WALK_TO_BUS_STOP_KM) {
-    // Offer walk but mention it's a bit long
-    const walkLeg = buildLeg('walk', origin, nearestOriginStop);
-    walkLeg.instruction += ' (10-15 min walk)';
-    legs.push(walkLeg);
-  } else {
-    // Too far to walk, take keke
-    legs.push(buildLeg('keke', origin, nearestOriginStop));
+  // First mile: choose best mode based on distance
+  if (distanceToFirstStop >= CONFIG.MIN_LEG_DISTANCE_KM) {
+    const firstMode = chooseBestMode(distanceToFirstStop, true);
+    legs.push(buildLeg(firstMode, origin, nearestOriginStop));
   }
   
-  // Main transit: Bus from stop to stop
-  legs.push(buildLeg('danfo', nearestOriginStop, nearestDestStop));
+  // Main transit: Bus between stops (only if distance justifies it)
+  const stopToStopDistance = calculateDistance(
+    nearestOriginStop.latitude, nearestOriginStop.longitude,
+    nearestDestStop.latitude, nearestDestStop.longitude
+  );
   
-  // Last mile: Walk or Keke from bus stop to destination
+  if (stopToStopDistance >= CONFIG.TRANSPORT_RULES.danfo.minKm) {
+    legs.push(buildLeg('danfo', nearestOriginStop, nearestDestStop));
+  } else if (stopToStopDistance >= CONFIG.MIN_LEG_DISTANCE_KM) {
+    // Too short for danfo, use keke between stops
+    const midMode = chooseBestMode(stopToStopDistance, false);
+    legs.push(buildLeg(midMode, nearestOriginStop, nearestDestStop));
+  }
+  
+  // Last mile: choose best mode based on distance
   const distanceFromLastStop = calculateDistance(
     nearestDestStop.latitude, nearestDestStop.longitude,
     destination.latitude, destination.longitude
   );
   
-  if (distanceFromLastStop <= CONFIG.MAX_COMFORTABLE_WALK_KM) {
-    legs.push(buildLeg('walk', nearestDestStop, destination));
-  } else if (distanceFromLastStop <= CONFIG.MAX_WALK_TO_BUS_STOP_KM) {
-    legs.push(buildLeg('walk', nearestDestStop, destination));
-  } else {
-    legs.push(buildLeg('keke', nearestDestStop, destination));
+  if (distanceFromLastStop >= CONFIG.MIN_LEG_DISTANCE_KM) {
+    const lastMode = chooseBestMode(distanceFromLastStop, true);
+    legs.push(buildLeg(lastMode, nearestDestStop, destination));
   }
   
   // Calculate totals
@@ -473,15 +538,7 @@ export function calculateSmartRoute(
   
   const options: RouteOption[] = [];
   
-  // Option 1: Direct Keke
-  const directKeke = buildDirectRoute(origin, destination, 'keke');
-  options.push(directKeke);
-  
-  // Option 2: Direct Okada (faster but similar price)
-  const directOkada = buildDirectRoute(origin, destination, 'okada');
-  options.push(directOkada);
-  
-  // Option 3: Segmented route (if distance > 3km)
+  // Segmented route (bus stop to bus stop)
   if (totalDistance > 3) {
     const nearestOriginStop = findNearestBusStop(originLat, originLng);
     const destStops = findBusStopsNearDestination(destLat, destLng);
@@ -492,10 +549,6 @@ export function calculateSmartRoute(
       
       const segmented = buildSegmentedRoute(origin, destination, nearestOriginStop, nearestDestStop);
       options.push(segmented);
-      
-      // Option 4: Direct Danfo (if there's a major route)
-      const directDanfo = buildDirectRoute(origin, destination, 'danfo');
-      options.push(directDanfo);
     }
   }
   
@@ -521,11 +574,8 @@ export function calculateSmartRoute(
     if (option.isFastest) option.tags.push('Fastest');
   }
   
-  // Calculate comparison
-  const directOption = options.find(o => o.type === 'direct');
-  const segmentedOption = options.find(o => o.type === 'segmented');
-  
-  let comparison = {
+  // Comparison data
+  const comparison = {
     priceDifference: 0,
     priceDifferencePercent: 0,
     timeDifference: 0,
@@ -533,47 +583,13 @@ export function calculateSmartRoute(
     comparisonText: '',
   };
   
-  if (directOption && segmentedOption) {
-    const priceDiff = directOption.totalPriceMax - segmentedOption.totalPriceMax;
-    const priceDiffPercent = Math.abs(priceDiff) / directOption.totalPriceMax * 100;
-    const timeDiff = directOption.totalDurationMins - segmentedOption.totalDurationMins;
-    
-    comparison = {
-      priceDifference: priceDiff,
-      priceDifferencePercent: priceDiffPercent,
-      timeDifference: timeDiff,
-      shouldLetUserChoose: priceDiffPercent <= CONFIG.SIMILAR_PRICE_THRESHOLD,
-      comparisonText: '',
-    };
-    
-    if (priceDiff > 0) {
-      comparison.comparisonText = `Bus route saves you ₦${Math.abs(priceDiff).toLocaleString()}`;
-    } else if (priceDiff < 0) {
-      comparison.comparisonText = `Direct route saves you ₦${Math.abs(priceDiff).toLocaleString()}`;
-    }
-    
-    if (comparison.shouldLetUserChoose) {
-      comparison.comparisonText = 'Prices are similar - choose your preference!';
-    }
-  }
-  
   // Determine recommended option
   let recommendedOption = cheapestOption;
   
   if (cheapestOption && fastestOption && cheapestOption.id !== fastestOption.id) {
-    // If segmented is cheaper, recommend it
-    if (segmentedOption?.isCheapest) {
-      recommendedOption = segmentedOption;
-      recommendedOption.isRecommended = true;
-      recommendedOption.recommendationReason = `Saves you ₦${Math.abs(comparison.priceDifference).toLocaleString()} compared to direct ride`;
-    } else if (comparison.shouldLetUserChoose) {
-      // Similar prices - don't force a recommendation
-      recommendedOption = null;
-    } else {
-      recommendedOption = cheapestOption;
-      recommendedOption.isRecommended = true;
-      recommendedOption.recommendationReason = 'Best value for money';
-    }
+    recommendedOption = cheapestOption;
+    recommendedOption.isRecommended = true;
+    recommendedOption.recommendationReason = 'Best value for money';
   } else if (cheapestOption) {
     cheapestOption.isRecommended = true;
     cheapestOption.recommendationReason = 'Best option for this trip';

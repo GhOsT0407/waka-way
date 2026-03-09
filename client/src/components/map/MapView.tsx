@@ -400,8 +400,12 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
           />
         )}
 
-        {/* Directions */}
-        {directions && directions.apikey && directions.apikey !== 'YOUR_GOOGLE_MAPS_API_KEY_HERE' && (
+        {/* Directions - only use Google Directions API if a real API key is provided */}
+        {directions && directions.apikey && 
+         !directions.apikey.includes('YOUR_') && 
+         !directions.apikey.includes('ACTUAL') && 
+         !directions.apikey.includes('HERE') &&
+         directions.apikey.length > 20 && (
           <MapViewDirections
             origin={directions.origin}
             destination={directions.destination}

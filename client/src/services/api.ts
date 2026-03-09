@@ -404,5 +404,92 @@ export const createReport = async (data: {
   return response.data;
 };
 
-export default apiClient;
+// Corridors
+export const getCorridors = async (params?: {
+  city?: number;
+  primary_mode?: string;
+  is_active?: boolean;
+  search?: string;
+  page?: number;
+  page_size?: number;
+}) => {
+  if (USE_MOCK_DATA) {
+    await new Promise(r => setTimeout(r, 300));
+    // Return mock corridors data
+    return {
+      count: 8,
+      next: null,
+      previous: null,
+      results: [],
+    };
+  }
+  const response = await apiClient.get('/corridors/', { params });
+  return response.data;
+};
 
+export const getCorridorDetail = async (id: number) => {
+  if (USE_MOCK_DATA) {
+    await new Promise(r => setTimeout(r, 400));
+    return null;
+  }
+  const response = await apiClient.get(`/corridors/${id}/`);
+  return response.data;
+};
+
+export const getCorridorByIdOrCode = async (idOrCode: string) => {
+  // Try to fetch by ID first, then by corridor_code
+  if (USE_MOCK_DATA) {
+    await new Promise(r => setTimeout(r, 400));
+    return null;
+  }
+  try {
+    const response = await apiClient.get(`/corridors/${idOrCode}/`);
+    return response.data;
+  } catch {
+    // If numeric ID fails, try searching by corridor_id
+    const corridors = await getCorridors({ search: idOrCode });
+    return corridors.results?.[0] || null;
+  }
+};
+
+export const getCorridorStops = async (corridorId: number, params?: {
+  page?: number;
+  page_size?: number;
+}) => {
+  if (USE_MOCK_DATA) {
+    await new Promise(r => setTimeout(r, 300));
+    return {
+      count: 0,
+      next: null,
+      previous: null,
+      results: [],
+    };
+  }
+  const response = await apiClient.get('/corridor-stops/', {
+    params: { corridor: corridorId, ...params },
+  });
+  return response.data;
+};
+
+export const getStopConnections = async (params?: {
+  from_stop?: number;
+  to_stop?: number;
+  transport_mode?: string;
+  corridor?: number;
+  page?: number;
+  page_size?: number;
+}) => {
+  if (USE_MOCK_DATA) {
+    await new Promise(r => setTimeout(r, 300));
+    return {
+      count: 0,
+      next: null,
+      previous: null,
+      results: [],
+    };
+  }
+  const response = await apiClient.get('/stop-connections/', { params });
+  return response.data;
+};
+
+export default apiClient;

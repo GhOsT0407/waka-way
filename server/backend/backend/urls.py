@@ -22,6 +22,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/', api_root, name='api-root'),
     path('api/v1/health/', health_check, name='health-check'),
-    # Add more API endpoints here as you build them
-    # path('api/v1/cities/', include('core.urls')),
+    path('api/v1/', include('core.urls')),
 ]

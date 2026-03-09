@@ -1,9 +1,19 @@
 from rest_framework import serializers
-from django.contrib.gis.geos import Point
+
+# Handle optional PostGIS import
+try:
+    from django.contrib.gis.geos import Point
+    POSTGIS_AVAILABLE = True
+except Exception:
+    # GDAL not installed or PostGIS not available
+    POSTGIS_AVAILABLE = False
+    Point = None
+
 from .models import (
     City, TransportStop, TransportRoute, RouteSegment,
     Fare, RouteSuggestion, RouteStep, UserReport,
-    UserFavoritePlace, UserRouteHistory
+    UserFavoritePlace, UserRouteHistory, Corridor,
+    CorridorStop, StopConnection
 )
 
 
@@ -167,12 +177,16 @@ class RouteSearchRequestSerializer(serializers.Serializer):
     max_walk_distance_km = serializers.FloatField(default=1.0, required=False)
 
     def validate_origin(self, value):
-        """Convert dict to Point"""
-        return Point(value['longitude'], value['latitude'], srid=4326)
+        """Convert dict to Point if PostGIS is available"""
+        if POSTGIS_AVAILABLE and Point:
+            return Point(value['longitude'], value['latitude'], srid=4326)
+        return value
 
     def validate_destination(self, value):
-        """Convert dict to Point"""
-        return Point(value['longitude'], value['latitude'], srid=4326)
+        """Convert dict to Point if PostGIS is available"""
+        if POSTGIS_AVAILABLE and Point:
+            return Point(value['longitude'], value['latitude'], srid=4326)
+        return value
 
 
 class UserReportSerializer(serializers.ModelSerializer):
@@ -224,27 +238,6 @@ class UserFavoritePlaceSerializer(serializers.ModelSerializer):
         return None
 
 
-class UserRouteHistorySerializer(serializers.ModelSerializer):
-    origin = serializers.SerializerMethodField()
-    destination = serializers.SerializerMethodField()
-    route_suggestion = RouteSuggestionSerializer(read_only=True)
-
-    class Meta:
-        model = UserRouteHistory
-        fields = [
-            'id', 'origin', 'destination', 'origin_name', 'destination_name',
-            'route_suggestion', 'searched_at'
-        ]
-        read_only_fields = ['searched_at']
-
-    def get_origin(self, obj):
-        if obj.origin:
-            return {
-                'latitude': obj.origin.y,
-                'longitude': obj.origin.x,
-            }
-        return None
-
     def get_destination(self, obj):
         if obj.destination:
             return {
@@ -253,3 +246,75 @@ class UserRouteHistorySerializer(serializers.ModelSerializer):
             }
         return None
 
+
+class StopConnectionSerializer(serializers.ModelSerializer):
+    """Serializer for stop connections"""
+    from_stop = TransportStopSerializer(read_only=True)
+    to_stop = TransportStopSerializer(read_only=True)
+    transport_mode_display = serializers.CharField(
+        source='get_transport_mode_display', 
+        read_only=True
+    )
+
+    class Meta:
+        model = StopConnection
+        fields = [
+            'id', 'from_stop', 'to_stop', 'transport_mode',
+            'transport_mode_display', 'corridor', 'estimated_time_minutes',
+            'distance_km', 'is_verified', 'created_at'
+        ]
+
+
+class CorridorStopSerializer(serializers.ModelSerializer):
+    """Serializer for a stop within a corridor"""
+    stop = TransportStopSerializer(read_only=True)
+    stop_type_display = serializers.CharField(
+        source='get_stop_type_display',
+        read_only=True
+    )
+
+    class Meta:
+        model = CorridorStop
+        fields = [
+            'id', 'sequence', 'stop', 'stop_type', 'stop_type_display',
+            'estimated_time_from_previous'
+        ]
+
+
+class CorridorDetailSerializer(serializers.ModelSerializer):
+    """Detailed corridor serializer with all stops and connections"""
+    corridor_stops = CorridorStopSerializer(many=True, read_only=True)
+    connections = StopConnectionSerializer(many=True, read_only=True)
+    primary_mode_display = serializers.CharField(
+        source='get_primary_mode_display',
+        read_only=True
+    )
+    city = CitySerializer(read_only=True)
+
+    class Meta:
+        model = Corridor
+        fields = [
+            'id', 'corridor_id', 'name', 'description', 'primary_mode',
+            'primary_mode_display', 'city', 'is_active', 'operating_hours_start',
+            'operating_hours_end', 'notes', 'corridor_stops', 'connections',
+            'created_at', 'updated_at'
+        ]
+
+
+class CorridorListSerializer(serializers.ModelSerializer):
+    """Brief corridor serializer for list views"""
+    primary_mode_display = serializers.CharField(
+        source='get_primary_mode_display',
+        read_only=True
+    )
+    stop_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Corridor
+        fields = [
+            'id', 'corridor_id', 'name', 'primary_mode', 'primary_mode_display',
+            'city', 'is_active', 'stop_count', 'notes'
+        ]
+
+    def get_stop_count(self, obj):
+        return obj.corridor_stops.count()

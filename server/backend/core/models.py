@@ -410,3 +410,150 @@ class UserRouteHistory(models.Model):
 
     def __str__(self):
         return f"Route search at {self.searched_at}"
+
+
+class Corridor(models.Model):
+    """
+    Represents a major transportation corridor in Lagos with multiple stops.
+    A corridor is a named route with a primary mode of transport (e.g., Danfo, BRT).
+    """
+    corridor_id = models.CharField(max_length=50, unique=True)  # e.g., "C001"
+    name = models.CharField(max_length=250)  # e.g., "Ikorodu - Mile 12 Local"
+    description = models.TextField(blank=True)  # Extended description
+    
+    primary_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ('danfo', 'Danfo/Minibus'),
+            ('brt', 'BRT (Bus Rapid Transit)'),
+            ('keke', 'Keke/Tricycle'),
+            ('okada', 'Okada/Motorcycle'),
+            ('ferry', 'Ferry'),
+            ('walk', 'Walking'),
+            ('mixed', 'Mixed Modes'),
+        ]
+    )
+    
+    city = models.ForeignKey(City, on_delete=models.CASCADE, related_name='corridors')
+    
+    # Route characteristics
+    is_active = models.BooleanField(default=True)
+    operating_hours_start = models.TimeField(blank=True, null=True)
+    operating_hours_end = models.TimeField(blank=True, null=True)
+    
+    # Additional info
+    notes = models.TextField(blank=True)  # Route-specific notes (e.g., "banned danfo on Lekki-Epe Expressway")
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['city', 'primary_mode']),
+            models.Index(fields=['is_active']),
+        ]
+        verbose_name_plural = "Corridors"
+    
+    def __str__(self):
+        return f"{self.corridor_id}: {self.name}"
+
+
+class CorridorStop(models.Model):
+    """
+    Represents a stop within a corridor in sequence.
+    Includes the position and characteristics of stops along the corridor.
+    """
+    STOP_TYPES = [
+        ('major_park', 'Major Park'),
+        ('major_interchange', 'Major Interchange'),
+        ('bus_stop', 'Bus Stop'),
+        ('major_bus_stop', 'Major Bus Stop'),
+        ('junction', 'Junction'),
+        ('major_junction', 'Major Junction'),
+        ('terminal', 'Terminal'),
+        ('major_terminal', 'Major Terminal'),
+    ]
+    
+    corridor = models.ForeignKey(Corridor, on_delete=models.CASCADE, related_name='corridor_stops')
+    stop = models.ForeignKey(TransportStop, on_delete=models.CASCADE, related_name='corridor_positions')
+    
+    # Position in the corridor
+    sequence = models.IntegerField()  # Order within corridor (0, 1, 2, ...)
+    
+    # Stop details specific to this corridor
+    stop_type = models.CharField(max_length=20, choices=STOP_TYPES)
+    
+    # Operational details
+    estimated_time_from_previous = models.IntegerField(
+        default=0,
+        help_text="Estimated travel time from previous stop in minutes"
+    )
+    
+    class Meta:
+        unique_together = ['corridor', 'sequence']
+        ordering = ['corridor', 'sequence']
+        indexes = [
+            models.Index(fields=['corridor', 'sequence']),
+        ]
+    
+    def __str__(self):
+        return f"{self.corridor.name} - Stop {self.sequence}: {self.stop.name}"
+
+
+class StopConnection(models.Model):
+    """
+    Represents an alternative transport connection from one stop to another.
+    Track secondary connections like "Keke to X" or "Okada to Y" from a main corridor stop.
+    """
+    from_stop = models.ForeignKey(
+        TransportStop,
+        on_delete=models.CASCADE,
+        related_name='connections_from'
+    )
+    to_stop = models.ForeignKey(
+        TransportStop,
+        on_delete=models.CASCADE,
+        related_name='connections_to'
+    )
+    
+    # Transport mode for this connection
+    transport_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ('danfo', 'Danfo/Minibus'),
+            ('brt', 'BRT'),
+            ('keke', 'Keke/Tricycle'),
+            ('okada', 'Okada/Motorcycle'),
+            ('ferry', 'Ferry'),
+            ('walk', 'Walking'),
+        ]
+    )
+    
+    # Corridor context (optional - the corridor this connection belongs to)
+    corridor = models.ForeignKey(
+        Corridor,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='connections'
+    )
+    
+    # Route/connection characteristics
+    estimated_time_minutes = models.IntegerField(default=5)
+    distance_km = models.FloatField(default=0.0)
+    is_verified = models.BooleanField(default=False)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['from_stop', 'to_stop', 'transport_mode']
+        indexes = [
+            models.Index(fields=['from_stop', 'transport_mode']),
+            models.Index(fields=['corridor']),
+        ]
+    
+    def __str__(self):
+        return f"{self.from_stop.name} → {self.to_stop.name} ({self.transport_mode})"

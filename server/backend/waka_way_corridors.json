@@ -1,0 +1,151 @@
+{
+  "lagos_transport_network": {
+    "app_name": "Waka Way",
+    "last_updated": "2026-03-04",
+    "corridors": [
+      {
+        "id": "C001",
+        "name": "Ikorodu - Mile 12 Local",
+        "primary_mode": "Danfo",
+        "stops": [
+          {"name": "Ikorodu Garage", "type": "Major Park", "connections": ["Keke to Sabo", "Okada to Ibeshe"]},
+          {"name": "Agric", "type": "Bus Stop", "connections": ["Keke to Isawo"]},
+          {"name": "Aruna", "type": "Bus Stop", "connections": []},
+          {"name": "Ogolonto", "type": "Bus Stop", "connections": ["Okada to Ebute"]},
+          {"name": "Majidun Ogolonto", "type": "Bus Stop", "connections": []},
+          {"name": "Majidun Awori", "type": "Bus Stop", "connections": ["Ferry to Addax"]},
+          {"name": "Owode-Onirin", "type": "Bus Stop", "connections": []},
+          {"name": "Idera", "type": "Bus Stop", "connections": []},
+          {"name": "Irawo", "type": "Bus Stop", "connections": []},
+          {"name": "Mile 12", "type": "Major Interchange", "connections": ["Danfo to Ojota", "Danfo to Ketu", "BRT to CMS"]}
+        ],
+        "notes": "Majidun split into Majidun Ogolonto and Majidun Awori per Primero BRT official route. Idera added between Owode-Onirin and Irawo."
+      },
+      {
+        "id": "C002",
+        "name": "Oshodi - Abule Egba (The Agege Motor Road)",
+        "primary_mode": "Danfo / BRT",
+        "stops": [
+          {"name": "Oshodi Under-bridge", "type": "Major Terminal", "connections": ["Danfo to Mile 2", "Danfo to CMS", "BRT to Abule Egba"]},
+          {"name": "Shogunle", "type": "Bus Stop", "connections": []},
+          {"name": "Ikeja Along", "type": "Major Bus Stop", "connections": ["Okada to Computer Village"]},
+          {"name": "Mangoro", "type": "Bus Stop", "connections": []},
+          {"name": "Cement", "type": "Bus Stop", "connections": []},
+          {"name": "Dopemu", "type": "Bus Stop", "connections": ["Keke to Egbeda"]},
+          {"name": "Iyana-Ipaja", "type": "Major Interchange", "connections": ["Danfo to Ikotun", "Keke to Ayobo"]},
+          {"name": "Pleasure", "type": "Bus Stop", "connections": []},
+          {"name": "Ile-Epo", "type": "Bus Stop", "connections": []},
+          {"name": "Super", "type": "Bus Stop", "connections": []},
+          {"name": "Abule-Egba", "type": "Major Park", "connections": ["Danfo to Sango", "Keke to Command"]}
+        ],
+        "notes": "Primary mode updated to Danfo/BRT — LAMATA extended BRT operations along this corridor."
+      },
+      {
+        "id": "C003",
+        "name": "Lekki - Ajah - Epe Line",
+        "primary_mode": "Regulated Bus (LAGBUS / LBSL)",
+        "stops": [
+          {"name": "Obalende", "type": "Major Park", "connections": ["Danfo to CMS", "Keke to Ikoyi"]},
+          {"name": "Sandfill", "type": "Bus Stop", "connections": ["Keke to VI"]},
+          {"name": "Lekki Phase 1 Gate", "type": "Bus Stop", "connections": ["Keke to Admiralty Way"]},
+          {"name": "Marwa", "type": "Bus Stop", "connections": ["Okada to Elf"]},
+          {"name": "Jakande", "type": "Bus Stop", "connections": ["Keke to Shoprite"]},
+          {"name": "Igbo-Efon", "type": "Bus Stop", "connections": []},
+          {"name": "Chevron", "type": "Bus Stop", "connections": ["Okada to Orchid Road"]},
+          {"name": "VGC", "type": "Bus Stop", "connections": []},
+          {"name": "Ajah Roundabout", "type": "Major Interchange", "connections": ["Bus to Epe", "Keke to Badore"]},
+          {"name": "Sangotedo", "type": "Bus Stop", "connections": []},
+          {"name": "Awoyaya", "type": "Bus Stop", "connections": []},
+          {"name": "Bogije", "type": "Bus Stop", "connections": []},
+          {"name": "Eleko Junction", "type": "Major Junction", "connections": ["Okada to Amen Estate"]},
+          {"name": "Epe T-Junction", "type": "Major Park", "connections": ["Keke to Marina Epe"]}
+        ],
+        "notes": "Primary mode corrected from Danfo to Regulated Bus — Lagos State banned danfo on the Lekki-Epe Expressway as part of the Bus Reform Initiative (2024/2025). LAGBUS and LBSL now operate this route."
+      },
+      {
+        "id": "C004",
+        "name": "Badagry - Mile 2 Express",
+        "primary_mode": "Danfo",
+        "stops": [
+          {"name": "Badagry Roundabout", "type": "Major Park", "connections": ["Okada to Whispering Palms"]},
+          {"name": "Agbara", "type": "Major Junction", "connections": ["Danfo to Lusada"]},
+          {"name": "Okokomaiko", "type": "Bus Stop", "connections": []},
+          {"name": "Iyana-Iba", "type": "Major Bus Stop", "connections": ["Keke to LASU", "Danfo to Igando"]},
+          {"name": "Ojo", "type": "Bus Stop", "connections": ["Keke to Ojo Barracks"]},
+          {"name": "Alaba International", "type": "Major Junction", "connections": ["Keke into Market", "Danfo to Satellite Town"]},
+          {"name": "Volks", "type": "Bus Stop", "connections": []},
+          {"name": "Trade Fair", "type": "Bus Stop", "connections": ["Keke into Market"]},
+          {"name": "Alakija", "type": "Bus Stop", "connections": ["Keke to Satellite Town"]},
+          {"name": "Festac 1st Gate", "type": "Bus Stop", "connections": ["Keke into Festac"]},
+          {"name": "Mile 2", "type": "Major Interchange", "connections": ["Danfo to Oshodi", "Danfo to CMS"]}
+        ],
+        "notes": "Added Ojo and Alaba International — two major stops between Iyana-Iba and Volks that were missing from the original data."
+      },
+      {
+        "id": "C005",
+        "name": "Ikorodu Road - Mile 12 to CMS (BRT Spine)",
+        "primary_mode": "BRT / Danfo",
+        "stops": [
+          {"name": "Mile 12", "type": "Major Terminal", "connections": ["Danfo to Ikorodu", "Danfo to Ketu"]},
+          {"name": "Ketu", "type": "Major Interchange", "connections": ["Danfo to Ojota", "Keke to Alapere"]},
+          {"name": "Ojota", "type": "Major Interchange", "connections": ["Danfo to Ikeja", "Interstate buses to Ibadan"]},
+          {"name": "Maryland", "type": "Major Bus Stop", "connections": ["Danfo to Ikeja", "Keke to Idi-Iroko"]},
+          {"name": "Anthony", "type": "Bus Stop", "connections": ["Keke to Gbagada"]},
+          {"name": "Obanikoro", "type": "Bus Stop", "connections": []},
+          {"name": "Palmgroove", "type": "Bus Stop", "connections": []},
+          {"name": "Awoyokun", "type": "Bus Stop", "connections": []},
+          {"name": "Onipanu", "type": "Bus Stop", "connections": []},
+          {"name": "Fadeyi", "type": "Bus Stop", "connections": ["Keke to Mushin"]},
+          {"name": "Jibowu", "type": "Bus Stop", "connections": []},
+          {"name": "Yaba", "type": "Major Interchange", "connections": ["Danfo to Oyingbo", "Danfo to Surulere", "Keke to UNILAG"]},
+          {"name": "Ojuelegba", "type": "Major Interchange", "connections": ["Danfo to Surulere", "Danfo to Oshodi"]},
+          {"name": "Mushalashi", "type": "Bus Stop", "connections": []},
+          {"name": "Stadium", "type": "Bus Stop", "connections": ["Keke to National Stadium"]},
+          {"name": "Costain", "type": "Bus Stop", "connections": ["Danfo to Orile"]},
+          {"name": "CMS", "type": "Major Terminal", "connections": ["Ferry to VI", "Danfo to Obalende", "Danfo to TBS"]}
+        ],
+        "notes": "The single busiest corridor in Lagos. The 22km BRT Lite spine from Mile 12 to CMS via Ikorodu Road and Funsho Williams Avenue, commissioned March 2008 and operated by Primero TSL."
+      },
+      {
+        "id": "C006",
+        "name": "Ikeja - Ojodu Berger",
+        "primary_mode": "Danfo",
+        "stops": [
+          {"name": "Ikeja Under-bridge", "type": "Major Interchange", "connections": ["Danfo to Oshodi", "Danfo to Maryland"]},
+          {"name": "Alausa", "type": "Bus Stop", "connections": ["Keke to Secretariat"]},
+          {"name": "Agidingbi", "type": "Bus Stop", "connections": []},
+          {"name": "Ogba", "type": "Major Bus Stop", "connections": ["Keke to Pen Cinema", "Keke to Ifako"]},
+          {"name": "Ojodu Berger", "type": "Major Park", "connections": ["Interstate buses to Ibadan", "Danfo to Isheri"]}
+        ],
+        "notes": "Links Ikeja GRA, Lagos State Secretariat (Alausa), and the Lagos-Ibadan Expressway interchange at Berger."
+      },
+      {
+        "id": "C007",
+        "name": "Surulere - Mushin - Oshodi",
+        "primary_mode": "Danfo",
+        "stops": [
+          {"name": "Ojuelegba", "type": "Major Interchange", "connections": ["Danfo to CMS", "Danfo to Yaba"]},
+          {"name": "Iponri", "type": "Bus Stop", "connections": ["Keke to Orile"]},
+          {"name": "Alaka", "type": "Bus Stop", "connections": []},
+          {"name": "National Stadium", "type": "Bus Stop", "connections": []},
+          {"name": "Itire", "type": "Bus Stop", "connections": ["Keke to Lawanson"]},
+          {"name": "Mushin", "type": "Major Interchange", "connections": ["Danfo to Oshodi", "Danfo to Ikeja", "Keke to Idi-Araba"]},
+          {"name": "Oshodi Under-bridge", "type": "Major Terminal", "connections": ["Danfo to Mile 2", "Danfo to Agege", "BRT to Abule Egba"]}
+        ],
+        "notes": "Dense corridor linking the Island (via Ojuelegba) through Surulere and Mushin to the Oshodi hub."
+      },
+      {
+        "id": "C008",
+        "name": "Ikotun - Oshodi",
+        "primary_mode": "Danfo",
+        "stops": [
+          {"name": "Ikotun Garage", "type": "Major Park", "connections": ["Keke to Egbe", "Danfo to Idimu"]},
+          {"name": "Ijesha", "type": "Bus Stop", "connections": []},
+          {"name": "Okota", "type": "Major Bus Stop", "connections": ["Keke to Isolo", "Keke to Ago Palace Way"]},
+          {"name": "Oshodi", "type": "Major Terminal", "connections": ["Danfo to Mile 2", "Danfo to Agege", "Danfo to Mushin"]}
+        ],
+        "notes": "Key corridor from deep southeast Mainland through Okota to Oshodi."
+      }
+    ]
+  }
+}
