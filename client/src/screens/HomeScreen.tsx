@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,13 @@ import {
   TouchableOpacity,
   Platform,
   ScrollView,
-  Image,
   Dimensions,
-  TextInput,
-  Alert,
   Animated,
+  PanResponder,
 } from 'react-native';
-import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useAppTheme } from '../context/ThemeContext';
@@ -25,35 +20,94 @@ import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
 import { getNearbyStops } from '../services/api';
 import { WakaWayMapView } from '../components/map/MapView';
 
-const { width } = Dimensions.get('window');
+const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const TRENDING_PLACES = [
-  { id: 1, name: 'Tarkwa Bay', image: 'https://images.unsplash.com/photo-1590457173273-044237194833' },
-  { id: 2, name: 'Nike Art Gallery', image: 'https://images.unsplash.com/photo-1550951664-9eb06b744049' },
-  { id: 3, name: 'Lekki Conservation', image: 'https://images.unsplash.com/photo-1623345805780-8f6e91060939' },
+const RECENT_SEARCHES_KEY = 'recentSearches';
+
+const POPULAR_PLACES = [
+  { id: 'p1', name: 'Victoria Island', address: 'Lagos', icon: 'business-outline' },
+  { id: 'p2', name: 'Ikeja City Mall', address: 'Obafemi Awolowo Way', icon: 'bag-outline' },
+  { id: 'p3', name: 'Lekki Phase 1', address: 'Lekki, Lagos', icon: 'location-outline' },
+  { id: 'p4', name: 'Oshodi', address: 'Oshodi, Lagos', icon: 'bus-outline' },
+  { id: 'p5', name: 'Yaba', address: 'Yaba, Lagos', icon: 'school-outline' },
+  { id: 'p6', name: 'Ajah', address: 'Ajah, Lagos', icon: 'location-outline' },
 ];
 
+// Bottom sheet snaps: peek (just the handle + search row), half, full
+const PEEK_HEIGHT   = 120;
+const HALF_HEIGHT   = SCREEN_HEIGHT * 0.45;
+const FULL_HEIGHT   = SCREEN_HEIGHT * 0.85;
+
 export default function HomeScreen({ navigation }: any) {
-  const { theme } = useAppTheme();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('all');
+  const { theme, isDark } = useAppTheme();
   const [nearbyStops, setNearbyStops] = useState<any[]>([]);
-  const [savedJourneys, setSavedJourneys] = useState<any[]>([]);
+  const [recentSearches, setRecentSearches] = useState<any[]>([]);
   const [currentLocation, setCurrentLocation] = useState<string>('Getting location...');
   const [locationCoords, setLocationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  // Bottom sheet refs and state
-  const bottomSheetY = useRef(new Animated.Value(0)).current;
-  const searchBarOpacity = useRef(new Animated.Value(1)).current;
-  const lastGestureDy = useRef(0);
-  const [bottomSheetHeight, setBottomSheetHeight] = useState(200); // Default collapsed height
+  // Bottom sheet
+  const sheetAnim   = useRef(new Animated.Value(PEEK_HEIGHT)).current;
+  const fabOffset   = useRef(new Animated.Value(16)).current;
+  const snapRef     = useRef(PEEK_HEIGHT);
+  const dragStartH  = useRef(PEEK_HEIGHT);
 
-  // Selected place state - null by default, only show bottom sheet when a place is selected
-  const [selectedPlace, setSelectedPlace] = useState<any>(null);
+  const snapTo = (target: number) => {
+    snapRef.current = target;
+    Animated.spring(sheetAnim, {
+      toValue: target,
+      friction: 9,
+      tension: 60,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      // Claim every touch on the handle immediately
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: () => {
+        // Capture exact current height so we track from the right base
+        dragStartH.current = snapRef.current;
+        sheetAnim.stopAnimation();
+      },
+      onPanResponderMove: (_, gs) => {
+        // Swipe up (dy < 0) expands sheet; swipe down (dy > 0) collapses
+        const next = Math.max(PEEK_HEIGHT, Math.min(FULL_HEIGHT, dragStartH.current - gs.dy));
+        sheetAnim.setValue(next);
+      },
+      onPanResponderRelease: (_, gs) => {
+        // Tiny movement = treat as tap — toggle peek ↔ half
+        if (Math.abs(gs.dy) < 6 && Math.abs(gs.dx) < 6) {
+          snapTo(snapRef.current === PEEK_HEIGHT ? HALF_HEIGHT : PEEK_HEIGHT);
+          return;
+        }
+        const cur = dragStartH.current - gs.dy;
+        if (gs.vy < -0.4) {
+          // Fast swipe up → go to next snap up
+          snapTo(snapRef.current < HALF_HEIGHT ? HALF_HEIGHT : FULL_HEIGHT);
+        } else if (gs.vy > 0.4) {
+          // Fast swipe down → go to next snap down
+          snapTo(snapRef.current > HALF_HEIGHT ? HALF_HEIGHT : PEEK_HEIGHT);
+        } else {
+          // Slow drag → snap to nearest
+          const dists = [
+            { h: PEEK_HEIGHT, d: Math.abs(cur - PEEK_HEIGHT) },
+            { h: HALF_HEIGHT, d: Math.abs(cur - HALF_HEIGHT) },
+            { h: FULL_HEIGHT, d: Math.abs(cur - FULL_HEIGHT) },
+          ];
+          snapTo(dists.reduce((a, b) => (a.d < b.d ? a : b)).h);
+        }
+      },
+      onPanResponderTerminationRequest: () => false,
+    })
+  ).current;
 
   useEffect(() => {
     loadNearbyStops();
-    loadSavedJourneys();
+    loadRecentSearches();
     loadCurrentLocation();
   }, []);
 
@@ -61,522 +115,386 @@ export default function HomeScreen({ navigation }: any) {
     try {
       const stops = await getNearbyStops(6.5244, 3.3792);
       setNearbyStops(stops);
-    } catch (e) {
-      console.log('Error loading stops', e);
-    }
+    } catch {}
   };
 
-  const loadSavedJourneys = async () => {
+  const loadRecentSearches = async () => {
     try {
-      const saved = await AsyncStorage.getItem('savedJourneys');
-      if (saved) {
-        setSavedJourneys(JSON.parse(saved));
-      }
-    } catch (e) {
-      console.log('Error loading saved journeys', e);
-    }
+      const raw = await AsyncStorage.getItem(RECENT_SEARCHES_KEY);
+      if (raw) setRecentSearches(JSON.parse(raw).slice(0, 5));
+    } catch {}
   };
 
   const loadCurrentLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setCurrentLocation('Location permission denied');
-        // Default to Lagos (Maryland/Ikeja area) when permissions denied
-        setLocationCoords({
-          latitude: 6.5244,
-          longitude: 3.3792,
-        });
+        setCurrentLocation('Lagos, Nigeria');
+        setLocationCoords({ latitude: 6.5244, longitude: 3.3792 });
         return;
       }
-
       const location = await Location.getCurrentPositionAsync({});
-      setLocationCoords({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
-
-      // Reverse geocode to get city/neighborhood
+      setLocationCoords({ latitude: location.coords.latitude, longitude: location.coords.longitude });
       const geocode = await Location.reverseGeocodeAsync({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
-
       if (geocode.length > 0) {
-        const address = geocode[0];
-        const locationName = address.city || address.region || address.country || 'Unknown Location';
-        setCurrentLocation(locationName);
+        const a = geocode[0];
+        setCurrentLocation(a.district || a.subregion || a.city || a.region || 'Lagos');
       } else {
-        setCurrentLocation('Unknown Location');
+        setCurrentLocation('Lagos, Nigeria');
       }
-    } catch (error) {
-      console.error('Error getting location:', error);
-      setCurrentLocation('Location unavailable');
-      // Fallback to Lagos on error
-      setLocationCoords({
-        latitude: 6.5244,
-        longitude: 3.3792,
-      });
+    } catch {
+      setCurrentLocation('Lagos, Nigeria');
+      setLocationCoords({ latitude: 6.5244, longitude: 3.3792 });
     }
   };
 
-  const handleSheetChanges = (index: number) => {
-    // Animate search bar opacity based on sheet position
-    Animated.timing(searchBarOpacity, {
-      toValue: index === 2 ? 0 : 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  };
+  const handleSearchPress = () => navigation.navigate('Search');
 
-  const onGestureEvent = Animated.event(
-    [{ nativeEvent: { translationY: bottomSheetY } }],
-    { useNativeDriver: false }
-  );
+  const listItems = recentSearches.length > 0
+    ? recentSearches
+    : POPULAR_PLACES;
 
-  const onHandlerStateChange = (event: any) => {
-    if (event.nativeEvent.state === State.END) {
-      const { translationY } = event.nativeEvent;
-      lastGestureDy.current += translationY;
-
-      // Snap to positions based on gesture
-      const screenHeight = Dimensions.get('window').height;
-      const collapsedHeight = 200;
-      const halfHeight = screenHeight * 0.5;
-      const fullHeight = screenHeight * 0.9;
-
-      let targetHeight = collapsedHeight;
-      if (Math.abs(lastGestureDy.current) > collapsedHeight) {
-        if (Math.abs(lastGestureDy.current) > halfHeight) {
-          targetHeight = fullHeight;
-        } else {
-          targetHeight = halfHeight;
-        }
-      }
-
-      Animated.spring(bottomSheetY, {
-        toValue: -targetHeight,
-        useNativeDriver: false,
-      }).start();
-
-      setBottomSheetHeight(targetHeight);
-      handleSheetChanges(targetHeight === fullHeight ? 2 : targetHeight === halfHeight ? 1 : 0);
-    }
-  };
-
-  const handleCurrentLocation = () => {
-    // Implement current location logic
-    Alert.alert('Current Location', 'Navigating to your location...');
-  };
+  const sectionLabel = recentSearches.length > 0 ? 'Recent' : 'Popular in Lagos';
 
   return (
     <View style={styles.container}>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      {/* Full Screen Map */}
+      {/* Full-screen map */}
       <WakaWayMapView
-        style={styles.map}
-        showUserLocation={true}
+        style={StyleSheet.absoluteFill}
+        showUserLocation
         initialRegion={locationCoords ? {
-          latitude: locationCoords.latitude,
-          longitude: locationCoords.longitude,
-          latitudeDelta: 0.05,
+          latitude:      locationCoords.latitude,
+          longitude:     locationCoords.longitude,
+          latitudeDelta:  0.05,
           longitudeDelta: 0.05,
         } : undefined}
-        markers={selectedPlace ? [
-          {
-            id: 'selected-place',
-            coordinate: { latitude: 6.5481, longitude: 3.3832 }, // This should be dynamic based on selectedPlace
-            title: selectedPlace.name,
-            description: selectedPlace.address,
-          }
-        ] : []}
       />
 
-      {/* Floating Search Bar */}
-      <Animated.View style={[styles.searchBarContainer, { opacity: searchBarOpacity }]}>
+      {/* Top floating bar */}
+      <SafeAreaView style={styles.topBar} pointerEvents="box-none">
+        {/* Location pill */}
+        <View style={[styles.locationPill, { backgroundColor: theme.CARD_BACKGROUND }]}>
+          <Ionicons name="location" size={14} color={theme.PRIMARY} />
+          <Text style={[styles.locationText, { color: theme.TEXT }]} numberOfLines={1}>
+            {currentLocation}
+          </Text>
+        </View>
+
+        {/* Right: notifications */}
         <TouchableOpacity
-          style={styles.searchBar}
-          onPress={() => navigation.navigate('Search')}
+          style={[styles.iconBtn, { backgroundColor: theme.CARD_BACKGROUND }]}
+          onPress={() => navigation.navigate('Notifications')}
           activeOpacity={0.8}
         >
-          <Ionicons name="search" size={20} color="#757575" />
-          <Text style={styles.searchPlaceholder}>Search places, addresses...</Text>
+          <Ionicons name="notifications-outline" size={20} color={theme.TEXT} />
+        </TouchableOpacity>
+      </SafeAreaView>
+
+      {/* FAB — recenter, floats 16px above the sheet */}
+      <Animated.View style={[styles.fab, { bottom: Animated.add(sheetAnim, fabOffset) }]}>
+        <TouchableOpacity
+          style={[styles.fabInner, { backgroundColor: theme.CARD_BACKGROUND }]}
+          onPress={loadCurrentLocation}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="locate" size={22} color={theme.PRIMARY} />
         </TouchableOpacity>
       </Animated.View>
 
-      {/* Category Chips */}
-      <Animated.View style={[styles.chipsContainer, { opacity: searchBarOpacity }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
-          {[
-            { id: 'restaurants', label: 'Restaurants', icon: 'restaurant' },
-            { id: 'hotels', label: 'Hotels', icon: 'bed' },
-            { id: 'attractions', label: 'Attractions', icon: 'camera' },
-            { id: 'transport', label: 'Transport', icon: 'bus' },
-            { id: 'shopping', label: 'Shopping', icon: 'bag' },
-          ].map((chip) => (
-            <TouchableOpacity key={chip.id} style={styles.chip}>
-              <Ionicons name={chip.icon as any} size={16} color="#2E7D32" />
-              <Text style={styles.chipText}>{chip.label}</Text>
+      {/* Bottom sheet */}
+      <Animated.View style={[styles.sheet, { height: sheetAnim, backgroundColor: theme.CARD_BACKGROUND }]}>
+        {/* Drag handle — plain View so PanResponder owns the touch (no TouchableOpacity conflict) */}
+        <View style={styles.handleArea} {...panResponder.panHandlers}>
+          <View style={[styles.handle, { backgroundColor: theme.BORDER }]} />
+        </View>
+
+        {/* Search row — always visible */}
+        <TouchableOpacity
+          style={[styles.searchRow, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}
+          onPress={handleSearchPress}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="search-outline" size={18} color={theme.TEXT_SECONDARY} />
+          <Text style={[styles.searchPlaceholder, { color: theme.TEXT_SECONDARY }]}>
+            Where to?
+          </Text>
+          <View style={[styles.searchBadge, { backgroundColor: theme.PRIMARY + '18' }]}>
+            <Text style={[styles.searchBadgeText, { color: theme.PRIMARY }]}>Search</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Scrollable content below */}
+        <ScrollView
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.sheetContent}
+        >
+          {/* Quick shortcuts */}
+          <View style={styles.shortcuts}>
+            <TouchableOpacity
+              style={[styles.shortcutBtn, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}
+              onPress={handleSearchPress}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.shortcutIcon, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="home-outline" size={18} color="#1565C0" />
+              </View>
+              <Text style={[styles.shortcutLabel, { color: theme.TEXT }]}>Home</Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </Animated.View>
 
-      {/* Floating Action Button */}
-      <TouchableOpacity style={styles.fab} onPress={handleCurrentLocation}>
-        <Ionicons name="locate" size={24} color="#2E7D32" />
-      </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.shortcutBtn, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}
+              onPress={handleSearchPress}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.shortcutIcon, { backgroundColor: '#FFF3E0' }]}>
+                <Ionicons name="briefcase-outline" size={18} color="#E65100" />
+              </View>
+              <Text style={[styles.shortcutLabel, { color: theme.TEXT }]}>Work</Text>
+            </TouchableOpacity>
 
-      {/* Custom Bottom Sheet - Only show when a place is selected */}
-      {selectedPlace && (
-        <PanGestureHandler
-          onGestureEvent={onGestureEvent}
-          onHandlerStateChange={onHandlerStateChange}
-        >
-        <Animated.View
-          style={[
-            styles.bottomSheet,
-            {
-              transform: [{ translateY: bottomSheetY }],
-            },
-          ]}
-        >
-          <View style={styles.bottomSheetHandle}>
-            <View style={styles.handleIndicator} />
+            <TouchableOpacity
+              style={[styles.shortcutBtn, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}
+              onPress={() => navigation.navigate('Notifications')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.shortcutIcon, { backgroundColor: '#F3E5F5' }]}>
+                <Ionicons name="notifications-outline" size={18} color="#6A1B9A" />
+              </View>
+              <Text style={[styles.shortcutLabel, { color: theme.TEXT }]}>Alerts</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.shortcutBtn, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}
+              onPress={() => navigation.navigate('Contribution')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.shortcutIcon, { backgroundColor: '#E8F5E9' }]}>
+                <Ionicons name="heart-outline" size={18} color="#2E7D32" />
+              </View>
+              <Text style={[styles.shortcutLabel, { color: theme.TEXT }]}>Contribute</Text>
+            </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={styles.bottomSheetContent}>
-            {/* Fixed Header with Home/Work Icons */}
-            <View style={styles.sheetHeader}>
-              <TouchableOpacity style={styles.locationButton}>
-                <Ionicons name="home-outline" size={20} color={theme.TEXT} />
-                <Text style={[styles.locationButtonText, { color: theme.TEXT }]}>Home</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.locationButton}>
-                <Ionicons name="briefcase-outline" size={20} color={theme.TEXT} />
-                <Text style={[styles.locationButtonText, { color: theme.TEXT }]}>Work</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Place Header */}
-            <View style={styles.placeHeader}>
-              <View style={styles.placeInfo}>
-                <Text style={[styles.placeName, { color: theme.TEXT }]}>{selectedPlace.name}</Text>
-                <Text style={[styles.placeAddress, { color: theme.TEXT_SECONDARY }]}>{selectedPlace.address}</Text>
-                <View style={styles.placeMeta}>
-                  <View style={styles.ratingContainer}>
-                    <Ionicons name="star" size={14} color="#FFD700" />
-                    <Text style={[styles.ratingText, { color: theme.TEXT }]}>{selectedPlace.rating}</Text>
-                    <Text style={[styles.reviewsText, { color: theme.TEXT_SECONDARY }]}>({selectedPlace.reviews})</Text>
-                  </View>
-                  <Text style={[styles.distanceText, { color: theme.TEXT_SECONDARY }]}>{selectedPlace.distance}</Text>
+          {/* Recent / Popular list */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.TEXT_SECONDARY }]}>{sectionLabel}</Text>
+            {listItems.map((item: any) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.listItem, { borderBottomColor: theme.BORDER }]}
+                onPress={handleSearchPress}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.listIconWrap, {
+                  backgroundColor: item.isRecent ? theme.SURFACE : '#E8F5E9',
+                }]}>
+                  <Ionicons
+                    name={item.isRecent ? 'time-outline' : (item.icon || 'location-outline')}
+                    size={17}
+                    color={theme.PRIMARY}
+                  />
                 </View>
-              </View>
-            </View>
+                <View style={styles.listText}>
+                  <Text style={[styles.listName, { color: theme.TEXT }]} numberOfLines={1}>{item.name}</Text>
+                  {!!item.address && (
+                    <Text style={[styles.listAddr, { color: theme.TEXT_SECONDARY }]} numberOfLines={1}>{item.address}</Text>
+                  )}
+                </View>
+                <Ionicons name="arrow-forward" size={14} color={theme.BORDER} />
+              </TouchableOpacity>
+            ))}
+          </View>
 
-            {/* Route Info Pill */}
-            <View style={styles.routeInfoPill}>
-              <Ionicons name="car-outline" size={16} color={theme.PRIMARY} />
-              <Text style={[styles.routeInfoText, { color: theme.TEXT }]}>{selectedPlace.time} • {selectedPlace.distance}</Text>
-            </View>
-
-            {/* Action Buttons Row */}
-            <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={styles.directionsButton}>
-                <Text style={styles.directionsButtonText}>Directions</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton}>
-                <Ionicons name="play" size={20} color={theme.PRIMARY} />
-                <Text style={[styles.actionButtonText, { color: theme.PRIMARY }]}>Start</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton}>
-                <Ionicons name="bookmark-outline" size={20} color={theme.PRIMARY} />
-                <Text style={[styles.actionButtonText, { color: theme.PRIMARY }]}>Save</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton}>
-                <Ionicons name="share-outline" size={20} color={theme.PRIMARY} />
-                <Text style={[styles.actionButtonText, { color: theme.PRIMARY }]}>Share</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Photo Carousel */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoCarousel}>
-                {selectedPlace.images.map((image: string, index: number) => (
-                  <Image key={index} source={{ uri: image }} style={styles.carouselImage} />
+          {/* Nearby stops chip row */}
+          {nearbyStops.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.TEXT_SECONDARY }]}>Nearby Stops</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stopsRow}>
+                {nearbyStops.slice(0, 6).map((stop: any, i: number) => (
+                  <View key={i} style={[styles.stopChip, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}>
+                    <Ionicons name="bus-outline" size={13} color={theme.PRIMARY} />
+                    <Text style={[styles.stopChipText, { color: theme.TEXT }]} numberOfLines={1}>{stop.name}</Text>
+                  </View>
                 ))}
               </ScrollView>
+            </View>
+          )}
 
-              {/* Nearby Sections */}
-              {selectedPlace.nearby.map((section: any, index: number) => (
-                <View key={index} style={styles.section}>
-                  <Text style={[styles.sectionTitle, { color: theme.TEXT }]}>{section.name}</Text>
-                  {section.items.map((item: string, itemIndex: number) => (
-                  <Text key={itemIndex} style={[styles.sectionItem, { color: theme.TEXT_SECONDARY }]}>{item}</Text>
-                ))}
-                {index < selectedPlace.nearby.length - 1 && <View style={styles.separator} />}
-              </View>
-            ))}
-          </ScrollView>
-        </Animated.View>
-      </PanGestureHandler>
-      )}
+          <View style={{ height: 24 }} />
+        </ScrollView>
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  searchBarContainer: {
+  container: { flex: 1 },
+
+  topBar: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
-    left: SPACING.MD,
-    right: SPACING.MD,
-    zIndex: 100,
-  },
-  searchBar: {
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
+    justifyContent: 'space-between',
     paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 10,
-      },
-      android: { elevation: 6 },
-    }),
+    paddingTop: Platform.OS === 'android' ? SPACING.LG : 0,
+    zIndex: 100,
   },
-  searchPlaceholder: {
-    flex: 1,
-    marginLeft: SPACING.SM,
-    color: '#757575',
-    fontSize: FONT_SIZES.BODY,
-  },
-  chipsContainer: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 120 : 100,
-    left: SPACING.MD,
-    right: SPACING.MD,
-    zIndex: 99,
-  },
-  chipsScroll: {
-    gap: SPACING.SM,
-  },
-  chip: {
+  locationPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.XS,
     paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.XS,
+    paddingVertical: 8,
+    borderRadius: BORDER_RADIUS.ROUND,
+    maxWidth: width * 0.65,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 8 },
+      android: { elevation: 5 },
+    }),
+  },
+  locationText: { fontSize: FONT_SIZES.SMALL + 1, fontWeight: '600' },
+
+  iconBtn: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#C8E6C9',
-  },
-  chipText: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '600',
-    color: '#2E7D32',
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 120,
-    right: SPACING.MD,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-      },
-      android: { elevation: 4 },
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 8 },
+      android: { elevation: 5 },
     }),
   },
-  bottomSheetContent: {
-    padding: SPACING.MD,
+
+  fab: {
+    position: 'absolute',
+    right: SPACING.MD,
+    width: 44,
+    height: 44,
   },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  fabInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
     alignItems: 'center',
-    height: 48, // Fixed height
-    marginBottom: SPACING.MD,
-    paddingBottom: SPACING.MD,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6 },
+      android: { elevation: 5 },
+    }),
   },
-  locationButton: {
+
+  sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.1, shadowRadius: 12 },
+      android: { elevation: 16 },
+    }),
+  },
+  handleArea: {
+    alignItems: 'center',
+    paddingVertical: SPACING.MD,  // taller hit area = easier to grab
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+  },
+
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: SPACING.XS,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  locationButtonText: {
-    marginLeft: SPACING.XS,
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '500',
-  },
-  placeHeader: {
+    gap: SPACING.SM,
+    marginHorizontal: SPACING.MD,
     marginBottom: SPACING.MD,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: 12,
+    borderRadius: BORDER_RADIUS.LARGE,
+    borderWidth: 1,
   },
-  placeInfo: {
+  searchPlaceholder: { flex: 1, fontSize: FONT_SIZES.BODY, fontWeight: '500' },
+  searchBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.ROUND,
+  },
+  searchBadgeText: { fontSize: FONT_SIZES.SMALL + 1, fontWeight: '700' },
+
+  sheetContent: { paddingHorizontal: SPACING.MD },
+
+  shortcuts: {
+    flexDirection: 'row',
+    gap: SPACING.SM,
+    marginBottom: SPACING.LG,
+  },
+  shortcutBtn: {
     flex: 1,
+    alignItems: 'center',
+    gap: SPACING.XS,
+    paddingVertical: SPACING.SM,
+    borderRadius: BORDER_RADIUS.MEDIUM,
+    borderWidth: 1,
   },
-  placeName: {
-    fontSize: FONT_SIZES.HEADING_2,
+  shortcutIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shortcutLabel: { fontSize: FONT_SIZES.SMALL, fontWeight: '600' },
+
+  section: { marginBottom: SPACING.MD },
+  sectionTitle: {
+    fontSize: FONT_SIZES.SMALL,
     fontWeight: '700',
-    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: SPACING.SM,
   },
-  placeAddress: {
-    fontSize: FONT_SIZES.BODY,
-    marginBottom: SPACING.XS,
-  },
-  placeMeta: {
+
+  listItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.MD,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.XS,
-  },
-  ratingText: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '600',
-  },
-  reviewsText: {
-    fontSize: FONT_SIZES.SMALL,
-  },
-  distanceText: {
-    fontSize: FONT_SIZES.SMALL,
-  },
-  routeInfoPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 20,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    alignSelf: 'center',
-    marginBottom: SPACING.MD,
-  },
-  routeInfoText: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '600',
-    marginLeft: SPACING.XS,
-  },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.MD,
-  },
-  directionsButton: {
-    backgroundColor: '#2E7D32',
-    paddingHorizontal: SPACING.LG,
-    paddingVertical: SPACING.SM,
-    borderRadius: 24,
-    flex: 1,
-    marginRight: SPACING.SM,
-  },
-  directionsButtonText: {
-    color: '#FFFFFF',
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  listIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#2E7D32',
-    backgroundColor: '#E8F5E9',
-    flex: 1,
-    marginHorizontal: SPACING.XS,
-  },
-  actionButtonText: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '600',
-    marginLeft: SPACING.XS,
-    color: '#2E7D32',
-  },
-  photoCarousel: {
-    marginBottom: SPACING.MD,
-  },
-  carouselImage: {
-    width: 200,
-    height: 120,
-    borderRadius: 16,
-    marginRight: SPACING.SM,
-  },
-  section: {
-    marginBottom: SPACING.MD,
-  },
-  sectionTitle: {
-    fontSize: FONT_SIZES.BODY_LARGE,
-    fontWeight: '600',
-    marginBottom: SPACING.SM,
-  },
-  sectionItem: {
-    fontSize: FONT_SIZES.BODY,
-    marginBottom: SPACING.XS,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: '#E0E0E0',
-    marginVertical: SPACING.MD,
-  },
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: Dimensions.get('window').height * 0.9,
-    minHeight: 200,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: { elevation: 8 },
-    }),
-  },
-  bottomSheetHandle: {
     alignItems: 'center',
-    paddingVertical: SPACING.SM,
   },
-  handleIndicator: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-  },
-});
+  listText: { flex: 1 },
+  listName: { fontSize: FONT_SIZES.BODY, fontWeight: '600' },
+  listAddr: { fontSize: FONT_SIZES.SMALL + 1, marginTop: 1 },
 
+  stopsRow: { gap: SPACING.SM },
+  stopChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: 7,
+    borderRadius: BORDER_RADIUS.ROUND,
+    borderWidth: 1,
+  },
+  stopChipText: { fontSize: FONT_SIZES.SMALL + 1, fontWeight: '600', maxWidth: 120 },
+});

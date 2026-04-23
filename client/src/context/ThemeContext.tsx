@@ -3,93 +3,93 @@ import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const COLORS = {
-  PRIMARY: '#2E7D32',     // Forest Green
-  SECONDARY: '#388E3C',   // Darker Green
-  ACCENT: '#4CAF50',      // Bright Green
+  PRIMARY: '#2E7D32',
+  SECONDARY: '#388E3C',
+  ACCENT: '#4CAF50',
   ERROR: '#D32F2F',
   SUCCESS: '#2E7D32',
   INFO: '#1976D2',
   WARNING: '#FFA000',
-  BACKGROUND: '#FFFFFF',  // Light Background
-  SURFACE: '#FFFFFF',     // White Surface
+  BACKGROUND: '#FFFFFF',
+  SURFACE: '#F8F9FA',
   CARD_BACKGROUND: '#FFFFFF',
-  TEXT: '#1C1B1F',        // High emphasis text - Light Mode Primary
-  TEXT_SECONDARY: '#444746', // Medium emphasis text - Light Mode Secondary
-  BORDER: '#E0E0E0',      // Light border
+  TEXT: '#1C1B1F',
+  TEXT_SECONDARY: '#444746',
+  BORDER: '#E0E0E0',
   WHITE: '#FFFFFF',
   BLACK: '#000000',
-  ROUTE_PATH: '#1B5E20',  // Dark Green for routes
-  CHIP_BACKGROUND: 'rgba(46, 125, 50, 0.08)', // Very faint brand green tint
+  ROUTE_PATH: '#1B5E20',
+  CHIP_BACKGROUND: 'rgba(46, 125, 50, 0.08)',
 };
 
 export const DARK_COLORS = {
-  PRIMARY: '#81C784',      // Light Green
-  SECONDARY: '#4CAF50',    // Bright Green
-  ACCENT: '#A5D6A7',       // Lighter Green
+  PRIMARY: '#81C784',
+  SECONDARY: '#4CAF50',
+  ACCENT: '#A5D6A7',
   ERROR: '#FF5252',
   SUCCESS: '#81C784',
   INFO: '#448AFF',
   WARNING: '#FFD740',
-  BACKGROUND: '#1C1B1F',   // Dark Background
-  SURFACE: '#1C1B1F',      // Dark Surface
-  CARD_BACKGROUND: '#212121',
-  TEXT: '#E1E3E1',         // Light text - Dark Mode Primary
-  TEXT_SECONDARY: '#C4C7C5', // Secondary text - Dark Mode Secondary
-  BORDER: '#333333',       // Dark border
+  BACKGROUND: '#1C1B1F',
+  SURFACE: '#2A2A2A',
+  CARD_BACKGROUND: '#242424',
+  TEXT: '#E1E3E1',
+  TEXT_SECONDARY: '#C4C7C5',
+  BORDER: '#3A3A3A',
   WHITE: '#FFFFFF',
   BLACK: '#000000',
-  ROUTE_PATH: '#4CAF50',   // Bright Green for routes
-  CHIP_BACKGROUND: 'rgba(76, 175, 80, 0.12)', // Faint brand green tint for dark mode
+  ROUTE_PATH: '#4CAF50',
+  CHIP_BACKGROUND: 'rgba(76, 175, 80, 0.12)',
 };
 
 type ThemeType = typeof COLORS;
+type ThemeMode = 'system' | 'light' | 'dark';
 
 interface ThemeContextType {
   theme: ThemeType;
   isDark: boolean;
+  themeMode: ThemeMode;
   toggleTheme: () => void;
+  setThemeMode: (mode: ThemeMode) => void;
 }
 
+const THEME_PREF_KEY = '@waka_theme_mode';
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const systemColorScheme = useColorScheme();
-  const [isDark, setIsDark] = useState(systemColorScheme === 'dark');
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    loadThemePreference();
+    AsyncStorage.getItem(THEME_PREF_KEY).then((saved) => {
+      if (saved === 'light' || saved === 'dark' || saved === 'system') {
+        setThemeModeState(saved);
+      }
+      setLoaded(true);
+    });
   }, []);
 
-  const loadThemePreference = async () => {
-    try {
-      const savedTheme = await AsyncStorage.getItem('theme');
-      if (savedTheme !== null) {
-        setIsDark(savedTheme === 'dark');
-      } else {
-        // First launch - detect system theme
-        setIsDark(systemColorScheme === 'dark');
-      }
-    } catch (error) {
-      console.error('Error loading theme preference:', error);
-      // Fallback to system theme
-      setIsDark(systemColorScheme === 'dark');
-    }
+  const setThemeMode = async (mode: ThemeMode) => {
+    setThemeModeState(mode);
+    await AsyncStorage.setItem(THEME_PREF_KEY, mode);
   };
 
-  const toggleTheme = async () => {
-    const newIsDark = !isDark;
-    setIsDark(newIsDark);
-    try {
-      await AsyncStorage.setItem('theme', newIsDark ? 'dark' : 'light');
-    } catch (error) {
-      console.error('Error saving theme preference:', error);
-    }
+  const toggleTheme = () => {
+    const next = isDark ? 'light' : 'dark';
+    setThemeMode(next);
   };
+
+  const isDark =
+    themeMode === 'dark' ||
+    (themeMode === 'system' && systemColorScheme === 'dark');
 
   const theme = isDark ? DARK_COLORS : COLORS;
 
+  if (!loaded) return null;
+
   return (
-    <ThemeContext.Provider value={{ theme, isDark, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, isDark, themeMode, toggleTheme, setThemeMode }}>
       {children}
     </ThemeContext.Provider>
   );

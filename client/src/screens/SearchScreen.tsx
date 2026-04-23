@@ -1,466 +1,500 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    TextInput,
-    FlatList,
-    ActivityIndicator,
-    Platform,
-    Keyboard,
-    Alert,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  FlatList,
+  ActivityIndicator,
+  Keyboard,
+  Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
 import { searchRoutes } from '../services/api';
+import { searchPlaces, getPlaceDetails, isWithinLagos } from '../services/placesService';
+import { getFavoritePlaces, FavoritePlace } from '../services/supabaseDataService';
+import type { TransportMode } from '../services/smartRoutingService';
+import TransportModeSelector from '../components/TransportModeSelector';
 
-const RECENT_SEARCHES = [
-    { id: 1, name: 'Victoria Island', address: 'Lagos', coordinates: { latitude: 6.4281, longitude: 3.4219 } },
-    { id: 2, name: 'Shoprite Ikeja', address: 'Obafemi Awolowo Way, Lagos', coordinates: { latitude: 6.5244, longitude: 3.3792 } },
-];
+const TRANSPORT_PREF_KEY  = 'preferredFirstLegTransportMode';
+const RECENT_SEARCHES_KEY = 'recentSearches';
+const MAX_RECENT          = 8;
+
+const DEFAULT_LAGOS = { latitude: 6.5244, longitude: 3.3792 };
 
 const POPULAR_PLACES = [
-    { id: 1, name: 'Lekki Phase 1', address: 'Lagos', coordinates: { latitude: 6.4488, longitude: 3.4723 } },
-    { id: 2, name: 'Ikeja City Mall', address: 'Lagos', coordinates: { latitude: 6.6059, longitude: 3.3490 } },
-    { id: 3, name: 'Surulere', address: 'Lagos', coordinates: { latitude: 6.4914, longitude: 3.3587 } },
-    { id: 4, name: 'Yaba', address: 'Lagos', coordinates: { latitude: 6.5101, longitude: 3.3869 } },
-    { id: 5, name: 'Ajah', address: 'Lagos', coordinates: { latitude: 6.4734, longitude: 3.5862 } },
+  { id: '1', name: 'Victoria Island',   address: 'Lagos',                    coordinates: { latitude: 6.4526, longitude: 3.3932 } },
+  { id: '2', name: 'Ikeja City Mall',   address: 'Obafemi Awolowo Way',      coordinates: { latitude: 6.6059, longitude: 3.3490 } },
+  { id: '3', name: 'Lekki Phase 1',     address: 'Lekki, Lagos',             coordinates: { latitude: 6.4281, longitude: 3.4219 } },
+  { id: '4', name: 'Yaba',              address: 'Yaba, Lagos',              coordinates: { latitude: 6.5101, longitude: 3.3869 } },
+  { id: '5', name: 'Ajah',              address: 'Ajah, Lagos',              coordinates: { latitude: 6.4734, longitude: 3.5862 } },
+  { id: '6', name: 'Surulere',          address: 'Surulere, Lagos',          coordinates: { latitude: 6.4914, longitude: 3.3587 } },
+  { id: '7', name: 'Ikoyi',             address: 'Ikoyi, Lagos',             coordinates: { latitude: 6.4579, longitude: 3.3674 } },
+  { id: '8', name: 'Oshodi',            address: 'Oshodi, Lagos',            coordinates: { latitude: 6.5569, longitude: 3.3484 } },
 ];
 
-// Default Lagos location (Victoria Island) for testing when outside Lagos
-const DEFAULT_LAGOS_LOCATION = { latitude: 6.4281, longitude: 3.4219 };
-
-// Check if coordinates are within Lagos area
-const isWithinLagos = (lat: number, lng: number): boolean => {
-    return lat >= 6.3 && lat <= 6.8 && lng >= 3.1 && lng <= 4.0;
-};
+interface SearchItem {
+  id: string;
+  name: string;
+  address: string;
+  coordinates?: { latitude: number; longitude: number };
+  placeId?: string;
+  isRecent?: boolean;
+  isQuery?: boolean;
+}
 
 export default function SearchScreen({ navigation }: any) {
-    const { theme } = useAppTheme();
-    const [query, setQuery] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [suggestions, setSuggestions] = useState<any[]>([]);
-    const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const { theme, isDark } = useAppTheme();
+  const { user } = useAuth();
+  const [query, setQuery]                 = useState('');
+  const [loading, setLoading]             = useState(false);
+  const [searching, setSearching]         = useState(false);
+  const [suggestions, setSuggestions]     = useState<SearchItem[]>([]);
+  const [recentSearches, setRecentSearches] = useState<SearchItem[]>([]);
+  const [userLocation, setUserLocation]   = useState<{ latitude: number; longitude: number } | null>(null);
+  const [savedPref, setSavedPref]         = useState<TransportMode | null>(null);
+  const [showModeSelector, setShowModeSelector] = useState(false);
+  const [pendingDestination, setPendingDestination] = useState<SearchItem | null>(null);
+  const [homePlace, setHomePlace]         = useState<FavoritePlace | null>(null);
+  const [workPlace, setWorkPlace]         = useState<FavoritePlace | null>(null);
 
-    useEffect(() => {
-        getUserLocation();
-    }, []);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef      = useRef<TextInput>(null);
 
-    useEffect(() => {
-        if (query.length > 0) {
-            generateSuggestions(query);
-        } else {
-            setSuggestions([]);
-        }
-    }, [query]);
+  useEffect(() => {
+    getUserLocation();
+    loadRecentSearches();
+    loadSavedPref();
+    loadSavedPlaces();
+  }, [user]);
 
-    const getUserLocation = async () => {
-        try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status === 'granted') {
-                const location = await Location.getCurrentPositionAsync({});
-                const lat = location.coords.latitude;
-                const lng = location.coords.longitude;
-                
-                // Check if user is in Lagos area
-                if (isWithinLagos(lat, lng)) {
-                    setUserLocation({ latitude: lat, longitude: lng });
-                } else {
-                    // User is outside Lagos - use default Lagos location for testing
-                    console.log('User outside Lagos, using default location for testing');
-                    setUserLocation(DEFAULT_LAGOS_LOCATION);
-                }
-            } else {
-                // Permission denied - use default Lagos location
-                setUserLocation(DEFAULT_LAGOS_LOCATION);
-            }
-        } catch (error) {
-            console.error('Error getting user location:', error);
-            // Fallback to default Lagos location
-            setUserLocation(DEFAULT_LAGOS_LOCATION);
-        }
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+
+    if (!query.trim()) {
+      setSuggestions([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    searchTimeout.current = setTimeout(async () => {
+      const results = await searchPlaces(query);
+      setSuggestions(
+        results.map((r) => ({
+          id:      r.placeId,
+          name:    r.name,
+          address: r.address,
+          placeId: r.placeId,
+        }))
+      );
+      setSearching(false);
+    }, 350);
+
+    return () => {
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
     };
+  }, [query]);
 
-    const generateSuggestions = (searchQuery: string) => {
-        const filteredPlaces = POPULAR_PLACES.filter(place =>
-            place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            place.address.toLowerCase().includes(searchQuery.toLowerCase())
+  const getUserLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({});
+        const { latitude, longitude } = loc.coords;
+        setUserLocation(isWithinLagos(latitude, longitude) ? { latitude, longitude } : DEFAULT_LAGOS);
+      } else {
+        setUserLocation(DEFAULT_LAGOS);
+      }
+    } catch {
+      setUserLocation(DEFAULT_LAGOS);
+    }
+  };
+
+  const loadRecentSearches = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(RECENT_SEARCHES_KEY);
+      if (raw) setRecentSearches(JSON.parse(raw));
+    } catch {}
+  };
+
+  const saveRecentSearch = async (item: SearchItem) => {
+    try {
+      const recent = recentSearches.filter((r) => r.id !== item.id);
+      const updated = [{ ...item, isRecent: true }, ...recent].slice(0, MAX_RECENT);
+      setRecentSearches(updated);
+      await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+    } catch {}
+  };
+
+  const removeRecentSearch = async (id: string) => {
+    const updated = recentSearches.filter((r) => r.id !== id);
+    setRecentSearches(updated);
+    await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+  };
+
+  const loadSavedPref = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(TRANSPORT_PREF_KEY);
+      if (raw) setSavedPref(raw as TransportMode);
+    } catch {}
+  };
+
+  const loadSavedPlaces = async () => {
+    if (!user) return;
+    try {
+      const places = await getFavoritePlaces(user.id);
+      setHomePlace(places.find((p) => p.type === 'home') ?? null);
+      setWorkPlace(places.find((p) => p.type === 'work') ?? null);
+    } catch {}
+  };
+
+  const handleDestinationSelect = useCallback(async (item: SearchItem) => {
+    if (!userLocation) return;
+    Keyboard.dismiss();
+    setPendingDestination(item);
+    setShowModeSelector(true);
+  }, [userLocation]);
+
+  const handleModeSelected = async (mode: TransportMode) => {
+    setShowModeSelector(false);
+    if (!pendingDestination || !userLocation) return;
+
+    await AsyncStorage.setItem(TRANSPORT_PREF_KEY, mode);
+    setSavedPref(mode);
+    setLoading(true);
+
+    try {
+      let coords = pendingDestination.coordinates;
+
+      if (!coords && pendingDestination.placeId) {
+        const details = await getPlaceDetails(pendingDestination.placeId);
+        if (!details) {
+          setLoading(false);
+          return;
+        }
+        if (!isWithinLagos(details.latitude, details.longitude)) {
+          setLoading(false);
+          return;
+        }
+        coords = { latitude: details.latitude, longitude: details.longitude };
+      }
+
+      if (!coords) {
+        setLoading(false);
+        Alert.alert(
+          'Location not found',
+          'We couldn\'t get coordinates for this place. Try searching for it directly.',
+          [{ text: 'OK' }]
         );
+        return;
+      }
 
-        // Add current query as a suggestion if it doesn't match existing places
-        const querySuggestion = {
-            id: 'query',
-            name: searchQuery,
-            address: 'Search for this location',
-            coordinates: null, // Will use geocoding
-            isQuery: true,
-        };
+      await saveRecentSearch({ ...pendingDestination, coordinates: coords });
 
-        setSuggestions([querySuggestion, ...filteredPlaces.slice(0, 4)]);
-    };
+      const result = await searchRoutes({
+        origin:               userLocation,
+        destination:          coords,
+        destinationName:      pendingDestination.name,
+        destinationDetails:   pendingDestination,
+        preferredFirstLegMode: mode,
+      });
 
-    const handleDestinationSelect = async (destination: any) => {
-        if (!userLocation) {
-            Alert.alert('Location Required', 'Please enable location services to get directions.');
-            return;
-        }
+      if (result?.legacyRoute) {
+        navigation.replace('RouteDetail', {
+          routeData:      result.legacyRoute,
+          smartRouteData: result.smartRoute,
+          destination:    pendingDestination,
+        });
+      }
+    } catch (err) {
+      console.error('Route search error:', err);
+    } finally {
+      setLoading(false);
+      setPendingDestination(null);
+    }
+  };
 
-        Keyboard.dismiss();
-        setLoading(true);
+  const handleModeSelectorDismiss = () => {
+    setShowModeSelector(false);
+    setPendingDestination(null);
+  };
 
-        try {
-            let destinationCoords = destination.coordinates;
+  const renderSearchItem = ({ item }: { item: SearchItem }) => (
+    <TouchableOpacity
+      style={[styles.listItem, { borderBottomColor: theme.BORDER }]}
+      onPress={() => handleDestinationSelect(item)}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.iconWrap, { backgroundColor: item.isRecent ? theme.SURFACE : '#E8F5E9' }]}>
+        <Ionicons
+          name={item.isRecent ? 'time-outline' : 'location-outline'}
+          size={18}
+          color={theme.PRIMARY}
+        />
+      </View>
+      <View style={styles.itemText}>
+        <Text style={[styles.itemName, { color: theme.TEXT }]} numberOfLines={1}>{item.name}</Text>
+        {!!item.address && (
+          <Text style={[styles.itemAddress, { color: theme.TEXT_SECONDARY }]} numberOfLines={1}>{item.address}</Text>
+        )}
+      </View>
+      {item.isRecent && (
+        <TouchableOpacity onPress={() => removeRecentSearch(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="close" size={16} color={theme.TEXT_SECONDARY} />
+        </TouchableOpacity>
+      )}
+    </TouchableOpacity>
+  );
 
-            // If it's a custom query, try to geocode it
-            if (destination.isQuery) {
-                try {
-                    // Add "Lagos Nigeria" to improve geocoding accuracy
-                    const searchQuery = `${destination.name} Lagos Nigeria`;
-                    const geocodeResult = await Location.geocodeAsync(searchQuery);
-                    if (geocodeResult.length > 0) {
-                        const lat = geocodeResult[0].latitude;
-                        const lng = geocodeResult[0].longitude;
-                        
-                        // Validate that result is in Lagos
-                        if (isWithinLagos(lat, lng)) {
-                            destinationCoords = { latitude: lat, longitude: lng };
-                        } else {
-                            // Result is not in Lagos - show error
-                            Alert.alert('Location Not in Lagos', 'Please search for a location within Lagos, Nigeria.');
-                            setLoading(false);
-                            return;
-                        }
-                    } else {
-                        Alert.alert('Location Not Found', 'Could not find this location. Please try a different search.');
-                        setLoading(false);
-                        return;
-                    }
-                } catch (error) {
-                    Alert.alert('Location Not Found', 'Could not find this location. Please try a different search.');
-                    setLoading(false);
-                    return;
-                }
-            }
+  const listData: SearchItem[] = query.trim()
+    ? suggestions
+    : [...recentSearches, ...POPULAR_PLACES.filter((p) => !recentSearches.find((r) => r.id === p.id))];
 
-            // Get routes for public transport
-            const routeResult = await searchRoutes({
-                origin: userLocation,
-                destination: destinationCoords,
-                destinationName: destination.name,
-                destinationDetails: destination,
-            });
+  const sectionTitle = query.trim() ? 'Suggestions' : recentSearches.length > 0 ? 'Recent & Popular' : 'Popular Places';
 
-            if (routeResult && routeResult.legacyRoute) {
-                // Replace the search modal with route detail screen
-                navigation.replace('RouteDetail', {
-                    routeData: routeResult.legacyRoute,
-                    smartRouteData: routeResult.smartRoute,
-                    destination: destination,
-                });
-            } else {
-                Alert.alert('No Routes Found', 'Could not find public transport routes to this destination.');
-            }
-        } catch (error) {
-            console.error('Error getting routes:', error);
-            Alert.alert('Error', 'Failed to get directions. Please try again.');
-        } finally {
-            setLoading(false);
-        }
-    };
+  return (
+    <View style={[styles.container, { backgroundColor: theme.BACKGROUND }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
-    return (
-        <View style={[styles.container, { backgroundColor: theme.BACKGROUND }]}>
-            <StatusBar style="dark" />
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                <View style={{ flex: 1 }}>
-                    <SafeAreaView style={styles.safeArea}>
+      {/* Header */}
+      <SafeAreaView style={[styles.header, { backgroundColor: theme.CARD_BACKGROUND, borderBottomColor: theme.BORDER }]}>
+        <View style={styles.searchRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="arrow-back" size={24} color={theme.PRIMARY} />
+          </TouchableOpacity>
 
-                        {/* Header Section - Vertical Flexbox Layout */}
-                        <View style={styles.headerSection}>
-                            <View style={styles.searchRow}>
-                                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                                    <Ionicons name="arrow-back" size={24} color={theme.PRIMARY} />
-                                </TouchableOpacity>
-                                <TextInput
-                                    style={[styles.searchInput, { color: theme.TEXT }]}
-                                    placeholder="Search places, addresses..."
-                                    placeholderTextColor={theme.TEXT_SECONDARY}
-                                    value={query}
-                                    onChangeText={setQuery}
-                                    autoFocus={true}
-                                    returnKeyType="search"
-                                    onSubmitEditing={() => query && handleDestinationSelect({ name: query, isQuery: true })}
-                                />
-                                {query.length > 0 && (
-                                    <TouchableOpacity onPress={() => setQuery('')}>
-                                        <Ionicons name="close-circle" size={20} color={theme.TEXT_SECONDARY} />
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-
-                            {/* Quick Actions - Home/Work buttons */}
-                            <View style={styles.quickActionsRow}>
-                                <TouchableOpacity style={styles.quickChip} onPress={() => handleDestinationSelect({ name: 'Home', address: 'Your home location', id: 'home' })}>
-                                    <Ionicons name="home" size={16} color={theme.PRIMARY} />
-                                    <Text style={[styles.quickChipText, { color: theme.PRIMARY }]}>Home</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.quickChip} onPress={() => handleDestinationSelect({ name: 'Work', address: 'Your work location', id: 'work' })}>
-                                    <Ionicons name="briefcase" size={16} color={theme.PRIMARY} />
-                                    <Text style={[styles.quickChipText, { color: theme.PRIMARY }]}>Work</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-
-                        {/* Content - Suggestions or Recent */}
-                        <View style={styles.content}>
-                            {loading ? (
-                                <View style={styles.center}>
-                                    <ActivityIndicator size="large" color={theme.PRIMARY} />
-                                    <Text style={[styles.loadingText, { color: theme.TEXT_SECONDARY }]}>
-                                        Finding public transport routes...
-                                    </Text>
-                                </View>
-                            ) : (
-                                <View>
-                                    {query ? (
-                                        <>
-                                            <Text style={[styles.sectionTitle, { color: theme.TEXT }]}>Suggestions</Text>
-                                            <FlatList
-                                                data={suggestions}
-                                                keyExtractor={(item) => item.id.toString()}
-                                                keyboardShouldPersistTaps="handled"
-                                                keyboardDismissMode="on-drag"
-                                                renderItem={({ item }) => (
-                                                    <TouchableOpacity
-                                                        style={styles.suggestionItem}
-                                                        onPress={() => handleDestinationSelect(item)}
-                                                    >
-                                                        <View style={styles.suggestionIcon}>
-                                                            <Ionicons
-                                                                name={item.isQuery ? "search" : "location-outline"}
-                                                                size={20}
-                                                                color={theme.PRIMARY}
-                                                            />
-                                                        </View>
-                                                        <View style={styles.suggestionInfo}>
-                                                            <Text style={[styles.suggestionName, { color: theme.TEXT }]}>
-                                                                {item.name}
-                                                            </Text>
-                                                            <Text style={[styles.suggestionAddress, { color: theme.TEXT_SECONDARY }]}>
-                                                                {item.address}
-                                                            </Text>
-                                                            {item.isQuery && (
-                                                                <Text style={[styles.suggestionHint, { color: theme.PRIMARY }]}>
-                                                                    Tap to search for this location
-                                                                </Text>
-                                                            )}
-                                                        </View>
-                                                    </TouchableOpacity>
-                                                )}
-                                            />
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Text style={[styles.sectionTitle, { color: theme.TEXT }]}>Recent</Text>
-                                            <FlatList
-                                                data={RECENT_SEARCHES}
-                                                keyExtractor={(item) => item.id.toString()}
-                                                keyboardShouldPersistTaps="handled"
-                                                keyboardDismissMode="on-drag"
-                                                renderItem={({ item }) => (
-                                                    <TouchableOpacity
-                                                        style={styles.recentItem}
-                                                        onPress={() => handleDestinationSelect(item)}
-                                                    >
-                                                        <View style={styles.recentIcon}>
-                                                            <Ionicons name="location-outline" size={20} color={theme.PRIMARY} />
-                                                        </View>
-                                                        <View>
-                                                            <Text style={[styles.recentName, { color: theme.TEXT }]}>{item.name}</Text>
-                                                            <Text style={[styles.recentAddress, { color: theme.TEXT_SECONDARY }]}>{item.address}</Text>
-                                                        </View>
-                                                    </TouchableOpacity>
-                                                )}
-                                            />
-
-                                            <Text style={[styles.sectionTitle, { color: theme.TEXT, marginTop: SPACING.LG }]}>Popular Places</Text>
-                                            <FlatList
-                                                data={POPULAR_PLACES}
-                                                keyExtractor={(item) => item.id.toString()}
-                                                keyboardShouldPersistTaps="handled"
-                                                keyboardDismissMode="on-drag"
-                                                renderItem={({ item }) => (
-                                                    <TouchableOpacity
-                                                        style={styles.recentItem}
-                                                        onPress={() => handleDestinationSelect(item)}
-                                                    >
-                                                        <View style={styles.recentIcon}>
-                                                            <Ionicons name="location-outline" size={20} color={theme.PRIMARY} />
-                                                        </View>
-                                                        <View>
-                                                            <Text style={[styles.recentName, { color: theme.TEXT }]}>{item.name}</Text>
-                                                            <Text style={[styles.recentAddress, { color: theme.TEXT_SECONDARY }]}>{item.address}</Text>
-                                                        </View>
-                                                    </TouchableOpacity>
-                                                )}
-                                            />
-                                        </>
-                                    )}
-                                </View>
-                            )}
-                        </View>
-                    </SafeAreaView>
-                </View>
-            </TouchableWithoutFeedback>
+          <View style={[styles.inputWrap, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}>
+            <Ionicons name="search-outline" size={18} color={theme.TEXT_SECONDARY} style={{ marginRight: 8 }} />
+            <TextInput
+              ref={inputRef}
+              style={[styles.input, { color: theme.TEXT }]}
+              placeholder="Search places in Lagos..."
+              placeholderTextColor={theme.TEXT_SECONDARY}
+              value={query}
+              onChangeText={setQuery}
+              autoFocus
+              returnKeyType="search"
+              onSubmitEditing={() => {
+                if (query.trim() && suggestions.length > 0) handleDestinationSelect(suggestions[0]);
+              }}
+            />
+            {query.length > 0 && (
+              <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close-circle" size={18} color={theme.TEXT_SECONDARY} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-    );
+
+        {/* Quick chips */}
+        <View style={styles.chips}>
+          <TouchableOpacity
+            style={[styles.chip, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}
+            onPress={() => {
+              if (homePlace) {
+                handleDestinationSelect({
+                  id: 'home',
+                  name: homePlace.name,
+                  address: homePlace.address || 'Home',
+                  coordinates: { latitude: homePlace.latitude, longitude: homePlace.longitude },
+                });
+              } else {
+                Alert.alert(
+                  'Home not set',
+                  'Go to You → Places to set your home location.',
+                  [{ text: 'OK' }]
+                );
+              }
+            }}
+          >
+            <Ionicons name="home-outline" size={14} color={theme.PRIMARY} />
+            <Text style={[styles.chipText, { color: theme.PRIMARY }]}>Home</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.chip, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}
+            onPress={() => {
+              if (workPlace) {
+                handleDestinationSelect({
+                  id: 'work',
+                  name: workPlace.name,
+                  address: workPlace.address || 'Work',
+                  coordinates: { latitude: workPlace.latitude, longitude: workPlace.longitude },
+                });
+              } else {
+                Alert.alert(
+                  'Work not set',
+                  'Go to You → Places to set your work location.',
+                  [{ text: 'OK' }]
+                );
+              }
+            }}
+          >
+            <Ionicons name="briefcase-outline" size={14} color={theme.PRIMARY} />
+            <Text style={[styles.chipText, { color: theme.PRIMARY }]}>Work</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      {/* Content */}
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={theme.PRIMARY} />
+          <Text style={[styles.loadingText, { color: theme.TEXT_SECONDARY }]}>
+            Finding public transport routes...
+          </Text>
+        </View>
+      ) : (
+        <View style={{ flex: 1 }}>
+          <View style={[styles.sectionHeader, { borderBottomColor: theme.BORDER }]}>
+            <Text style={[styles.sectionTitle, { color: theme.TEXT_SECONDARY }]}>{sectionTitle}</Text>
+            {searching && <ActivityIndicator size="small" color={theme.PRIMARY} />}
+          </View>
+
+          {listData.length === 0 && query.trim() && !searching ? (
+            <View style={styles.center}>
+              <Ionicons name="search-outline" size={40} color={theme.TEXT_SECONDARY} />
+              <Text style={[styles.emptyText, { color: theme.TEXT_SECONDARY }]}>No places found</Text>
+              <Text style={[styles.emptyHint, { color: theme.TEXT_SECONDARY }]}>Try a different search term</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={listData}
+              keyExtractor={(item) => item.id}
+              renderItem={renderSearchItem}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentContainerStyle={{ paddingBottom: 40 }}
+            />
+          )}
+        </View>
+      )}
+
+      {/* Transport mode selector */}
+      <TransportModeSelector
+        visible={showModeSelector}
+        savedPreference={savedPref}
+        onSelect={handleModeSelected}
+        onDismiss={handleModeSelectorDismiss}
+      />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    safeArea: {
-        flex: 1,
-    },
-    headerSection: {
-        flexDirection: 'column',
-        padding: SPACING.MD,
-        paddingBottom: 24, // Fixed padding bottom as requested
-        backgroundColor: '#FFFFFF',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E0E0E0',
-    },
-    searchRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.SM,
-        marginBottom: SPACING.SM,
-    },
-    backButton: {
-        padding: 4,
-    },
-    searchInputContainer: {
-        // Legacy container if needed
-        flex: 1,
-    },
-    searchInput: {
-        flex: 1,
-        fontSize: FONT_SIZES.BODY,
-        paddingVertical: 8,
-    },
-    quickActionsRow: {
-        flexDirection: 'row',
-        gap: SPACING.SM,
-        marginTop: 4,
-        marginBottom: 24,
-    },
-    quickChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-        backgroundColor: '#FFFFFF',
-        borderWidth: 1,
-        borderColor: '#C8E6C9',
-    },
-    quickChipText: {
-        fontSize: FONT_SIZES.SMALL,
-        fontWeight: '600',
-        color: '#2E7D32',
-    },
-    content: {
-        flex: 1,
-        padding: SPACING.MD,
-    },
-    center: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingText: {
-        marginTop: SPACING.MD,
-        fontSize: FONT_SIZES.BODY,
-    },
-    sectionTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#444746',
-        marginBottom: SPACING.SM,
-    },
-    recentItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: SPACING.MD,
-        gap: SPACING.MD,
-    },
-    recentIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#E8F5E9',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    recentName: {
-        fontSize: FONT_SIZES.BODY,
-        fontWeight: '600',
-        color: '#1C1B1F',
-    },
-    recentAddress: {
-        fontSize: FONT_SIZES.CAPTION,
-        color: '#444746',
-    },
-    separator: {
-        height: 1,
-        backgroundColor: '#EEEEEE',
-        marginLeft: 36 + SPACING.MD, // Align with text
-    },
-    mockResult: {
-        marginTop: SPACING.XL,
-        padding: SPACING.MD,
-        backgroundColor: '#e8f5e9',
-        borderRadius: BORDER_RADIUS.MEDIUM,
-        alignItems: 'center',
-    },
-    suggestionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: SPACING.MD,
-        gap: SPACING.MD,
-    },
-    suggestionIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#E8F5E9',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    suggestionInfo: {
-        flex: 1,
-    },
-    suggestionName: {
-        fontSize: FONT_SIZES.BODY,
-        fontWeight: '600',
-        color: '#1C1B1F',
-    },
-    suggestionAddress: {
-        fontSize: FONT_SIZES.CAPTION,
-        color: '#444746',
-    },
-    suggestionHint: {
-        fontSize: FONT_SIZES.SMALL,
-        fontWeight: '500',
-        color: '#2E7D32',
-        marginTop: 2,
-    },
+  container: { flex: 1 },
+  header: {
+    paddingHorizontal: SPACING.MD,
+    paddingBottom: SPACING.MD,
+    borderBottomWidth: 1,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },
+      android: { elevation: 3 },
+    }),
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.SM,
+    paddingTop: SPACING.SM,
+  },
+  backBtn: { padding: 4 },
+  inputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+    borderRadius: BORDER_RADIUS.ROUND,
+    borderWidth: 1,
+  },
+  input: {
+    flex: 1,
+    fontSize: FONT_SIZES.BODY,
+  },
+  chips: {
+    flexDirection: 'row',
+    gap: SPACING.SM,
+    marginTop: SPACING.MD,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: 7,
+    borderRadius: BORDER_RADIUS.ROUND,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: FONT_SIZES.SMALL,
+    fontWeight: '600',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.SM,
+    borderBottomWidth: 1,
+  },
+  sectionTitle: {
+    fontSize: FONT_SIZES.SMALL,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.MD,
+    gap: SPACING.MD,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemText: { flex: 1 },
+  itemName: {
+    fontSize: FONT_SIZES.BODY,
+    fontWeight: '600',
+  },
+  itemAddress: {
+    fontSize: FONT_SIZES.SMALL,
+    marginTop: 2,
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.XL,
+  },
+  loadingText: {
+    marginTop: SPACING.MD,
+    fontSize: FONT_SIZES.BODY,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: FONT_SIZES.HEADING_3,
+    fontWeight: '600',
+    marginTop: SPACING.MD,
+  },
+  emptyHint: {
+    fontSize: FONT_SIZES.BODY,
+    marginTop: SPACING.SM,
+  },
 });

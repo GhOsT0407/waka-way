@@ -48,7 +48,7 @@ export const BORDER_RADIUS = {
   ROUND: 50,
 } as const;
 
-export const GOOGLE_MAPS_API_KEY = 'YOUR_ACTUAL_API_KEY_HERE'; // Replace with your actual API key
+export const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 export const FONT_SIZES = {
   DISPLAY_LARGE: 32,

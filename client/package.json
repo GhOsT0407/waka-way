@@ -18,7 +18,7 @@
     "@supabase/supabase-js": "^2.89.0",
     "axios": "^1.13.2",
     "base64-arraybuffer": "^1.0.2",
-    "expo": "~54.0.29",
+    "expo": "~54.0.33",
     "expo-auth-session": "~7.0.10",
     "expo-blur": "~15.0.8",
     "expo-crypto": "~15.0.8",
@@ -26,7 +26,7 @@
     "expo-image-picker": "~17.0.4",
     "expo-linear-gradient": "~15.0.8",
     "expo-location": "~19.0.8",
-    "expo-notifications": "~0.31.2",
+    "expo-notifications": "~0.32.16",
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.10",
     "react": "19.1.0",
@@ -40,6 +40,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "expo-module-scripts": "^55.0.2",
     "patch-package": "^8.0.1",
     "typescript": "~5.9.2"
   },

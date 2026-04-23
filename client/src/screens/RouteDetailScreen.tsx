@@ -15,16 +15,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WakaWayMapView } from '../components/map/MapView';
 import { RouteStepCard } from '../components/RouteStepCard';
 import { FareEstimateCard } from '../components/FareEstimateCard';
 import { SmartRouteOptions } from '../components/SmartRouteOptions';
 import { useAppTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZES, GOOGLE_MAPS_API_KEY } from '../utils/constants';
 import { getRoute } from '../services/api';
 import { TransportMode } from '../services/pricingEngine';
 import { SmartRouteResult, RouteOption } from '../services/smartRoutingService';
+import { addRouteHistory, saveRoute, deleteSavedRoute, getSavedRoutes } from '../services/supabaseDataService';
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -36,12 +37,14 @@ const SNAP_POINTS = {
 };
 
 export default function RouteDetailScreen({ route, navigation }: any) {
-    const { theme } = useAppTheme();
+    const { theme, isDark } = useAppTheme();
+    const { user } = useAuth();
     const { routeId, routeData, smartRouteData } = route.params || {};
     const [activeRoute, setActiveRoute] = useState<any>(routeData || null);
     const [smartRoute, setSmartRoute] = useState<SmartRouteResult | null>(smartRouteData || null);
     const [selectedOption, setSelectedOption] = useState<RouteOption | null>(null);
     const [isSaved, setIsSaved] = useState(false);
+    const [savedRouteId, setSavedRouteId] = useState<string | null>(null);
     const [showSmartOptions, setShowSmartOptions] = useState(true);
     const [selectedTransportMode, setSelectedTransportMode] = useState<TransportMode | undefined>(undefined);
     const [isRaining, setIsRaining] = useState(false);
@@ -162,33 +165,33 @@ export default function RouteDetailScreen({ route, navigation }: any) {
     };
 
     const checkIfSaved = async () => {
+        if (!user) return;
         try {
-            const savedJourneys = await AsyncStorage.getItem('savedJourneys');
-            if (savedJourneys) {
-                const journeys = JSON.parse(savedJourneys);
-                const exists = journeys.some((j: any) => j.id === activeRoute.id);
-                setIsSaved(exists);
-            }
+            const saved = await getSavedRoutes(user.id);
+            const match = saved.find(
+                (s) =>
+                    s.origin_name === (activeRoute?.origin ?? smartRoute?.origin.name) &&
+                    s.destination_name === (activeRoute?.destination ?? smartRoute?.destination.name)
+            );
+            if (match) { setIsSaved(true); setSavedRouteId(match.id); }
         } catch (e) {
-            console.log('Error checking saved journeys', e);
+            console.log('checkIfSaved error', e);
         }
     };
 
     const saveJourney = async () => {
+        if (!user || !activeRoute) return;
         try {
-            const savedJourneys = await AsyncStorage.getItem('savedJourneys');
-            let journeys = savedJourneys ? JSON.parse(savedJourneys) : [];
             if (!isSaved) {
-                journeys.push(activeRoute);
-                await AsyncStorage.setItem('savedJourneys', JSON.stringify(journeys));
-                setIsSaved(true);
-            } else {
-                journeys = journeys.filter((j: any) => j.id !== activeRoute.id);
-                await AsyncStorage.setItem('savedJourneys', JSON.stringify(journeys));
+                const saved = await saveRoute(user.id, activeRoute, smartRoute, selectedOption);
+                if (saved) { setIsSaved(true); setSavedRouteId(saved.id); }
+            } else if (savedRouteId) {
+                await deleteSavedRoute(savedRouteId);
                 setIsSaved(false);
+                setSavedRouteId(null);
             }
         } catch (e) {
-            console.log('Error saving journey', e);
+            console.log('saveJourney error', e);
         }
     };
 
@@ -196,6 +199,52 @@ export default function RouteDetailScreen({ route, navigation }: any) {
         setSelectedTransportMode(mode);
         // In a real app, you might want to update the route with the selected mode and price
         console.log(`Selected ${mode} with estimated fare: ${priceRange.formatted}`);
+    };
+
+    const applyRouteOptionToActiveRoute = (option: RouteOption) => {
+        setSelectedOption(option);
+        setActiveRoute((prev: any) => ({
+            ...prev,
+            total_duration_mins: option.totalDurationMins,
+            total_distance_km: option.totalDistanceKm,
+            total_fare: option.totalPriceMax,
+            segments: option.legs.map((leg, index) => ({
+                id: index + 1,
+                mode: leg.mode.toUpperCase(),
+                instruction: leg.instruction,
+                duration_mins: leg.durationMins,
+                distance_km: leg.distanceKm,
+                fare: leg.priceMax,
+                from_stop: leg.from.name,
+                to_stop: leg.to.name,
+            })),
+        }));
+    };
+
+    const startJourney = async (option?: RouteOption) => {
+        const optionToStart = option
+            || selectedOption
+            || smartRoute?.options.find((o) => o.id === smartRoute.recommendedOptionId)
+            || smartRoute?.options[0]
+            || null;
+
+        if (optionToStart) {
+            applyRouteOptionToActiveRoute(optionToStart);
+        }
+
+        setShowSmartOptions(false);
+        expandSheet();
+
+        // Auto-save to route history
+        if (user && activeRoute) {
+            addRouteHistory(user.id, activeRoute, smartRoute, optionToStart).catch(() => {});
+        }
+
+        Alert.alert(
+            'Journey Started! 🚌',
+            'Step-by-step directions are now active. Follow the route below.',
+            [{ text: 'OK' }]
+        );
     };
 
     if (!activeRoute) {
@@ -208,7 +257,7 @@ export default function RouteDetailScreen({ route, navigation }: any) {
 
     return (
         <View style={styles.container}>
-            <StatusBar style="dark" />
+            <StatusBar style={isDark ? 'light' : 'dark'} />
 
             {/* Full Screen Map */}
             <View style={styles.mapContainer}>
@@ -298,31 +347,10 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                         <SmartRouteOptions
                             routeResult={smartRoute}
                             onSelectOption={(option) => {
-                                setSelectedOption(option);
-                                // Update activeRoute with selected option's data
-                                setActiveRoute({
-                                    ...activeRoute,
-                                    total_duration_mins: option.totalDurationMins,
-                                    total_distance_km: option.totalDistanceKm,
-                                    total_fare: option.totalPriceMax,
-                                    segments: option.legs.map((leg, index) => ({
-                                        id: index + 1,
-                                        mode: leg.mode.toUpperCase(),
-                                        instruction: leg.instruction,
-                                        duration_mins: leg.durationMins,
-                                        distance_km: leg.distanceKm,
-                                        fare: leg.priceMax,
-                                        from_stop: leg.from.name,
-                                        to_stop: leg.to.name,
-                                    })),
-                                });
+                                applyRouteOptionToActiveRoute(option);
                             }}
                             onStartJourney={(option) => {
-                                Alert.alert(
-                                    'Start Journey',
-                                    `Starting ${option.name} route to ${smartRoute.destination.name}`,
-                                    [{ text: 'OK' }]
-                                );
+                                startJourney(option);
                             }}
                         />
                     ) : (
@@ -337,19 +365,19 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                                     </View>
                                     <View style={styles.ratingContainer}>
                                         <Ionicons name="star" size={14} color={theme.ACCENT} />
-                                        <Text style={styles.ratingText}>{activeRoute.rating}</Text>
+                                        <Text style={[styles.ratingText, { color: theme.TEXT }]}>{activeRoute.rating}</Text>
                                     </View>
                                 </View>
 
-                                <View style={styles.statsRow}>
+                                <View style={[styles.statsRow, { backgroundColor: theme.SURFACE }]}>
                                     <View style={styles.statItem}>
-                                        <Text style={styles.statLabel}>Duration</Text>
-                                        <Text style={styles.statValue}>{activeRoute.total_duration_mins} min</Text>
+                                        <Text style={[styles.statLabel, { color: theme.TEXT_SECONDARY }]}>Duration</Text>
+                                        <Text style={[styles.statValue, { color: theme.TEXT }]}>{activeRoute.total_duration_mins} min</Text>
                                     </View>
-                                    <View style={styles.divider} />
+                                    <View style={[styles.divider, { backgroundColor: theme.BORDER }]} />
                                     <View style={styles.statItem}>
-                                        <Text style={styles.statLabel}>Distance</Text>
-                                        <Text style={styles.statValue}>{activeRoute.total_distance_km} km</Text>
+                                        <Text style={[styles.statLabel, { color: theme.TEXT_SECONDARY }]}>Distance</Text>
+                                        <Text style={[styles.statValue, { color: theme.TEXT }]}>{activeRoute.total_distance_km} km</Text>
                                     </View>
                                 </View>
 
@@ -377,11 +405,11 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                                 </View>
                             </View>
 
-                            <View style={styles.sectionDivider} />
+                            <View style={[styles.sectionDivider, { backgroundColor: theme.BORDER }]} />
 
                             {/* Steps List */}
                             <View style={styles.stepsContainer}>
-                                <Text style={styles.stepsTitle}>Directions</Text>
+                                <Text style={[styles.stepsTitle, { color: theme.TEXT }]}>Directions</Text>
                                 {activeRoute.segments?.map((step: any, index: number) => (
                                     <RouteStepCard
                                         key={step.id}
@@ -404,7 +432,7 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                 <TouchableOpacity style={[styles.saveFab, { backgroundColor: theme.CARD_BACKGROUND }]} onPress={saveJourney}>
                     <Ionicons name={isSaved ? "heart" : "heart-outline"} size={24} color={isSaved ? theme.ERROR : theme.TEXT} />
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.fab, { backgroundColor: theme.PRIMARY }]}>
+                <TouchableOpacity style={[styles.fab, { backgroundColor: theme.PRIMARY }]} onPress={() => startJourney()}>
                     <Text style={[styles.fabText, { color: theme.CARD_BACKGROUND }]}>Start Journey</Text>
                     <Ionicons name="navigate" size={20} color={theme.CARD_BACKGROUND} />
                 </TouchableOpacity>
@@ -481,8 +509,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.LG,
     },
     mapContainer: {
-        width: '100%',
-        position: 'relative',
+        flex: 1,
     },
     swipeIndicator: {
         position: 'absolute',

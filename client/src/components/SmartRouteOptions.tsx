@@ -39,6 +39,7 @@ const LegItem: React.FC<{ leg: RouteLeg; isLast: boolean; theme: any }> = ({ leg
       case 'danfo': return '#2196F3';
       case 'brt': return '#9C27B0';
       case 'ferry': return '#00BCD4';
+      case 'rail': return '#E91E63';
       default: return '#757575';
     }
   };
@@ -51,6 +52,7 @@ const LegItem: React.FC<{ leg: RouteLeg; isLast: boolean; theme: any }> = ({ leg
       case 'danfo': return 'Danfo';
       case 'brt': return 'BRT';
       case 'ferry': return 'Ferry';
+      case 'rail': return 'Train';
       default: return mode;
     }
   };

@@ -247,6 +247,9 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
 }) => {
   const { theme } = useAppTheme();
   const mapRef = useRef<MapView>(null);
+  const hasAppliedInitialUserCenter = useRef(false);
+  const lastPolylineFitKey = useRef<string | null>(null);
+  const lastDirectionsFitKey = useRef<string | null>(null);
   const [userLocation, setUserLocation] = useState<LocationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [region, setRegion] = useState<Region>(initialRegion || DEFAULT_REGION);
@@ -277,6 +280,13 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
 
   useEffect(() => {
     if (routePolyline && routePolyline.length > 0) {
+      const polylineKey = JSON.stringify(routePolyline);
+      if (lastPolylineFitKey.current === polylineKey) {
+        return;
+      }
+
+      lastPolylineFitKey.current = polylineKey;
+
       // Auto-zoom to fit the route
       mapRef.current?.fitToCoordinates(routePolyline, {
         edgePadding: { top: 50, right: 50, bottom: 300, left: 50 },
@@ -303,8 +313,11 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
 
         setRegion(newRegion);
 
-        // Animate to user location
-        mapRef.current?.animateToRegion(newRegion, 1000);
+        // Only auto-center once and only when no explicit initial region is provided.
+        if (!initialRegion && !hasAppliedInitialUserCenter.current) {
+          hasAppliedInitialUserCenter.current = true;
+          mapRef.current?.animateToRegion(newRegion, 1000);
+        }
       } else {
         setError('Location not available. Using default location.');
       }
@@ -381,7 +394,6 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         initialRegion={region}
-        region={region}
         onRegionChangeComplete={handleRegionChange}
         showsUserLocation={showUserLocation}
         showsMyLocationButton={false}
@@ -414,6 +426,17 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
             strokeColor={theme.PRIMARY}
             onReady={(result) => {
               if (result.coordinates && result.coordinates.length > 0) {
+                const directionsFitKey = JSON.stringify({
+                  origin: directions.origin,
+                  destination: directions.destination,
+                });
+
+                if (lastDirectionsFitKey.current === directionsFitKey) {
+                  return;
+                }
+
+                lastDirectionsFitKey.current = directionsFitKey;
+
                 // Fit to coordinates
                 mapRef.current?.fitToCoordinates(result.coordinates, {
                   edgePadding: { top: 50, right: 50, bottom: 300, left: 50 },

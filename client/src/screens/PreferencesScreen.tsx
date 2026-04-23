@@ -1,147 +1,277 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Switch, Alert, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Switch,
+  Alert,
+  Platform,
+  Linking,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
 
+const TRANSPORT_PREF_KEY = 'preferredFirstLegTransportMode';
+
+const MODE_LABELS: Record<string, string> = {
+  keke:  'Keke (Tricycle)',
+  danfo: 'Danfo (Yellow bus)',
+  okada: 'Okada (Motorbike)',
+  brt:   'BRT / LAGBUS',
+  walk:  'Walk',
+};
+
+interface SettingRowProps {
+  icon: string;
+  iconColor: string;
+  iconBg: string;
+  title: string;
+  subtitle?: string;
+  onPress?: () => void;
+  rightElement?: React.ReactNode;
+}
+
+function SettingRow({ icon, iconColor, iconBg, title, subtitle, onPress, rightElement }: SettingRowProps) {
+  const { theme } = useAppTheme();
+  return (
+    <TouchableOpacity
+      style={[styles.row, { borderBottomColor: theme.BORDER }]}
+      onPress={onPress}
+      disabled={!onPress && !rightElement}
+      activeOpacity={onPress ? 0.6 : 1}
+    >
+      <View style={[styles.rowIcon, { backgroundColor: iconBg }]}>
+        <Ionicons name={icon as any} size={20} color={iconColor} />
+      </View>
+      <View style={styles.rowText}>
+        <Text style={[styles.rowTitle, { color: theme.TEXT }]}>{title}</Text>
+        {!!subtitle && <Text style={[styles.rowSub, { color: theme.TEXT_SECONDARY }]}>{subtitle}</Text>}
+      </View>
+      {rightElement ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={theme.TEXT_SECONDARY} /> : null)}
+    </TouchableOpacity>
+  );
+}
+
 export default function PreferencesScreen({ navigation }: any) {
-  const { theme, toggleTheme, isDark } = useAppTheme();
-  const [notifications, setNotifications] = useState(true);
+  const { theme, isDark, themeMode, setThemeMode } = useAppTheme();
+  const { user } = useAuth();
+
+  const [savedMode, setSavedMode] = useState<string | null>(null);
 
   useEffect(() => {
-    loadPreferences();
+    AsyncStorage.getItem(TRANSPORT_PREF_KEY).then((v) => setSavedMode(v));
   }, []);
 
-  const loadPreferences = async () => {
-    try {
-      const notif = await AsyncStorage.getItem('notifications');
-      setNotifications(notif !== 'false');
-    } catch (e) {
-      console.log('Error loading preferences', e);
-    }
+  const handleThemePress = () => {
+    Alert.alert(
+      'Appearance',
+      'Choose your preferred theme',
+      [
+        { text: 'System default', onPress: () => setThemeMode('system') },
+        { text: 'Light',          onPress: () => setThemeMode('light')  },
+        { text: 'Dark',           onPress: () => setThemeMode('dark')   },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
   };
 
-  const savePreference = async (key: string, value: string) => {
-    try {
-      await AsyncStorage.setItem(key, value);
-    } catch (e) {
-      console.log('Error saving preference', e);
-    }
+  const handleTransportPress = () => {
+    const modes = Object.keys(MODE_LABELS);
+    Alert.alert(
+      'Default Transport Mode',
+      'Choose your preferred first-leg transport',
+      [
+        ...modes.map((m) => ({
+          text: MODE_LABELS[m],
+          onPress: async () => {
+            await AsyncStorage.setItem(TRANSPORT_PREF_KEY, m);
+            setSavedMode(m);
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
   };
 
-  const toggleNotifications = (value: boolean) => {
-    setNotifications(value);
-    savePreference('notifications', value.toString());
-  };
-
-  const clearSearchHistory = () => {
+  const handleClearHistory = () => {
     Alert.alert(
       'Clear Search History',
-      'Are you sure you want to clear all search history?',
+      'This will clear your recent searches from this device.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Clear',
           style: 'destructive',
           onPress: async () => {
-            try {
-              await AsyncStorage.removeItem('searchHistory');
-              Alert.alert('Success', 'Search history cleared.');
-            } catch (e) {
-              console.log('Error clearing history', e);
-            }
+            await AsyncStorage.removeItem('recentSearches');
+            Alert.alert('Done', 'Search history cleared.');
           },
         },
       ]
     );
   };
 
+  const themeLabel = themeMode === 'system' ? 'System default' : themeMode === 'light' ? 'Light' : 'Dark';
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.BACKGROUND }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: theme.BORDER }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="arrow-back" size={24} color={theme.TEXT} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.TEXT }]}>App Preferences</Text>
+        <Text style={[styles.headerTitle, { color: theme.TEXT }]}>Preferences</Text>
         <View style={{ width: 24 }} />
       </View>
-      <ScrollView style={styles.content}>
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.TEXT }]}>Appearance</Text>
-          <View style={[styles.item, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}>
-            <Text style={[styles.itemText, { color: theme.TEXT }]}>Dark Mode</Text>
-            <Switch value={isDark} onValueChange={toggleTheme} />
-          </View>
+
+      <ScrollView contentContainerStyle={styles.content}>
+
+        {/* Appearance */}
+        <Text style={[styles.section, { color: theme.TEXT_SECONDARY }]}>APPEARANCE</Text>
+        <View style={[styles.group, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
+          <SettingRow
+            icon="contrast-outline"
+            iconColor="#6200EA"
+            iconBg="#EDE7F6"
+            title="Theme"
+            subtitle={themeLabel}
+            onPress={handleThemePress}
+          />
+          <SettingRow
+            icon={isDark ? 'moon' : 'sunny'}
+            iconColor={isDark ? '#7986CB' : '#FFA000'}
+            iconBg={isDark ? '#E8EAF6' : '#FFF8E1'}
+            title="Dark Mode"
+            rightElement={
+              <Switch
+                value={isDark}
+                onValueChange={(v) => setThemeMode(v ? 'dark' : 'light')}
+                trackColor={{ false: theme.BORDER, true: theme.PRIMARY }}
+                thumbColor={Platform.OS === 'android' ? (isDark ? theme.PRIMARY : '#F5F5F5') : undefined}
+              />
+            }
+          />
         </View>
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.TEXT }]}>Notifications</Text>
-          <View style={[styles.item, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}>
-            <Text style={[styles.itemText, { color: theme.TEXT }]}>Enable Notifications</Text>
-            <Switch value={notifications} onValueChange={toggleNotifications} />
-          </View>
+
+        {/* Transport */}
+        <Text style={[styles.section, { color: theme.TEXT_SECONDARY }]}>TRANSPORT</Text>
+        <View style={[styles.group, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
+          <SettingRow
+            icon="car-outline"
+            iconColor="#E65100"
+            iconBg="#FFF3E0"
+            title="Default Transport Mode"
+            subtitle={savedMode ? MODE_LABELS[savedMode] : 'Ask me each time'}
+            onPress={handleTransportPress}
+          />
         </View>
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.TEXT }]}>Data</Text>
-          <TouchableOpacity style={[styles.item, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]} onPress={clearSearchHistory}>
-            <Ionicons name="trash-outline" size={24} color={theme.ERROR} />
-            <Text style={[styles.itemText, { color: theme.ERROR }]}>Clear Search History</Text>
-            <Ionicons name="chevron-forward" size={20} color={theme.TEXT_SECONDARY} />
-          </TouchableOpacity>
+
+        {/* Privacy */}
+        <Text style={[styles.section, { color: theme.TEXT_SECONDARY }]}>PRIVACY & DATA</Text>
+        <View style={[styles.group, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
+          <SettingRow
+            icon="time-outline"
+            iconColor="#1565C0"
+            iconBg="#E3F2FD"
+            title="Clear Search History"
+            subtitle="Remove recent searches from this device"
+            onPress={handleClearHistory}
+          />
         </View>
+
+        {/* Account */}
+        {user && (
+          <>
+            <Text style={[styles.section, { color: theme.TEXT_SECONDARY }]}>ACCOUNT</Text>
+            <View style={[styles.group, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
+              <SettingRow
+                icon="person-outline"
+                iconColor="#2E7D32"
+                iconBg="#E8F5E9"
+                title="Email"
+                subtitle={user.email}
+              />
+            </View>
+          </>
+        )}
+
+        {/* About */}
+        <Text style={[styles.section, { color: theme.TEXT_SECONDARY }]}>ABOUT</Text>
+        <View style={[styles.group, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
+          <SettingRow
+            icon="information-circle-outline"
+            iconColor="#1976D2"
+            iconBg="#E3F2FD"
+            title="App Version"
+            subtitle="WakaWay v1.0.0"
+          />
+          <SettingRow
+            icon="map-outline"
+            iconColor="#388E3C"
+            iconBg="#E8F5E9"
+            title="Coverage"
+            subtitle="Lagos, Nigeria"
+          />
+          <SettingRow
+            icon="shield-checkmark-outline"
+            iconColor="#6A1B9A"
+            iconBg="#F3E5F5"
+            title="Privacy Policy"
+            onPress={() => Linking.openURL('https://wakaway.app/privacy')}
+          />
+        </View>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: SPACING.MD,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.MD,
     borderBottomWidth: 1,
   },
-  title: {
-    fontSize: FONT_SIZES.HEADING_2,
-    fontWeight: 'bold',
-  },
-  content: {
-    flex: 1,
-    padding: SPACING.MD,
-  },
+  headerTitle: { fontSize: FONT_SIZES.HEADING_3, fontWeight: '700' },
+  content:     { paddingTop: SPACING.MD },
   section: {
-    marginBottom: SPACING.XL,
+    fontSize: FONT_SIZES.SMALL,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.SM,
+    marginTop: SPACING.MD,
   },
-  sectionTitle: {
-    fontSize: FONT_SIZES.HEADING_3,
-    fontWeight: 'bold',
-    marginBottom: SPACING.MD,
+  group: {
+    marginHorizontal: SPACING.MD,
+    borderRadius: BORDER_RADIUS.LARGE,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  item: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: SPACING.MD,
     paddingVertical: SPACING.MD,
-    paddingHorizontal: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    marginBottom: SPACING.SM,
-    justifyContent: 'space-between',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-      },
-      android: { elevation: 2 },
-    }),
+    gap: SPACING.MD,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  itemText: {
-    fontSize: FONT_SIZES.BODY,
-    flex: 1,
-    marginLeft: SPACING.MD,
-  },
+  rowIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  rowText: { flex: 1 },
+  rowTitle: { fontSize: FONT_SIZES.BODY, fontWeight: '600' },
+  rowSub:   { fontSize: FONT_SIZES.SMALL, marginTop: 2 },
 });

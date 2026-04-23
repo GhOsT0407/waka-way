@@ -5,7 +5,7 @@ import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
 // Set to true to use mock auth (for testing when Supabase is unavailable)
 // Set to false to use real Supabase authentication
-const USE_MOCK_AUTH = true;
+const USE_MOCK_AUTH = false;
 
 // Mock user storage key
 const MOCK_USERS_KEY = '@waka_mock_users';
@@ -100,7 +100,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // ============ MOCK AUTH FUNCTIONS ============
   const mockLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      setIsLoading(true);
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -124,19 +123,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(userData);
       setSession({ user: userData } as any); // Mock session
       await saveMockSession(userData);
-      
+
       return { success: true };
     } catch (error: any) {
       console.error('Mock login error:', error);
       return { success: false, error: 'Login failed. Please try again.' };
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const mockSignup = async (email: string, password: string, name: string): Promise<{ success: boolean; needsConfirmation: boolean; error?: string }> => {
     try {
-      setIsLoading(true);
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -171,28 +167,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error: any) {
       console.error('Mock signup error:', error);
       return { success: false, needsConfirmation: false, error: 'Signup failed. Please try again.' };
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const mockLogout = async () => {
     try {
-      setIsLoading(true);
       await clearMockSession();
       setUser(null);
       setSession(null);
     } catch (error) {
       console.error('Mock logout error:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   // ============ REAL SUPABASE AUTH FUNCTIONS ============
   const supabaseLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      setIsLoading(true);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -214,14 +204,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return { success: false, error: 'No internet connection. Please check your network and try again.' };
       }
       return { success: false, error: error?.message || 'Login failed' };
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const supabaseSignup = async (email: string, password: string, name: string): Promise<{ success: boolean; needsConfirmation: boolean; error?: string }> => {
     try {
-      setIsLoading(true);
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -253,14 +240,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return { success: false, needsConfirmation: false, error: 'No internet connection. Please check your network and try again.' };
       }
       return { success: false, needsConfirmation: false, error: error?.message || 'Signup failed' };
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const supabaseLogout = async () => {
     try {
-      setIsLoading(true);
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('Logout error:', error);
@@ -269,8 +253,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setSession(null);
     } catch (error) {
       console.error('Logout error:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
