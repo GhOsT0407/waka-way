@@ -1,11 +1,12 @@
 // Transport Pricing Engine for WakaWay Lagos Transit App
 // Based on 2025 Lagos transport benchmarks
 
-export enum TransportMode {
-  DANFO = 'DANFO',
-  KEKE = 'KEKE',
-  OKADA = 'OKADA'
-}
+import type { TransportMode } from '../types/routing';
+
+export type { TransportMode };
+
+// Modes shown in the FareEstimateCard UI
+export const FARE_MODES: TransportMode[] = ['danfo', 'keke', 'okada'];
 
 export interface PricingRates {
   base: number;  // Base fare in Naira
@@ -35,10 +36,10 @@ export interface PriceRange {
 }
 
 // 2025 Lagos Transport Benchmarks
-export const LAGOS_RATES: Record<TransportMode, PricingRates> = {
-  [TransportMode.DANFO]: { base: 400, km: 180, min: 600 },
-  [TransportMode.KEKE]: { base: 300, km: 150, min: 400 },
-  [TransportMode.OKADA]: { base: 500, km: 300, min: 800 }
+export const LAGOS_RATES: Partial<Record<TransportMode, PricingRates>> = {
+  danfo: { base: 400, km: 180, min: 600 },
+  keke:  { base: 300, km: 150, min: 400 },
+  okada: { base: 500, km: 300, min: 800 },
 };
 
 // Multipliers for Lagos environmental factors
@@ -95,7 +96,7 @@ export class TransportPricingEngine {
 
     // Create range: ±10% to account for real-world price variation
     const variation = estimated * 0.1;
-    const min = Math.max(estimated - variation, LAGOS_RATES[options.transportMode].min);
+    const min = Math.max(estimated - variation, LAGOS_RATES[options.transportMode]?.min ?? 0);
     const max = estimated + variation;
 
     // Format as currency string
@@ -136,21 +137,20 @@ export class TransportPricingEngine {
   /**
    * Get all transport mode price ranges for a given distance
    */
-  static getAllModePrices(distanceInKm: number, isRaining: boolean = false, isFuelScarce: boolean = false): Record<TransportMode, PriceRange> {
+  static getAllModePrices(distanceInKm: number, isRaining: boolean = false, isFuelScarce: boolean = false): Record<string, PriceRange> {
     const isPeakHour = this.isPeakHour();
+    const prices: Record<string, PriceRange> = {};
 
-    const prices: Partial<Record<TransportMode, PriceRange>> = {};
-
-    Object.values(TransportMode).forEach(mode => {
+    FARE_MODES.forEach(mode => {
       prices[mode] = this.getPriceRange({
         distanceInKm,
         transportMode: mode,
         isPeakHour,
         isRaining,
-        isFuelScarce
+        isFuelScarce,
       });
     });
 
-    return prices as Record<TransportMode, PriceRange>;
+    return prices;
   }
 }

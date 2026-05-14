@@ -6,7 +6,7 @@
 
 // Main map views
 export { CommunityMapView } from './CommunityMapView';
-export { default as MapView } from './MapView';
+export { WakaWayMapView } from './MapView';
 
 // Map elements
 export { AlertMarkers } from './AlertMarkers';

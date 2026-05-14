@@ -15,7 +15,7 @@ import { DetectedLocation, LocationAccuracy } from './locationDetector';
 import { isOnline } from './locationDetector';
 import { calculateSmartRoute, RouteLeg, SmartRouteResult } from '../services/smartRoutingService';
 import { validateRoute } from '../services/routeAutoFixer';
-import { RouteLeg as ValidatorLeg, TransportMode } from '../services/routeValidator';
+import { RouteLeg as ValidatorLeg } from '../services/routeValidator';
 
 export interface SmartRouterResult {
   /** The validated/fixed route legs */
@@ -30,22 +30,9 @@ export interface SmartRouterResult {
   warning?: string;
 }
 
-/**
- * Map a smartRoutingService RouteLeg to a routeValidator RouteLeg
- * so the auto-fixer can validate it.
- */
 function toValidatorLeg(leg: RouteLeg): ValidatorLeg {
-  const modeMap: Record<string, TransportMode> = {
-    walk: TransportMode.WALK,
-    keke: TransportMode.KEKE,
-    okada: TransportMode.OKADA,
-    danfo: TransportMode.DANFO,
-    brt: TransportMode.BRT,
-    ferry: TransportMode.FERRY,
-  };
-
   return {
-    mode: modeMap[leg.mode] ?? TransportMode.DANFO,
+    mode: leg.mode,
     distanceKm: leg.distanceKm,
     durationMin: leg.durationMins,
     from: leg.from.name,
@@ -54,26 +41,12 @@ function toValidatorLeg(leg: RouteLeg): ValidatorLeg {
   };
 }
 
-/**
- * Map a validated routeValidator RouteLeg back to update the original RouteLeg's mode.
- */
 function applyValidatedMode(original: RouteLeg, validated: ValidatorLeg): RouteLeg {
-  const reverseMap: Record<string, RouteLeg['mode']> = {
-    [TransportMode.WALK]: 'walk',
-    [TransportMode.KEKE]: 'keke',
-    [TransportMode.OKADA]: 'okada',
-    [TransportMode.DANFO]: 'danfo',
-    [TransportMode.BRT]: 'brt',
-    [TransportMode.FERRY]: 'ferry',
-  };
-
-  const newMode = reverseMap[validated.mode] ?? original.mode;
+  const newMode = validated.mode;
   if (newMode === original.mode) return original;
-
   return {
     ...original,
     mode: newMode,
-    // Recalculate instruction with new mode
     instruction: original.instruction.replace(
       /^(Walk|Keke|Okada|Danfo|BRT|Ferry)/i,
       newMode.charAt(0).toUpperCase() + newMode.slice(1)

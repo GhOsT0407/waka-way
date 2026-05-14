@@ -8,8 +8,8 @@ import {
   ScrollView,
   Dimensions,
   Animated,
-  PanResponder,
 } from 'react-native';
+import { PanGestureHandler, State as GestureState } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,10 +46,10 @@ export default function HomeScreen({ navigation }: any) {
   const [locationCoords, setLocationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
   // Bottom sheet
-  const sheetAnim   = useRef(new Animated.Value(PEEK_HEIGHT)).current;
-  const fabOffset   = useRef(new Animated.Value(16)).current;
-  const snapRef     = useRef(PEEK_HEIGHT);
-  const dragStartH  = useRef(PEEK_HEIGHT);
+  const sheetAnim  = useRef(new Animated.Value(PEEK_HEIGHT)).current;
+  const fabOffset  = useRef(new Animated.Value(16)).current;
+  const snapRef    = useRef(PEEK_HEIGHT);
+  const dragBaseRef = useRef(PEEK_HEIGHT);
 
   const snapTo = (target: number) => {
     snapRef.current = target;
@@ -61,49 +61,35 @@ export default function HomeScreen({ navigation }: any) {
     }).start();
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      // Claim every touch on the handle immediately
-      onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
-      onPanResponderGrant: () => {
-        // Capture exact current height so we track from the right base
-        dragStartH.current = snapRef.current;
-        sheetAnim.stopAnimation();
-      },
-      onPanResponderMove: (_, gs) => {
-        // Swipe up (dy < 0) expands sheet; swipe down (dy > 0) collapses
-        const next = Math.max(PEEK_HEIGHT, Math.min(FULL_HEIGHT, dragStartH.current - gs.dy));
-        sheetAnim.setValue(next);
-      },
-      onPanResponderRelease: (_, gs) => {
-        // Tiny movement = treat as tap — toggle peek ↔ half
-        if (Math.abs(gs.dy) < 6 && Math.abs(gs.dx) < 6) {
-          snapTo(snapRef.current === PEEK_HEIGHT ? HALF_HEIGHT : PEEK_HEIGHT);
-          return;
-        }
-        const cur = dragStartH.current - gs.dy;
-        if (gs.vy < -0.4) {
-          // Fast swipe up → go to next snap up
-          snapTo(snapRef.current < HALF_HEIGHT ? HALF_HEIGHT : FULL_HEIGHT);
-        } else if (gs.vy > 0.4) {
-          // Fast swipe down → go to next snap down
-          snapTo(snapRef.current > HALF_HEIGHT ? HALF_HEIGHT : PEEK_HEIGHT);
-        } else {
-          // Slow drag → snap to nearest
-          const dists = [
-            { h: PEEK_HEIGHT, d: Math.abs(cur - PEEK_HEIGHT) },
-            { h: HALF_HEIGHT, d: Math.abs(cur - HALF_HEIGHT) },
-            { h: FULL_HEIGHT, d: Math.abs(cur - FULL_HEIGHT) },
-          ];
-          snapTo(dists.reduce((a, b) => (a.d < b.d ? a : b)).h);
-        }
-      },
-      onPanResponderTerminationRequest: () => false,
-    })
-  ).current;
+  const onGestureEvent = ({ nativeEvent }: any) => {
+    const next = Math.max(PEEK_HEIGHT, Math.min(FULL_HEIGHT, dragBaseRef.current - nativeEvent.translationY));
+    sheetAnim.setValue(next);
+  };
+
+  const onHandlerStateChange = ({ nativeEvent }: any) => {
+    if (nativeEvent.state === GestureState.BEGAN) {
+      sheetAnim.stopAnimation();
+      dragBaseRef.current = snapRef.current;
+    }
+    if (nativeEvent.oldState === GestureState.ACTIVE) {
+      const dy  = nativeEvent.translationY;
+      const vy  = nativeEvent.velocityY;
+      const cur = dragBaseRef.current - dy;
+      // Tiny movement = tap → toggle peek ↔ half
+      if (Math.abs(dy) < 6) {
+        snapTo(snapRef.current === PEEK_HEIGHT ? HALF_HEIGHT : PEEK_HEIGHT);
+        return;
+      }
+      if (vy < -400) {
+        snapTo(snapRef.current <= HALF_HEIGHT ? HALF_HEIGHT : FULL_HEIGHT);
+      } else if (vy > 400) {
+        snapTo(snapRef.current >= HALF_HEIGHT ? HALF_HEIGHT : PEEK_HEIGHT);
+      } else {
+        const snaps = [PEEK_HEIGHT, HALF_HEIGHT, FULL_HEIGHT];
+        snapTo(snaps.reduce((a, b) => Math.abs(cur - a) < Math.abs(cur - b) ? a : b));
+      }
+    }
+  };
 
   useEffect(() => {
     loadNearbyStops();
@@ -208,10 +194,12 @@ export default function HomeScreen({ navigation }: any) {
 
       {/* Bottom sheet */}
       <Animated.View style={[styles.sheet, { height: sheetAnim, backgroundColor: theme.CARD_BACKGROUND }]}>
-        {/* Drag handle — plain View so PanResponder owns the touch (no TouchableOpacity conflict) */}
-        <View style={styles.handleArea} {...panResponder.panHandlers}>
-          <View style={[styles.handle, { backgroundColor: theme.BORDER }]} />
-        </View>
+        {/* Drag handle — RNGH PanGestureHandler avoids conflict with GestureHandlerRootView */}
+        <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange}>
+          <Animated.View style={styles.handleArea}>
+            <View style={[styles.handle, { backgroundColor: theme.BORDER }]} />
+          </Animated.View>
+        </PanGestureHandler>
 
         {/* Search row — always visible */}
         <TouchableOpacity

@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+
 export type ReportType = 'Traffic' | 'Hazard' | 'Security';
 
 export interface Report {
@@ -32,15 +34,8 @@ const typeToContribType: Record<ReportType, string> = {
   Security: 'security',
 };
 
-// Check if Supabase is configured
-const isSupabaseConfigured = () => {
-  try {
-    // Check if supabase URL is not placeholder
-    return !supabase.supabaseUrl.includes('YOUR_PROJECT_ID');
-  } catch {
-    return false;
-  }
-};
+const isSupabaseConfigured = () =>
+  Boolean(SUPABASE_URL) && !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
 // ===== LOCAL STORAGE FALLBACK =====
 async function readAllLocal(): Promise<Report[]> {

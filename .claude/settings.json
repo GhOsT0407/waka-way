@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\USER\\\\portfolio\\\\waka-way\\\\client\\\\src\" -Recurse -File)",
+      "Bash(Select-Object FullName)",
+      "Bash(node -e \"const s = require\\('@supabase/supabase-js'\\); console.log\\(Object.keys\\(s.createClient\\('https://x.supabase.co', 'anon'\\)\\)\\)\")",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__list_tables",
+      "Bash(curl -s -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nbWh5emVwZm91bXJlcnlycGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4MzI5NDIsImV4cCI6MjA4MjQwODk0Mn0.EsTpyXbuajfGMt1e9ejhJImcGbFWt8qVs8mwvVFaAN4' 'https://ogmhyzepfoumreryrpgc.supabase.co/rest/v1/?select=*')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -sv -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nbWh5emVwZm91bXJlcnlycGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4MzI5NDIsImV4cCI6MjA4MjQwODk0Mn0.EsTpyXbuajfGMt1e9ejhJImcGbFWt8qVs8mwvVFaAN4' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nbWh5emVwZm91bXJlcnlycGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4MzI5NDIsImV4cCI6MjA4MjQwODk0Mn0.EsTpyXbuajfGMt1e9ejhJImcGbFWt8qVs8mwvVFaAN4' -H 'Accept: application/openapi+json' https://ogmhyzepfoumreryrpgc.supabase.co/rest/v1/contributions)",
+      "Bash(curl -s -X POST -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nbWh5emVwZm91bXJlcnlycGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4MzI5NDIsImV4cCI6MjA4MjQwODk0Mn0.EsTpyXbuajfGMt1e9ejhJImcGbFWt8qVs8mwvVFaAN4' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nbWh5emVwZm91bXJlcnlycGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4MzI5NDIsImV4cCI6MjA4MjQwODk0Mn0.EsTpyXbuajfGMt1e9ejhJImcGbFWt8qVs8mwvVFaAN4' -H 'Content-Type: application/json' -H 'Prefer: return=minimal' https://ogmhyzepfoumreryrpgc.supabase.co/rest/v1/contributions -d '{\"confirms\": 0}')",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'Total profiles: {len\\(d\\)}'\\)\")"
+    ]
+  }
+}

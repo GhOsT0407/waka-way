@@ -28,6 +28,7 @@ const TRANSIT_NAMES: Record<TransitMode, { formal: string; local: string }> = {
   danfo: { formal: 'Danfo (Yellow Bus)', local: 'Danfo' },
   brt: { formal: 'BRT Bus', local: 'BRT' },
   ferry: { formal: 'Ferry', local: 'Boat' },
+  rail: { formal: 'Rail', local: 'Train' },
   uber: { formal: 'Uber', local: 'Uber' },
   bolt: { formal: 'Bolt', local: 'Bolt' },
 };
@@ -283,6 +284,7 @@ function getModeIcon(mode: TransitMode): string {
     danfo: 'bus-outline',
     brt: 'bus',
     ferry: 'boat-outline',
+    rail: 'train-outline',
     uber: 'car-sport-outline',
     bolt: 'car-sport-outline',
   };

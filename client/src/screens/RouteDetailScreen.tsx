@@ -8,9 +8,8 @@ import {
     Dimensions,
     Platform,
     Animated,
-    Alert,
-    PanResponder,
 } from 'react-native';
+import { PanGestureHandler, State as GestureState } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,7 +22,7 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZES, GOOGLE_MAPS_API_KEY } from '../utils/constants';
 import { getRoute } from '../services/api';
-import { TransportMode } from '../services/pricingEngine';
+import type { TransportMode } from '../types/routing';
 import { SmartRouteResult, RouteOption } from '../services/smartRoutingService';
 import { addRouteHistory, saveRoute, deleteSavedRoute, getSavedRoutes } from '../services/supabaseDataService';
 
@@ -56,63 +55,45 @@ export default function RouteDetailScreen({ route, navigation }: any) {
     const currentSnapPoint = useRef(SNAP_POINTS.COLLAPSED);
     const scrollRef = useRef<ScrollView>(null);
 
-    // Pan responder for dragging the sheet
-    const panResponder = useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
-            onMoveShouldSetPanResponder: (_, gestureState) => {
-                // Only respond to vertical gestures
-                return Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
-            },
-            onPanResponderGrant: () => {
-                // Stop any ongoing animation
-                sheetHeight.stopAnimation();
-            },
-            onPanResponderMove: (_, gestureState) => {
-                // Calculate new height based on drag
-                const newHeight = currentSnapPoint.current - gestureState.dy;
-                // Clamp between collapsed and expanded
-                const clampedHeight = Math.max(
-                    SNAP_POINTS.COLLAPSED,
-                    Math.min(SNAP_POINTS.EXPANDED, newHeight)
-                );
-                sheetHeight.setValue(clampedHeight);
-            },
-            onPanResponderRelease: (_, gestureState) => {
-                const velocity = gestureState.vy;
-                const currentHeight = currentSnapPoint.current - gestureState.dy;
-                
-                let targetSnap: number;
-                
-                // Determine target based on velocity and position
-                if (velocity < -0.5) {
-                    // Fast swipe up - expand
-                    targetSnap = SNAP_POINTS.EXPANDED;
-                } else if (velocity > 0.5) {
-                    // Fast swipe down - collapse
-                    targetSnap = SNAP_POINTS.COLLAPSED;
-                } else {
-                    // Snap to nearest point
-                    const distances = [
-                        { point: SNAP_POINTS.COLLAPSED, dist: Math.abs(currentHeight - SNAP_POINTS.COLLAPSED) },
-                        { point: SNAP_POINTS.HALF, dist: Math.abs(currentHeight - SNAP_POINTS.HALF) },
-                        { point: SNAP_POINTS.EXPANDED, dist: Math.abs(currentHeight - SNAP_POINTS.EXPANDED) },
-                    ];
-                    targetSnap = distances.reduce((a, b) => a.dist < b.dist ? a : b).point;
-                }
-                
-                currentSnapPoint.current = targetSnap;
-                setCanScroll(targetSnap === SNAP_POINTS.EXPANDED);
-                
-                Animated.spring(sheetHeight, {
-                    toValue: targetSnap,
-                    friction: 8,
-                    tension: 50,
-                    useNativeDriver: false,
-                }).start();
-            },
-        })
-    ).current;
+    const dragBaseRef = useRef(SNAP_POINTS.COLLAPSED);
+
+    const snapTo = (target: number) => {
+        currentSnapPoint.current = target;
+        setCanScroll(target === SNAP_POINTS.EXPANDED);
+        Animated.spring(sheetHeight, {
+            toValue: target,
+            friction: 8,
+            tension: 50,
+            useNativeDriver: false,
+        }).start();
+    };
+
+    const onSheetGestureEvent = ({ nativeEvent }: any) => {
+        const next = Math.max(
+            SNAP_POINTS.COLLAPSED,
+            Math.min(SNAP_POINTS.EXPANDED, dragBaseRef.current - nativeEvent.translationY)
+        );
+        sheetHeight.setValue(next);
+    };
+
+    const onSheetHandlerStateChange = ({ nativeEvent }: any) => {
+        if (nativeEvent.state === GestureState.BEGAN) {
+            sheetHeight.stopAnimation();
+            dragBaseRef.current = currentSnapPoint.current;
+        }
+        if (nativeEvent.oldState === GestureState.ACTIVE) {
+            const vy  = nativeEvent.velocityY;
+            const cur = dragBaseRef.current - nativeEvent.translationY;
+            if (vy < -500) {
+                snapTo(SNAP_POINTS.EXPANDED);
+            } else if (vy > 500) {
+                snapTo(SNAP_POINTS.COLLAPSED);
+            } else {
+                const pts = [SNAP_POINTS.COLLAPSED, SNAP_POINTS.HALF, SNAP_POINTS.EXPANDED];
+                snapTo(pts.reduce((a, b) => Math.abs(cur - a) < Math.abs(cur - b) ? a : b));
+            }
+        }
+    };
 
     useEffect(() => {
         if (!activeRoute && routeId) {
@@ -232,19 +213,17 @@ export default function RouteDetailScreen({ route, navigation }: any) {
             applyRouteOptionToActiveRoute(optionToStart);
         }
 
-        setShowSmartOptions(false);
-        expandSheet();
-
         // Auto-save to route history
         if (user && activeRoute) {
             addRouteHistory(user.id, activeRoute, smartRoute, optionToStart).catch(() => {});
         }
 
-        Alert.alert(
-            'Journey Started! 🚌',
-            'Step-by-step directions are now active. Follow the route below.',
-            [{ text: 'OK' }]
-        );
+        if (optionToStart) {
+            navigation.navigate('Navigation', {
+                option: optionToStart,
+                destinationName: smartRoute?.destination.name ?? activeRoute?.destination ?? 'Destination',
+            });
+        }
     };
 
     if (!activeRoute) {
@@ -313,23 +292,26 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                 ]}
             >
                 {/* Drag Handle - Tap to expand/collapse */}
-                <TouchableOpacity 
-                    onPress={() => {
-                        if (currentSnapPoint.current === SNAP_POINTS.EXPANDED) {
-                            collapseSheet();
-                        } else {
-                            expandSheet();
-                        }
-                    }}
-                    activeOpacity={0.8}
-                >
-                    <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
-                        <View style={[styles.dragHandle, { backgroundColor: theme.BORDER }]} />
-                        <Text style={[styles.dragHint, { color: theme.TEXT_SECONDARY }]}>
-                            {canScroll ? 'Tap to minimize' : 'Tap or swipe up for more'}
-                        </Text>
-                    </View>
-                </TouchableOpacity>
+                <PanGestureHandler onGestureEvent={onSheetGestureEvent} onHandlerStateChange={onSheetHandlerStateChange}>
+                    <Animated.View style={styles.dragHandleArea}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                if (currentSnapPoint.current === SNAP_POINTS.EXPANDED) {
+                                    collapseSheet();
+                                } else {
+                                    expandSheet();
+                                }
+                            }}
+                            activeOpacity={0.8}
+                            style={{ alignItems: 'center' }}
+                        >
+                            <View style={[styles.dragHandle, { backgroundColor: theme.BORDER }]} />
+                            <Text style={[styles.dragHint, { color: theme.TEXT_SECONDARY }]}>
+                                {canScroll ? 'Tap to minimize' : 'Tap or swipe up for more'}
+                            </Text>
+                        </TouchableOpacity>
+                    </Animated.View>
+                </PanGestureHandler>
 
                 {/* Scrollable Content - Use flex:1 to fill remaining space */}
                 <View style={{ flex: 1 }}>

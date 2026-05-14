@@ -298,6 +298,24 @@ export const SmartRouteOptions: React.FC<SmartRouteOptionsProps> = ({
         </View>
       </View>
 
+      {/* Nearest Stop Banner — Lara-style "go to this stop first" anchor */}
+      {routeResult.originNearestStop && (
+        <View style={[styles.nearestStopBanner, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}>
+          <Ionicons name="location" size={16} color="#4CAF50" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.nearestStopLabel, { color: theme.TEXT_SECONDARY }]}>
+              Nearest stop from you
+            </Text>
+            <Text style={[styles.nearestStopName, { color: theme.TEXT }]}>
+              {routeResult.originNearestStop.name}
+              <Text style={[styles.nearestStopMeta, { color: theme.TEXT_SECONDARY }]}>
+                {'  '}·{'  '}{routeResult.originNearestStop.walkMins} min walk ({routeResult.originNearestStop.distanceKm} km)
+              </Text>
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Comparison Banner */}
       {routeResult.comparison.comparisonText && (
         <View style={[styles.comparisonBanner, { backgroundColor: theme.PRIMARY + '15' }]}>
@@ -361,6 +379,29 @@ const styles = StyleSheet.create({
   destText: {
     fontSize: FONT_SIZES.BODY_LARGE,
     fontWeight: '600',
+  },
+  nearestStopBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.SM,
+    marginHorizontal: SPACING.MD,
+    marginBottom: SPACING.SM,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.SM,
+    borderRadius: BORDER_RADIUS.MEDIUM,
+    borderWidth: 1,
+  },
+  nearestStopLabel: {
+    fontSize: FONT_SIZES.SMALL,
+    marginBottom: 1,
+  },
+  nearestStopName: {
+    fontSize: FONT_SIZES.BODY,
+    fontWeight: '600',
+  },
+  nearestStopMeta: {
+    fontSize: FONT_SIZES.SMALL,
+    fontWeight: '400',
   },
   comparisonBanner: {
     flexDirection: 'row',

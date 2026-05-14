@@ -7,15 +7,6 @@ export const TRANSPORT_MODES = {
   WALK: 'walk',
 } as const;
 
-export type TransportMode = typeof TRANSPORT_MODES[keyof typeof TRANSPORT_MODES];
-
-export const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
-  [TRANSPORT_MODES.BUS]: 'Bus/Danfo',
-  [TRANSPORT_MODES.KEKE]: 'Keke/Tricycle',
-  [TRANSPORT_MODES.OKADA]: 'Okada/Motorbike',
-  [TRANSPORT_MODES.WALK]: 'Walk',
-};
-
 export const COLORS = {
   PRIMARY: '#00C853',      // Sharp Vivid Green
   SECONDARY: '#FFFFFF',    // White

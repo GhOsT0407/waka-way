@@ -22,15 +22,20 @@ export interface Location extends Coordinates {
 // TRANSIT TYPES
 // ============================================================
 
-export type TransitMode = 
+// Canonical transport mode type — single source of truth for the whole app
+export type TransportMode =
   | 'walk'
   | 'keke'      // Tricycle (Keke Napep/Marwa)
   | 'okada'     // Motorcycle
   | 'danfo'     // Yellow minibus
-  | 'brt'       // Bus Rapid Transit
-  | 'ferry'     // Lagos ferry
+  | 'brt'       // Bus Rapid Transit (Primero/LAGBUS)
+  | 'ferry'     // Lagos ferry (LagFerry)
+  | 'rail'      // Blue/Red Line rail
   | 'uber'      // Ride-hailing
   | 'bolt';     // Ride-hailing
+
+// Alias kept for backward compat with pricingService / guideGenerator
+export type TransitMode = TransportMode;
 
 export type LegType = 
   | 'first_mile'    // Start to first transit node

@@ -10,7 +10,7 @@
  */
 
 import { RouteLeg, TransportMode, isValidLeg } from './routeValidator';
-import { validateLagosConnection, isOkadaAllowed } from './lagosRouteRules';
+import { isOkadaAllowed } from './lagosRouteRules';
 
 /**
  * Pick a fallback transport mode based on distance and position.
@@ -18,11 +18,10 @@ import { validateLagosConnection, isOkadaAllowed } from './lagosRouteRules';
  */
 function getFallbackMode(leg: RouteLeg, isFirstLeg: boolean): TransportMode {
   if (isFirstLeg) {
-    // Use Okada only if allowed in that zone
-    if (leg.distanceKm <= 1.0 && isOkadaAllowed(leg.from, leg.to)) return TransportMode.OKADA;
-    if (leg.distanceKm <= 5.0) return TransportMode.KEKE;
+    if (leg.distanceKm <= 1.0 && isOkadaAllowed(leg.from, leg.to)) return 'okada';
+    if (leg.distanceKm <= 5.0) return 'keke';
   }
-  return TransportMode.DANFO;
+  return 'danfo';
 }
 
 /**
@@ -42,17 +41,11 @@ export function validateRoute(legs: RouteLeg[]): RouteLeg[] {
       const isFirstLeg = index === 0;
 
       // 1. Block Okada in banned zones — downgrade immediately
-      if (leg.mode === TransportMode.OKADA && !isOkadaAllowed(leg.from, leg.to)) {
-        return { ...leg, mode: TransportMode.KEKE };
+      if (leg.mode === 'okada' && !isOkadaAllowed(leg.from, leg.to)) {
+        return { ...leg, mode: 'keke' as TransportMode };
       }
 
-      // 2. Check Lagos-specific connection rules
-      const lagosCheck = validateLagosConnection(leg.from, leg.to);
-      if (!lagosCheck.isValid && lagosCheck.suggestedMode) {
-        return { ...leg, mode: lagosCheck.suggestedMode };
-      }
-
-      // 3. Check general transport rules
+      // 2. Check general transport rules
       if (!isValidLeg(leg, isFirstLeg)) {
         const fallback = getFallbackMode(leg, isFirstLeg);
         return { ...leg, mode: fallback };
@@ -62,7 +55,7 @@ export function validateRoute(legs: RouteLeg[]): RouteLeg[] {
     })
     .filter((leg) => {
       // Remove 0km walk legs entirely
-      const isUselessWalk = leg.mode === TransportMode.WALK && leg.distanceKm === 0;
+      const isUselessWalk = leg.mode === 'walk' && leg.distanceKm === 0;
       return !isUselessWalk;
     });
 }

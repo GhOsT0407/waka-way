@@ -78,6 +78,7 @@ function calculateDuration(distanceKm: number, mode: TransitMode): number {
     danfo: ROUTING_CONFIG.DANFO_SPEED,
     brt: ROUTING_CONFIG.BRT_SPEED,
     ferry: ROUTING_CONFIG.FERRY_SPEED,
+    rail: ROUTING_CONFIG.BRT_SPEED * 1.5,
     uber: ROUTING_CONFIG.KEKE_SPEED * 1.2,
     bolt: ROUTING_CONFIG.KEKE_SPEED * 1.2,
   };
@@ -104,11 +105,12 @@ function formatDuration(minutes: number): string {
 function getModeIcon(mode: TransitMode): string {
   const icons: Record<TransitMode, string> = {
     walk: 'walk-outline',
-    keke: 'car-outline',           // Tricycle
-    okada: 'bicycle-outline',      // Motorcycle
+    keke: 'car-outline',
+    okada: 'bicycle-outline',
     danfo: 'bus-outline',
     brt: 'bus',
     ferry: 'boat-outline',
+    rail: 'train-outline',
     uber: 'car-sport-outline',
     bolt: 'car-sport-outline',
   };

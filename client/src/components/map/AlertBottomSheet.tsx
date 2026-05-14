@@ -8,8 +8,8 @@ import {
   Dimensions,
   Image,
   ActivityIndicator,
-  PanResponder,
 } from 'react-native';
+import { PanGestureHandler, State as GestureState } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Contribution } from '../../hooks/useContributions';
@@ -90,28 +90,21 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
     }).start();
   }, [visible, translateY]);
 
-  // Pan responder for drag to close
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          translateY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 100) {
-          onClose();
-        } else {
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
-    })
-  ).current;
+  const onGestureEvent = ({ nativeEvent }: any) => {
+    if (nativeEvent.translationY > 0) {
+      translateY.setValue(nativeEvent.translationY);
+    }
+  };
+
+  const onHandlerStateChange = ({ nativeEvent }: any) => {
+    if (nativeEvent.oldState === GestureState.ACTIVE) {
+      if (nativeEvent.translationY > 100) {
+        onClose();
+      } else {
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+      }
+    }
+  };
 
   // Handle vote
   const handleVote = async (voteType: 'CONFIRM' | 'DISMISS') => {
@@ -160,9 +153,11 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
       ]}
     >
       {/* Handle */}
-      <View style={styles.handleContainer} {...panResponder.panHandlers}>
-        <View style={[styles.handle, { backgroundColor: theme.BORDER }]} />
-      </View>
+      <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange}>
+        <Animated.View style={styles.handleContainer}>
+          <View style={[styles.handle, { backgroundColor: theme.BORDER }]} />
+        </Animated.View>
+      </PanGestureHandler>
 
       {/* Content */}
       <View style={[styles.content, { backgroundColor: theme.SURFACE }]}>

@@ -1,5 +1,5 @@
 // Test the pricing engine
-import { TransportPricingEngine, TransportMode } from './pricingEngine';
+import { TransportPricingEngine } from './pricingEngine';
 
 // Test cases for Lagos transport pricing
 console.log('🚌 WakaWay Lagos Transport Pricing Engine Test\n');
@@ -39,7 +39,7 @@ console.log();
 console.log('Test 5: Manual calculation verification (5km Danfo, peak hour)');
 const manualPrice = TransportPricingEngine.calculateFare({
   distanceInKm: 5,
-  transportMode: TransportMode.DANFO,
+  transportMode: 'danfo',
   isPeakHour: true,
   isRaining: false,
   isFuelScarce: false
@@ -47,7 +47,7 @@ const manualPrice = TransportPricingEngine.calculateFare({
 console.log('Manual calculation: ₦' + manualPrice);
 const range = TransportPricingEngine.getPriceRange({
   distanceInKm: 5,
-  transportMode: TransportMode.DANFO,
+  transportMode: 'danfo',
   isPeakHour: true,
   isRaining: false,
   isFuelScarce: false

@@ -15,7 +15,8 @@
 // TYPES
 // ─────────────────────────────────────────────────────────────
 
-export type TransportMode = 'walk' | 'keke' | 'okada' | 'danfo' | 'brt' | 'ferry' | 'rail';
+import type { TransportMode } from '../types/routing';
+export type { TransportMode };
 
 export interface Location {
   latitude: number;
@@ -56,9 +57,18 @@ export interface RouteOption {
   tags: string[];
 }
 
+export interface NearestStopInfo {
+  name: string;
+  distanceKm: number;
+  walkMins: number;
+}
+
 export interface SmartRouteResult {
   origin: Location;
   destination: Location;
+  tripBand: TripBand;
+  originNearestStop?: NearestStopInfo;
+  destinationNearestStop?: NearestStopInfo;
   options: RouteOption[];
   recommendedOptionId: string;
   comparison: {
@@ -68,7 +78,7 @@ export interface SmartRouteResult {
     shouldLetUserChoose: boolean;
     comparisonText: string;
   };
-  computedAt: Date;
+  computedAt: string;
 }
 
 export interface SmartRoutePreferences {
@@ -102,13 +112,15 @@ function uid(): string {
 // ─────────────────────────────────────────────────────────────
 
 const SPEEDS: Record<TransportMode, number> = {
-  walk:  5,
+  walk:  4,
   keke:  22,
   okada: 30,
-  danfo: 18,   // Lagos traffic is brutal
-  brt:   28,   // dedicated lanes
+  danfo: 14,
+  brt:   28,
   ferry: 25,
-  rail:  60,   // Blue/Red Line speed
+  rail:  60,
+  uber:  35,
+  bolt:  35,
 };
 
 // 2025 Lagos transport pricing
@@ -146,6 +158,15 @@ function calcPrice(distKm: number, mode: TransportMode): { min: number; max: num
       return distKm <= 10
         ? { min: 1000, max: 1500 }
         : { min: 1500, max: 2500 };
+
+    case 'uber':
+    case 'bolt':
+      return distKm <= 5
+        ? { min: 1500, max: 2500 }
+        : { min: 2000, max: 4000 };
+
+    default:
+      return { min: 0, max: 0 };
   }
 }
 
@@ -164,6 +185,8 @@ function modeIcon(mode: TransportMode): string {
     brt:   'bus',
     ferry: 'boat-outline',
     rail:  'train-outline',
+    uber:  'car-sport-outline',
+    bolt:  'car-sport-outline',
   };
   return map[mode];
 }
@@ -196,132 +219,20 @@ function isOkadaAllowed(fromLat: number, fromLng: number, toLat: number, toLng: 
 }
 
 // ─────────────────────────────────────────────────────────────
-// INFRASTRUCTURE DATA
-// All coordinates verified against known Lagos landmarks
+// INFRASTRUCTURE DATA  (imported from centralised data file)
 // ─────────────────────────────────────────────────────────────
 
-interface Stop extends Location {
-  corridor?: 'brt' | 'blue_line' | 'red_line' | 'ferry' | 'danfo_hub';
-  lineIndex?: number; // position along corridor for BRT/rail routing
-}
-
-// BRT Corridor: Ikorodu → TBS (Primero Transport)
-// Ordered south→north so lineIndex increases northward
-const BRT_STOPS: Stop[] = [
-  { name: 'TBS Terminal',        latitude: 6.4531, longitude: 3.3898, type: 'brt_terminal', corridor: 'brt', lineIndex: 0  },
-  { name: 'CMS',                 latitude: 6.4555, longitude: 3.3938, type: 'brt_stop',     corridor: 'brt', lineIndex: 1  },
-  { name: 'National Theatre',    latitude: 6.4934, longitude: 3.3681, type: 'brt_stop',     corridor: 'brt', lineIndex: 2  },
-  { name: 'Costain',             latitude: 6.4960, longitude: 3.3553, type: 'brt_stop',     corridor: 'brt', lineIndex: 3  },
-  { name: 'Ojuelegba',           latitude: 6.5110, longitude: 3.3614, type: 'brt_stop',     corridor: 'brt', lineIndex: 4  },
-  { name: 'Yaba BRT',            latitude: 6.5158, longitude: 3.3674, type: 'brt_stop',     corridor: 'brt', lineIndex: 5  },
-  { name: 'Fadeyi',              latitude: 6.5390, longitude: 3.3593, type: 'brt_stop',     corridor: 'brt', lineIndex: 6  },
-  { name: 'Anthony',             latitude: 6.5620, longitude: 3.3598, type: 'brt_stop',     corridor: 'brt', lineIndex: 7  },
-  { name: 'Maryland BRT',        latitude: 6.5710, longitude: 3.3602, type: 'brt_stop',     corridor: 'brt', lineIndex: 8  },
-  { name: 'Gbagada',             latitude: 6.5745, longitude: 3.3890, type: 'brt_stop',     corridor: 'brt', lineIndex: 9  },
-  { name: 'Ojota',               latitude: 6.6043, longitude: 3.3819, type: 'brt_stop',     corridor: 'brt', lineIndex: 10 },
-  { name: 'Ketu',                latitude: 6.6065, longitude: 3.3876, type: 'brt_stop',     corridor: 'brt', lineIndex: 11 },
-  { name: 'Mile 12',             latitude: 6.6212, longitude: 3.3836, type: 'brt_stop',     corridor: 'brt', lineIndex: 12 },
-  { name: 'Ikorodu Terminal',    latitude: 6.6176, longitude: 3.5027, type: 'brt_terminal', corridor: 'brt', lineIndex: 13 },
-];
-
-// Blue Line Rail: Mile 2 ↔ Marina (operational Sep 2023)
-const BLUE_LINE_STOPS: Stop[] = [
-  { name: 'Marina Rail',         latitude: 6.4541, longitude: 3.3944, type: 'rail_station', corridor: 'blue_line', lineIndex: 0 },
-  { name: 'National Theatre Rail',latitude: 6.4902, longitude: 3.3681, type: 'rail_station', corridor: 'blue_line', lineIndex: 1 },
-  { name: 'Orile Iganmu',        latitude: 6.4902, longitude: 3.3481, type: 'rail_station', corridor: 'blue_line', lineIndex: 2 },
-  { name: 'Suru-Alaba',          latitude: 6.4740, longitude: 3.3313, type: 'rail_station', corridor: 'blue_line', lineIndex: 3 },
-  { name: 'Mile 2 Rail',         latitude: 6.4648, longitude: 3.3117, type: 'rail_station', corridor: 'blue_line', lineIndex: 4 },
-];
-
-// Red Line Rail: Oyingbo ↔ Agbado (operational Oct 2024)
-const RED_LINE_STOPS: Stop[] = [
-  { name: 'Oyingbo',             latitude: 6.4823, longitude: 3.3879, type: 'rail_station', corridor: 'red_line', lineIndex: 0 },
-  { name: 'Yaba Rail',           latitude: 6.5196, longitude: 3.3703, type: 'rail_station', corridor: 'red_line', lineIndex: 1 },
-  { name: 'Mushin Rail',         latitude: 6.5293, longitude: 3.3542, type: 'rail_station', corridor: 'red_line', lineIndex: 2 },
-  { name: 'Oshodi Rail',         latitude: 6.5508, longitude: 3.3451, type: 'rail_station', corridor: 'red_line', lineIndex: 3 },
-  { name: 'MMIA Domestic',       latitude: 6.5770, longitude: 3.3198, type: 'rail_station', corridor: 'red_line', lineIndex: 4 },
-  { name: 'Ikeja Rail',          latitude: 6.5954, longitude: 3.3383, type: 'rail_station', corridor: 'red_line', lineIndex: 5 },
-  { name: 'Agege Rail',          latitude: 6.6219, longitude: 3.3090, type: 'rail_station', corridor: 'red_line', lineIndex: 6 },
-  { name: 'Iju',                 latitude: 6.6345, longitude: 3.2761, type: 'rail_station', corridor: 'red_line', lineIndex: 7 },
-  { name: 'Agbado',              latitude: 6.6516, longitude: 3.2477, type: 'rail_station', corridor: 'red_line', lineIndex: 8 },
-];
-
-// LagFerry terminals (LAGFERRY + Metro Ferry, 2024)
-const FERRY_TERMINALS: Stop[] = [
-  { name: 'Marina Ferry',        latitude: 6.4542, longitude: 3.3944, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Five Cowries (Falomo)', latitude: 6.4508, longitude: 3.4259, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Ebute-Ero Jetty',     latitude: 6.4566, longitude: 3.3794, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Ipakodo (Ikorodu)',   latitude: 6.6094, longitude: 3.5038, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Mile 2 Ferry',        latitude: 6.4648, longitude: 3.3117, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Liverpool Apapa',     latitude: 6.4434, longitude: 3.3611, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Badore Jetty',        latitude: 6.4432, longitude: 3.5690, type: 'ferry_terminal', corridor: 'ferry' },
-];
-
-// Ferry route pairs (which terminals are directly connected)
-const FERRY_ROUTES: Array<[string, string]> = [
-  ['Ipakodo (Ikorodu)', 'Five Cowries (Falomo)'],
-  ['Ipakodo (Ikorodu)', 'Ebute-Ero Jetty'],
-  ['Ipakodo (Ikorodu)', 'Marina Ferry'],
-  ['Mile 2 Ferry',      'Liverpool Apapa'],
-  ['Mile 2 Ferry',      'Marina Ferry'],
-  ['Ebute-Ero Jetty',   'Marina Ferry'],
-  ['Five Cowries (Falomo)', 'Marina Ferry'],
-  ['Badore Jetty',      'Marina Ferry'],
-];
-
-// Major danfo hubs and interchange stops
-const DANFO_HUBS: Stop[] = [
-  { name: 'Oshodi',             latitude: 6.5520, longitude: 3.3430, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Ikeja Along',        latitude: 6.5869, longitude: 3.3348, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Allen Junction',     latitude: 6.5964, longitude: 3.3506, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Maryland',           latitude: 6.5710, longitude: 3.3602, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Ojuelegba',          latitude: 6.5110, longitude: 3.3614, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Yaba',               latitude: 6.5158, longitude: 3.3674, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Surulere',           latitude: 6.5050, longitude: 3.3500, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Mushin',             latitude: 6.5293, longitude: 3.3542, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Obalende',           latitude: 6.4508, longitude: 3.4201, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Lagos Island',       latitude: 6.4562, longitude: 3.3941, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Idumota',            latitude: 6.4563, longitude: 3.3875, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Victoria Island',    latitude: 6.4285, longitude: 3.4230, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Lekki Phase 1',      latitude: 6.4346, longitude: 3.4714, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Chevron',            latitude: 6.4305, longitude: 3.4505, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'VGC',                latitude: 6.4432, longitude: 3.4692, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Ajah',               latitude: 6.4698, longitude: 3.5732, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Sangotedo',          latitude: 6.4390, longitude: 3.5023, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Abraham Adesanya',   latitude: 6.4558, longitude: 3.5231, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Ojodu Berger',       latitude: 6.6453, longitude: 3.3558, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Ikorodu',            latitude: 6.6176, longitude: 3.5027, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Agbara',             latitude: 6.4899, longitude: 3.1261, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Festac',             latitude: 6.4660, longitude: 3.2830, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Mile 2',             latitude: 6.4648, longitude: 3.3117, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Apapa',              latitude: 6.4434, longitude: 3.3611, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Egbeda',             latitude: 6.5652, longitude: 3.2638, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Agege',              latitude: 6.6219, longitude: 3.3090, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Ikoyi',              latitude: 6.4579, longitude: 3.4355, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Computer Village',   latitude: 6.5892, longitude: 3.3333, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Ikeja GRA',          latitude: 6.6000, longitude: 3.3500, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Jibowu',             latitude: 6.5519, longitude: 3.3839, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Bariga',             latitude: 6.5400, longitude: 3.3930, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Ketu',               latitude: 6.6065, longitude: 3.3876, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Mile 12',            latitude: 6.6212, longitude: 3.3836, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Ojota',              latitude: 6.6043, longitude: 3.3819, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Gbagada',            latitude: 6.5745, longitude: 3.3890, type: 'major_hub', corridor: 'danfo_hub' },
-  { name: 'Orile',              latitude: 6.4902, longitude: 3.3481, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Ogba',               latitude: 6.6096, longitude: 3.3340, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Berger',             latitude: 6.6453, longitude: 3.3558, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Isolo',              latitude: 6.5280, longitude: 3.3038, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Ejigbo',             latitude: 6.5310, longitude: 3.2884, type: 'bus_stop',  corridor: 'danfo_hub' },
-  { name: 'Jakande',            latitude: 6.4432, longitude: 3.4692, type: 'bus_stop',  corridor: 'danfo_hub' },
-];
-
-// Combined pool for nearest-stop searches
-const ALL_STOPS: Stop[] = [
-  ...BRT_STOPS,
-  ...BLUE_LINE_STOPS,
-  ...RED_LINE_STOPS,
-  ...FERRY_TERMINALS,
-  ...DANFO_HUBS,
-];
+import {
+  Stop,
+  BRT_IKORODU_STOPS,
+  BRT_ABULE_EGBA_STOPS,
+  BLUE_LINE_STOPS,
+  RED_LINE_STOPS,
+  FERRY_TERMINALS,
+  FERRY_ROUTES,
+  DANFO_HUBS,
+  ALL_STOPS,
+} from '../data/lagosStops';
 
 // ─────────────────────────────────────────────────────────────
 // STOP SEARCH HELPERS
@@ -401,6 +312,9 @@ function lagosInstruction(mode: TransportMode, from: string, to: string): string
     case 'brt':   return `Enter BRT at ${from}, alight at ${to}`;
     case 'ferry': return `Board ferry at ${from} jetty, disembark at ${to}`;
     case 'rail':  return `Board train at ${from} station, alight at ${to}`;
+    case 'uber':
+    case 'bolt':  return `Take ${mode === 'uber' ? 'Uber' : 'Bolt'} from ${from} to ${to}`;
+    default:      return `Travel from ${from} to ${to}`;
   }
 }
 
@@ -413,12 +327,38 @@ function lagosPidginInstruction(mode: TransportMode, from: string, to: string): 
     case 'brt':   return `Enter BRT for ${from} busstop, come down for ${to}`;
     case 'ferry': return `Enter boat for ${from} jetty, commot for ${to}`;
     case 'rail':  return `Enter train for ${from} station, come down for ${to}`;
+    case 'uber':
+    case 'bolt':  return `Call ${mode === 'uber' ? 'Uber' : 'Bolt'} from ${from} go ${to}`;
+    default:      return `Travel from ${from} to ${to}`;
   }
 }
 
 // ─────────────────────────────────────────────────────────────
+// TRIP CLASSIFICATION
+// Gates which route builders run based on straight-line distance.
+// Prevents a 1.5km trip from attempting Rail/BRT lookups.
+// ─────────────────────────────────────────────────────────────
+
+export type TripBand = 'micro' | 'short' | 'medium' | 'long';
+
+export function classifyTrip(distKm: number): TripBand {
+  if (distKm < 2)  return 'micro';   // Walk / Keke — around the area
+  if (distKm < 8)  return 'short';   // Keke / Danfo local
+  if (distKm < 25) return 'medium';  // Danfo hubs + BRT corridor
+  return 'long';                      // All modes: Rail, BRT, Ferry, Danfo
+}
+
+// Human-readable label shown in the UI
+export const TRIP_BAND_LABEL: Record<TripBand, string> = {
+  micro:  'Short walk nearby',
+  short:  'Local trip',
+  medium: 'Cross-area trip',
+  long:   'Long-distance trip',
+};
+
+// ─────────────────────────────────────────────────────────────
 // CONNECTOR MODE SELECTION
-// First/last mile mode — walk, keke, or okada
+// First/last mile mode — walk, keke, okada, or danfo for very long legs
 // ─────────────────────────────────────────────────────────────
 
 function connectorMode(
@@ -427,17 +367,19 @@ function connectorMode(
   distKm: number,
   preferred?: TransportMode
 ): TransportMode {
-  if (distKm <= 0.4) return 'walk';
+  if (distKm <= 0.2) return 'walk';
 
   const okadaOk = isOkadaAllowed(fromLat, fromLng, toLat, toLng);
 
   if (preferred === 'keke'  && distKm <= 5.0) return 'keke';
   if (preferred === 'okada' && distKm <= 6.0 && okadaOk) return 'okada';
-  if (preferred === 'walk'  && distKm <= 0.4) return 'walk';
+
+  // Very long feeder legs (> 8km) — use danfo rather than keke for the connector
+  if (distKm > 8) return 'danfo';
 
   if (distKm <= 5.0) return 'keke';
   if (okadaOk && distKm <= 8.0) return 'okada';
-  return 'keke'; // keke for anything longer if okada banned
+  return 'keke';
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -511,41 +453,41 @@ function buildRailRoute(
   return assembleOption(uid(), 'segmented', `${lineName} Train`, `Via ${entryStation.name} → ${exitStation.name}`, legs, ['Rail', 'Fast']);
 }
 
-/** Build a BRT route along the Ikorodu–TBS corridor */
+/** Build a BRT route — tries each physical corridor independently to prevent impossible cross-corridor routes */
 function buildBRTRoute(
   origin: Location,
   destination: Location,
   pref?: TransportMode
 ): RouteOption | null {
-  const entryStop = nearestStop(origin.latitude, origin.longitude, BRT_STOPS);
-  const exitStop  = nearestStop(destination.latitude, destination.longitude, BRT_STOPS, entryStop ? [entryStop.name] : []);
-  if (!entryStop || !exitStop) return null;
+  for (const corridorStops of [BRT_IKORODU_STOPS, BRT_ABULE_EGBA_STOPS]) {
+    const entryStop = nearestStop(origin.latitude, origin.longitude, corridorStops);
+    const exitStop  = nearestStop(destination.latitude, destination.longitude, corridorStops, entryStop ? [entryStop.name] : []);
+    if (!entryStop || !exitStop) continue;
 
-  // Only use BRT if it travels meaningfully in the right direction
-  const brtDist = calculateDistance(entryStop.latitude, entryStop.longitude, exitStop.latitude, exitStop.longitude);
-  if (brtDist < 3) return null;
+    const brtDist = calculateDistance(entryStop.latitude, entryStop.longitude, exitStop.latitude, exitStop.longitude);
+    if (brtDist < 3) continue;
 
-  const walkToEntry  = calculateDistance(origin.latitude, origin.longitude, entryStop.latitude, entryStop.longitude);
-  const walkFromExit = calculateDistance(exitStop.latitude, exitStop.longitude, destination.latitude, destination.longitude);
+    const walkToEntry  = calculateDistance(origin.latitude, origin.longitude, entryStop.latitude, entryStop.longitude);
+    const walkFromExit = calculateDistance(exitStop.latitude, exitStop.longitude, destination.latitude, destination.longitude);
+    if (walkToEntry > 4 || walkFromExit > 4) continue;
 
-  // Don't suggest BRT if the feeder legs are too long relative to the BRT leg
-  if (walkToEntry > 4 || walkFromExit > 4) return null;
+    const legs: RouteLeg[] = [];
 
-  const legs: RouteLeg[] = [];
+    if (walkToEntry >= 0.05) {
+      const mode = connectorMode(origin.latitude, origin.longitude, entryStop.latitude, entryStop.longitude, walkToEntry, pref);
+      legs.push(buildLeg(mode, origin, entryStop));
+    }
 
-  if (walkToEntry >= 0.05) {
-    const mode = connectorMode(origin.latitude, origin.longitude, entryStop.latitude, entryStop.longitude, walkToEntry, pref);
-    legs.push(buildLeg(mode, origin, entryStop));
+    legs.push(buildLeg('brt', entryStop, exitStop));
+
+    if (walkFromExit >= 0.05) {
+      const mode = connectorMode(exitStop.latitude, exitStop.longitude, destination.latitude, destination.longitude, walkFromExit);
+      legs.push(buildLeg(mode, exitStop, destination));
+    }
+
+    return assembleOption(uid(), 'segmented', 'BRT (Express)', `Via ${entryStop.name} → ${exitStop.name}`, legs, ['BRT', 'Faster']);
   }
-
-  legs.push(buildLeg('brt', entryStop, exitStop));
-
-  if (walkFromExit >= 0.05) {
-    const mode = connectorMode(exitStop.latitude, exitStop.longitude, destination.latitude, destination.longitude, walkFromExit);
-    legs.push(buildLeg(mode, exitStop, destination));
-  }
-
-  return assembleOption(uid(), 'segmented', 'BRT (Express)', `Via ${entryStop.name} → ${exitStop.name}`, legs, ['BRT', 'Faster']);
+  return null;
 }
 
 /** Build a ferry route if there's a viable terminal pair */
@@ -572,7 +514,7 @@ function buildFerryRoute(
 
   // Ferry only worth it if it saves real distance
   const ferryDist = calculateDistance(originTerminal.latitude, originTerminal.longitude, destTerminal.latitude, destTerminal.longitude);
-  if (ferryDist < 2) return null;
+  if (ferryDist < 1) return null;
   if (walkToTerminal > 5 || walkFromTerminal > 5) return null;
 
   const legs: RouteLeg[] = [];
@@ -601,15 +543,31 @@ function buildDanfoRoute(
   const legs: RouteLeg[] = [];
   const totalDist = calculateDistance(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
 
-  // For short trips, go direct
-  if (totalDist <= 2.5) {
+  // Only go direct for genuinely walkable trips — anything longer gets a stop anchor
+  if (totalDist <= 0.8) {
     const mode = connectorMode(origin.latitude, origin.longitude, destination.latitude, destination.longitude, totalDist, pref);
     legs.push(buildLeg(mode, origin, destination));
-    return assembleOption(uid(), 'direct', 'Direct', `${mode === 'walk' ? 'Walk' : mode === 'keke' ? 'Keke' : 'Okada'} direct`, legs, ['Short Trip']);
+    return assembleOption(uid(), 'direct', 'Direct', `${mode === 'walk' ? 'Walk' : 'Keke'} direct`, legs, ['Short Trip']);
   }
 
-  // Find nearest hub to origin
-  const firstHub = nearestStop(origin.latitude, origin.longitude, DANFO_HUBS);
+  // Snap origin to the nearest stop in ALL_STOPS first, then fall back to DANFO_HUBS.
+  // This mirrors Lara's "find your nearest bus stop" approach — a user standing next to
+  // a BRT terminal shouldn't be routed to a danfo hub 2km away.
+  const firstHubRaw =
+    nearestStop(origin.latitude, origin.longitude, ALL_STOPS) ??
+    nearestStop(origin.latitude, origin.longitude, DANFO_HUBS);
+
+  // Prefer danfo-specific hubs for the main trunk, but use the closest ALL_STOPS entry
+  // as the boarding anchor if it's genuinely closer (saves the user from a long first mile).
+  const nearestDanfoHub = nearestStop(origin.latitude, origin.longitude, DANFO_HUBS);
+  const firstHub = (() => {
+    if (!firstHubRaw) return nearestDanfoHub;
+    if (!nearestDanfoHub) return firstHubRaw;
+    const dAll   = calculateDistance(origin.latitude, origin.longitude, firstHubRaw.latitude, firstHubRaw.longitude);
+    const dDanfo = calculateDistance(origin.latitude, origin.longitude, nearestDanfoHub.latitude, nearestDanfoHub.longitude);
+    // Use the ALL_STOPS anchor only if it's meaningfully closer (saves ≥300m)
+    return dAll < dDanfo - 0.3 ? firstHubRaw : nearestDanfoHub;
+  })();
 
   // Find nearest hub to destination (different from first)
   const lastHub = firstHub
@@ -634,7 +592,7 @@ function buildDanfoRoute(
   }
 
   // Hub-to-hub: if long, find intermediate stops
-  if (hubToHubDist > 12) {
+  if (hubToHubDist > 6) {
     const intermediates = stopsAlongCorridor(
       firstHub.latitude, firstHub.longitude,
       lastHub.latitude, lastHub.longitude,
@@ -655,7 +613,7 @@ function buildDanfoRoute(
 
   // Last mile
   if (distFromLast >= 0.05) {
-    const mode = connectorMode(lastHub.latitude, lastHub.longitude, destination.latitude, destination.longitude, distFromLast);
+    const mode = connectorMode(lastHub.latitude, lastHub.longitude, destination.latitude, destination.longitude, distFromLast, pref);
     legs.push(buildLeg(mode, lastHub, destination));
   }
 
@@ -686,23 +644,34 @@ export function calculateSmartRoute(
   const pref = preferences?.preferredFirstLegMode;
   const options: RouteOption[] = [];
 
-  // 1. Try Blue Line (Marina ↔ Mile 2)
-  const blueRoute = buildRailRoute(origin, destination, BLUE_LINE_STOPS, 'Blue Line', pref);
-  if (blueRoute) options.push(blueRoute);
+  // Pre-compute nearest stop to each endpoint across all stop types.
+  // Exposed in the result so the UI can show "Nearest stop: X — 5 min walk".
+  const _originStop = nearestStop(originLat, originLng, ALL_STOPS);
+  const _destStop   = nearestStop(destLat, destLng, ALL_STOPS);
 
-  // 2. Try Red Line (Oyingbo ↔ Agbado)
-  const redRoute = buildRailRoute(origin, destination, RED_LINE_STOPS, 'Red Line', pref);
-  if (redRoute) options.push(redRoute);
+  const toStopInfo = (stop: Stop | null, fromLat: number, fromLng: number): NearestStopInfo | undefined => {
+    if (!stop) return undefined;
+    const distanceKm = calculateDistance(fromLat, fromLng, stop.latitude, stop.longitude);
+    return { name: stop.name, distanceKm: Math.round(distanceKm * 100) / 100, walkMins: Math.max(1, Math.ceil((distanceKm / SPEEDS.walk) * 60)) };
+  };
 
-  // 3. Try BRT (Ikorodu ↔ TBS corridor)
+  const originNearestStop = toStopInfo(_originStop, originLat, originLng);
+  const destinationNearestStop = toStopInfo(_destStop, destLat, destLng);
+
+  // Classify the trip so we only run builders that make sense for the distance.
+  // A 1.5km trip should never attempt a rail lookup; a 40km trip should always try rail.
+  const totalDist = calculateDistance(originLat, originLng, destLat, destLng);
+  const tripBand  = classifyTrip(totalDist);
+
+  // BRT — internal guard rejects if corridor doesn't help (brtDist < 3km or feeder > 4km)
   const brtRoute = buildBRTRoute(origin, destination, pref);
   if (brtRoute) options.push(brtRoute);
 
-  // 4. Try Ferry
+  // Ferry — internal guard rejects if no viable terminal pair or ferry leg < 1km
   const ferryRoute = buildFerryRoute(origin, destination, pref);
   if (ferryRoute) options.push(ferryRoute);
 
-  // 5. Always add danfo route
+  // Danfo/Keke — always included; buildDanfoRoute handles micro trips internally
   const danfoRoute = buildDanfoRoute(origin, destination, pref);
   options.push(danfoRoute);
 
@@ -732,9 +701,8 @@ export function calculateSmartRoute(
     if (opt.isFastest && opt.id !== cheapest.id) opt.tags.push('Fastest');
   }
 
-  // Pick recommended: prefer rail/BRT if available (faster, more reliable)
+  // Pick recommended: BRT > fastest > first option
   let recommended =
-    finalOptions.find(o => o.tags.includes('Rail')) ??
     finalOptions.find(o => o.tags.includes('BRT')) ??
     finalOptions.find(o => o.isFastest) ??
     finalOptions[0];
@@ -758,6 +726,9 @@ export function calculateSmartRoute(
   return {
     origin,
     destination,
+    tripBand,
+    originNearestStop,
+    destinationNearestStop,
     options: finalOptions,
     recommendedOptionId: recommended.id,
     comparison: {
@@ -769,12 +740,11 @@ export function calculateSmartRoute(
         ? `Similar price (${pricePct}% difference). Pick what suits you!`
         : (recommended.recommendationReason ?? ''),
     },
-    computedAt: new Date(),
+    computedAt: new Date().toISOString(),
   };
 }
 
 function pickRecommendationReason(opt: RouteOption): string {
-  if (opt.tags.includes('Rail'))  return 'Fastest option — train avoids Lagos traffic';
   if (opt.tags.includes('BRT'))   return 'BRT runs on dedicated lanes — more reliable in traffic';
   if (opt.tags.includes('Ferry')) return 'Waterway avoids road traffic completely';
   if (opt.isFastest)              return 'Quickest route for this trip';

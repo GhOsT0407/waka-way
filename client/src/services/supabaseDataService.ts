@@ -260,9 +260,10 @@ export async function voteOnContribution(
     .single();
 
   if (current) {
+    const count = (current as Record<string, number>)[field] ?? 0;
     await supabase
       .from('contributions')
-      .update({ [field]: (current[field] ?? 0) + 1 })
+      .update({ [field]: count + 1 })
       .eq('id', contributionId);
   }
 

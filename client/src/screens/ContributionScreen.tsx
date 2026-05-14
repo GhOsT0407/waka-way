@@ -15,18 +15,10 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useAppTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
 import { supabase } from '../lib/supabase';
 import { CommunityMapView } from '../components/map/CommunityMapView';
-
-// Check if Supabase is configured
-const isSupabaseConfigured = () => {
-  try {
-    return !supabase.supabaseUrl.includes('YOUR_PROJECT_ID');
-  } catch {
-    return false;
-  }
-};
 
 interface Contribution {
   id: string;
@@ -54,6 +46,7 @@ const CONTRIBUTION_TYPES = [
 
 export default function ContributionScreen() {
   const { theme } = useAppTheme();
+  const { user } = useAuth();
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [isAddingContribution, setIsAddingContribution] = useState(false);
   const [selectedType, setSelectedType] = useState<string>('');
@@ -69,36 +62,30 @@ export default function ContributionScreen() {
 
   const loadContributions = async () => {
     try {
-      // Try Supabase first
-      if (isSupabaseConfigured()) {
-        const { data, error } = await supabase
-          .from('contributions')
-          .select('*')
-          .order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('contributions')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-        if (!error && data) {
-          const mapped = data.map((d: any) => ({
-            id: d.id,
-            type: d.type,
-            title: d.title || '',
-            description: d.description || '',
-            latitude: d.latitude,
-            longitude: d.longitude,
-            address: d.address || '',
-            timestamp: d.created_at,
-            status: d.status,
-            ai_score: d.ai_score,
-          }));
-          setContributions(mapped);
-          return;
-        }
+      if (!error && data) {
+        setContributions(data.map((d: any) => ({
+          id: d.id,
+          type: d.type,
+          title: d.title || '',
+          description: d.description || '',
+          latitude: d.latitude,
+          longitude: d.longitude,
+          address: d.address || '',
+          timestamp: d.created_at,
+          status: d.status,
+          ai_score: d.ai_score,
+        })));
+        return;
       }
 
-      // Fallback to local storage
+      // Fallback to local cache
       const saved = await AsyncStorage.getItem('userContributions');
-      if (saved) {
-        setContributions(JSON.parse(saved));
-      }
+      if (saved) setContributions(JSON.parse(saved));
     } catch (error) {
       console.error('Error loading contributions:', error);
     }
@@ -149,7 +136,7 @@ export default function ContributionScreen() {
       };
 
       // Try Supabase first
-      if (isSupabaseConfigured()) {
+      {
         const { data, error } = await supabase
           .from('contributions')
           .insert({
@@ -160,6 +147,7 @@ export default function ContributionScreen() {
             longitude: currentLocation.longitude,
             address,
             status: 'pending',
+            ...(user ? { user_id: user.id } : {}),
           })
           .select()
           .single();

@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -7,6 +10,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
+import { OfflineBanner } from './components/ui/OfflineBanner';
 import HomeScreen from './screens/HomeScreen';
 import YouScreen from './screens/YouScreen';
 import ContributionScreen from './screens/ContributionScreen';
@@ -17,9 +22,12 @@ import SignupScreen from './screens/SignupScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import PreferencesScreen from './screens/PreferencesScreen';
 import OnboardingScreen, { ONBOARDING_DONE_KEY } from './screens/OnboardingScreen';
+import NavigationScreen from './screens/NavigationScreen';
 import { ThemeProvider, useAppTheme } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+
+SplashScreen.preventAutoHideAsync();
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -79,6 +87,7 @@ function AuthStack() {
 function AppNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
   const { theme, isDark } = useAppTheme();
+  const { isOnline } = useNetworkStatus();
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -86,6 +95,14 @@ function AppNavigator() {
       setOnboardingDone(val === 'true');
     });
   }, []);
+
+  const appReady = !isLoading && onboardingDone !== null;
+
+  const onLayoutRootView = useCallback(async () => {
+    if (appReady) {
+      await SplashScreen.hideAsync();
+    }
+  }, [appReady]);
 
   const navigationTheme = isDark
     ? {
@@ -113,7 +130,7 @@ function AppNavigator() {
         },
       };
 
-  if (isLoading || onboardingDone === null) {
+  if (!appReady) {
     return null;
   }
 
@@ -126,6 +143,7 @@ function AppNavigator() {
   }
 
   return (
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
     <NavigationContainer theme={navigationTheme}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack.Navigator
@@ -162,12 +180,19 @@ function AppNavigator() {
               component={PreferencesScreen}
               options={{ animation: 'slide_from_right' }}
             />
+            <Stack.Screen
+              name="Navigation"
+              component={NavigationScreen}
+              options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+            />
           </>
         ) : (
           <Stack.Screen name="Auth" component={AuthStack} />
         )}
       </Stack.Navigator>
     </NavigationContainer>
+    <OfflineBanner isOnline={isOnline} />
+    </View>
   );
 }
 

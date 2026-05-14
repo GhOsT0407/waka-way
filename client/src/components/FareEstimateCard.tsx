@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { TransportMode, TransportPricingEngine, PriceRange } from '../services/pricingEngine';
+import { TransportMode, TransportPricingEngine, PriceRange, FARE_MODES } from '../services/pricingEngine';
 import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
 
 interface FareEstimateCardProps {
@@ -34,27 +34,14 @@ const TransportOption: React.FC<TransportOptionProps> = ({
 }) => {
   const getModeDetails = (mode: TransportMode) => {
     switch (mode) {
-      case TransportMode.DANFO:
-        return {
-          icon: 'bus',
-          name: 'Danfo (Bus)',
-          description: 'Reliable for longer trips',
-          color: '#2E7D32'
-        };
-      case TransportMode.KEKE:
-        return {
-          icon: 'bicycle',
-          name: 'Keke (Tricycle)',
-          description: 'Flexible for short trips',
-          color: '#2E7D32'
-        };
-      case TransportMode.OKADA:
-        return {
-          icon: 'bicycle-outline',
-          name: 'Okada (Bike)',
-          description: 'Fastest for urgent trips',
-          color: '#2E7D32'
-        };
+      case 'danfo':
+        return { icon: 'bus',            name: 'Danfo (Bus)',      description: 'Reliable for longer trips',  color: '#2E7D32' };
+      case 'keke':
+        return { icon: 'bicycle',        name: 'Keke (Tricycle)',  description: 'Flexible for short trips',   color: '#2E7D32' };
+      case 'okada':
+        return { icon: 'bicycle-outline', name: 'Okada (Bike)',    description: 'Fastest for urgent trips',   color: '#2E7D32' };
+      default:
+        return { icon: 'car-outline',    name: mode,               description: '',                           color: '#2E7D32' };
     }
   };
 
@@ -139,26 +126,15 @@ export const FareEstimateCard: React.FC<FareEstimateCardProps> = ({
       </View>
 
       <View style={styles.optionsContainer}>
-        <TransportOption
-          mode={TransportMode.DANFO}
-          priceRange={prices[TransportMode.DANFO]}
-          isSelected={selectedMode === TransportMode.DANFO}
-          onPress={() => handleModeSelect(TransportMode.DANFO)}
-        />
-
-        <TransportOption
-          mode={TransportMode.KEKE}
-          priceRange={prices[TransportMode.KEKE]}
-          isSelected={selectedMode === TransportMode.KEKE}
-          onPress={() => handleModeSelect(TransportMode.KEKE)}
-        />
-
-        <TransportOption
-          mode={TransportMode.OKADA}
-          priceRange={prices[TransportMode.OKADA]}
-          isSelected={selectedMode === TransportMode.OKADA}
-          onPress={() => handleModeSelect(TransportMode.OKADA)}
-        />
+        {FARE_MODES.map((mode) => (
+          <TransportOption
+            key={mode}
+            mode={mode}
+            priceRange={prices[mode]}
+            isSelected={selectedMode === mode}
+            onPress={() => handleModeSelect(mode)}
+          />
+        ))}
       </View>
 
       <View style={styles.footer}>

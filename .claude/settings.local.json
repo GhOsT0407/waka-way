@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep -l \"stop\\\\|Stop\\\\|corridor\")",
+      "Bash(xargs grep -l \"latitude\\\\|longitude\\\\|lat.*lng\\\\|coordinates\")",
+      "Bash(dir \"c:\\\\Users\\\\USER\\\\portfolio\\\\waka-way\\\\server\" /b)",
+      "Bash(npx tsc *)",
+      "Bash(python3 -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(dir \"c:\\\\Users\\\\USER\\\\portfolio\\\\waka-way\\\\client\" /B /A-D)",
+      "Bash(dir \"c:\\\\Users\\\\USER\\\\portfolio\\\\waka-way\\\\client\\\\assets\")",
+      "Bash(dir \"c:\\\\Users\\\\USER\\\\portfolio\\\\waka-way\\\\client\")",
+      "WebFetch(domain:lara.ng)"
+    ]
+  }
+}
