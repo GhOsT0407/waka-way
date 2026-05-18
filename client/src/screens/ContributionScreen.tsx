@@ -44,7 +44,7 @@ const CONTRIBUTION_TYPES = [
   { id: 'other', label: 'Other', icon: 'help-circle-outline' },
 ];
 
-export default function ContributionScreen() {
+export default function ContributionScreen({ navigation }: any) {
   const { theme } = useAppTheme();
   const { user } = useAuth();
   const [contributions, setContributions] = useState<Contribution[]>([]);
@@ -315,7 +315,10 @@ export default function ContributionScreen() {
       <StatusBar style="auto" />
 
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: theme.TEXT }]}>Community</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Close" accessibilityRole="button">
+          <Ionicons name="chevron-down" size={22} color={theme.TEXT} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.TEXT, flex: 1, textAlign: 'center' }]}>Community</Text>
         <TouchableOpacity
           style={[styles.addButton, { backgroundColor: theme.PRIMARY }]}
           onPress={() => setIsAddingContribution(true)}

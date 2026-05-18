@@ -8,7 +8,7 @@ module.exports = {
     scheme: 'wakaway',
     orientation: 'portrait',
     icon: './assets/icon.png',
-    userInterfaceStyle: 'light',
+    userInterfaceStyle: 'automatic',
     newArchEnabled: true,
     description: 'Find your WakaWay - Move Smart. Move Local.',
     splash: {

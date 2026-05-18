@@ -102,6 +102,7 @@ export const searchRoutes = async (data: {
   destinationName?: string;
   destinationDetails?: any;
   preferredFirstLegMode?: TransportMode;
+  avoidPoints?: { latitude: number; longitude: number; radiusKm: number }[];
 }): Promise<{ smartRoute: SmartRouteResult; legacyRoute: any }> => {
   try {
     // Simulate API delay
@@ -115,7 +116,10 @@ export const searchRoutes = async (data: {
       data.destination.latitude,
       data.destination.longitude,
       data.destinationName || 'Destination',
-      { preferredFirstLegMode: data.preferredFirstLegMode }
+      {
+        preferredFirstLegMode: data.preferredFirstLegMode,
+        avoidPoints: data.avoidPoints,
+      }
     );
 
     // Also generate legacy route format for backwards compatibility

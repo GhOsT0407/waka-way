@@ -81,8 +81,15 @@ export interface SmartRouteResult {
   computedAt: string;
 }
 
+export interface AvoidPoint {
+  latitude:  number;
+  longitude: number;
+  radiusKm:  number;
+}
+
 export interface SmartRoutePreferences {
   preferredFirstLegMode?: TransportMode;
+  avoidPoints?: AvoidPoint[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -701,19 +708,56 @@ export function calculateSmartRoute(
     if (opt.isFastest && opt.id !== cheapest.id) opt.tags.push('Fastest');
   }
 
-  // Pick recommended: BRT > fastest > first option
+  // ── Incident avoidance reranking ──────────────────────────────────────
+  // If the caller supplied avoidPoints (from community incident reports),
+  // demote options whose legs pass through those regions.
+  const avoidPoints = preferences?.avoidPoints ?? [];
+  const affectedByIncident = new Set<string>();
+
+  if (avoidPoints.length > 0) {
+    for (const opt of finalOptions) {
+      const hit = opt.legs.some((leg) =>
+        avoidPoints.some((ap) => {
+          const distFrom = calculateDistance(leg.from.latitude, leg.from.longitude, ap.latitude, ap.longitude);
+          const distTo   = calculateDistance(leg.to.latitude,   leg.to.longitude,   ap.latitude, ap.longitude);
+          // Point-to-segment approximation: check endpoints + midpoint
+          const midLat = (leg.from.latitude  + leg.to.latitude)  / 2;
+          const midLng = (leg.from.longitude + leg.to.longitude) / 2;
+          const distMid = calculateDistance(midLat, midLng, ap.latitude, ap.longitude);
+          return Math.min(distFrom, distTo, distMid) <= ap.radiusKm;
+        })
+      );
+      if (hit) affectedByIncident.add(opt.id);
+    }
+  }
+
+  // Pick recommended: prefer unaffected BRT > unaffected fastest > unaffected first > any
   let recommended =
+    finalOptions.find(o => !affectedByIncident.has(o.id) && o.tags.includes('BRT')) ??
+    finalOptions.find(o => !affectedByIncident.has(o.id) && o.isFastest) ??
+    finalOptions.find(o => !affectedByIncident.has(o.id)) ??
     finalOptions.find(o => o.tags.includes('BRT')) ??
     finalOptions.find(o => o.isFastest) ??
     finalOptions[0];
 
   recommended.isRecommended = true;
-  recommended.recommendationReason = pickRecommendationReason(recommended);
+  recommended.recommendationReason = affectedByIncident.has(recommended.id)
+    ? pickRecommendationReason(recommended)
+    : affectedByIncident.size > 0
+      ? 'Avoids reported incidents on your route'
+      : pickRecommendationReason(recommended);
 
-  // Sort: recommended first, then by price
+  if (affectedByIncident.size > 0 && !affectedByIncident.has(recommended.id)) {
+    if (!recommended.tags.includes('Incident-free')) recommended.tags.push('Incident-free');
+  }
+
+  // Sort: recommended first, then clean options, then by price
   finalOptions.sort((a, b) => {
     if (a.isRecommended) return -1;
     if (b.isRecommended) return 1;
+    const aAffected = affectedByIncident.has(a.id) ? 1 : 0;
+    const bAffected = affectedByIncident.has(b.id) ? 1 : 0;
+    if (aAffected !== bAffected) return aAffected - bAffected;
     return a.totalPriceMin - b.totalPriceMin;
   });
 

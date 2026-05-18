@@ -16,9 +16,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { useAppTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
+import { Colors } from '../theme/colors';
+import { Typography } from '../theme/typography';
 import {
   FavoritePlace,
   RouteHistoryItem,
@@ -43,7 +43,6 @@ interface AddPlaceForm {
 }
 
 export default function YouScreen({ navigation }: any) {
-  const { theme, isDark } = useAppTheme();
   const { user, logout } = useAuth();
 
   const [activeTab, setActiveTab]         = useState<Tab>('history');
@@ -237,7 +236,7 @@ export default function YouScreen({ navigation }: any) {
     <>
       {history.length > 0 && (
         <TouchableOpacity style={styles.clearBtn} onPress={handleClearHistory}>
-          <Text style={[styles.clearBtnText, { color: theme.ERROR }]}>Clear history</Text>
+          <Text style={styles.clearBtnText}>Clear history</Text>
         </TouchableOpacity>
       )}
       <FlatList
@@ -245,41 +244,35 @@ export default function YouScreen({ navigation }: any) {
         keyExtractor={(i) => i.id}
         scrollEnabled={false}
         renderItem={({ item }) => (
-          <View style={[styles.card, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}>
+          <View style={styles.card}>
             <View style={styles.cardRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: theme.TEXT }]} numberOfLines={1}>
-                  {item.destination_name}
-                </Text>
-                <Text style={[styles.cardSub, { color: theme.TEXT_SECONDARY }]} numberOfLines={1}>
-                  From {item.origin_name}
-                </Text>
+                <Text style={styles.cardTitle} numberOfLines={1}>{item.destination_name}</Text>
+                <Text style={styles.cardSub} numberOfLines={1}>From {item.origin_name}</Text>
                 <View style={styles.cardMeta}>
                   {!!item.total_duration_mins && (
                     <View style={styles.metaChip}>
-                      <Ionicons name="time-outline" size={11} color={theme.TEXT_SECONDARY} />
-                      <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]}>{formatDuration(item.total_duration_mins)}</Text>
+                      <Ionicons name="time-outline" size={11} color={Colors.textSecondary} />
+                      <Text style={styles.metaText}>{formatDuration(item.total_duration_mins)}</Text>
                     </View>
                   )}
                   {(!!item.total_fare_min || !!item.total_fare_max) && (
                     <View style={styles.metaChip}>
-                      <Text style={[styles.metaText, { color: theme.PRIMARY }]}>{formatFare(item.total_fare_min, item.total_fare_max)}</Text>
+                      <Text style={styles.metaTextBlue}>{formatFare(item.total_fare_min, item.total_fare_max)}</Text>
                     </View>
                   )}
                   {(item.transport_modes ?? []).length > 0 && (
                     <View style={styles.metaChip}>
-                      <Ionicons name="bus-outline" size={11} color={theme.TEXT_SECONDARY} />
-                      <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]}>
-                        {(item.transport_modes ?? []).join(', ')}
-                      </Text>
+                      <Ionicons name="bus-outline" size={11} color={Colors.textSecondary} />
+                      <Text style={styles.metaText}>{(item.transport_modes ?? []).join(', ')}</Text>
                     </View>
                   )}
                 </View>
               </View>
               <View style={styles.cardRight}>
-                <Text style={[styles.cardDate, { color: theme.TEXT_SECONDARY }]}>{formatDate(item.started_at)}</Text>
+                <Text style={styles.cardDate}>{formatDate(item.started_at)}</Text>
                 <TouchableOpacity onPress={() => handleDeleteHistory(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="trash-outline" size={18} color={theme.TEXT_SECONDARY} />
+                  <Ionicons name="trash-outline" size={18} color={Colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -288,9 +281,9 @@ export default function YouScreen({ navigation }: any) {
         ListEmptyComponent={
           !loading ? (
             <View style={styles.empty}>
-              <Ionicons name="navigate-outline" size={44} color={theme.TEXT_SECONDARY} />
-              <Text style={[styles.emptyTitle, { color: theme.TEXT }]}>No trips yet</Text>
-              <Text style={[styles.emptySub, { color: theme.TEXT_SECONDARY }]}>Your journey history will appear here</Text>
+              <Ionicons name="navigate-outline" size={44} color={Colors.textSecondary} />
+              <Text style={styles.emptyTitle}>No trips yet</Text>
+              <Text style={styles.emptySub}>Your journey history will appear here</Text>
             </View>
           ) : null
         }
@@ -304,32 +297,28 @@ export default function YouScreen({ navigation }: any) {
       keyExtractor={(i) => i.id}
       scrollEnabled={false}
       renderItem={({ item }) => (
-        <View style={[styles.card, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}>
+        <View style={styles.card}>
           <View style={styles.cardRow}>
-            <Ionicons name="heart" size={18} color={theme.ERROR} style={{ marginRight: SPACING.SM }} />
+            <Ionicons name="heart" size={18} color="#EF4444" style={{ marginRight: 8 }} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: theme.TEXT }]} numberOfLines={1}>
-                {item.destination_name}
-              </Text>
-              <Text style={[styles.cardSub, { color: theme.TEXT_SECONDARY }]} numberOfLines={1}>
-                From {item.origin_name}
-              </Text>
+              <Text style={styles.cardTitle} numberOfLines={1}>{item.destination_name}</Text>
+              <Text style={styles.cardSub} numberOfLines={1}>From {item.origin_name}</Text>
               <View style={styles.cardMeta}>
                 {!!item.total_duration_mins && (
                   <View style={styles.metaChip}>
-                    <Ionicons name="time-outline" size={11} color={theme.TEXT_SECONDARY} />
-                    <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]}>{formatDuration(item.total_duration_mins)}</Text>
+                    <Ionicons name="time-outline" size={11} color={Colors.textSecondary} />
+                    <Text style={styles.metaText}>{formatDuration(item.total_duration_mins)}</Text>
                   </View>
                 )}
                 {(!!item.total_fare_min || !!item.total_fare_max) && (
                   <View style={styles.metaChip}>
-                    <Text style={[styles.metaText, { color: theme.PRIMARY }]}>{formatFare(item.total_fare_min, item.total_fare_max)}</Text>
+                    <Text style={styles.metaTextBlue}>{formatFare(item.total_fare_min, item.total_fare_max)}</Text>
                   </View>
                 )}
               </View>
             </View>
             <TouchableOpacity onPress={() => handleDeleteSaved(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="trash-outline" size={18} color={theme.TEXT_SECONDARY} />
+              <Ionicons name="trash-outline" size={18} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -337,9 +326,9 @@ export default function YouScreen({ navigation }: any) {
       ListEmptyComponent={
         !loading ? (
           <View style={styles.empty}>
-            <Ionicons name="heart-outline" size={44} color={theme.TEXT_SECONDARY} />
-            <Text style={[styles.emptyTitle, { color: theme.TEXT }]}>No saved routes</Text>
-            <Text style={[styles.emptySub, { color: theme.TEXT_SECONDARY }]}>Tap ♥ on a route to save it here</Text>
+            <Ionicons name="heart-outline" size={44} color={Colors.textSecondary} />
+            <Text style={styles.emptyTitle}>No saved routes</Text>
+            <Text style={styles.emptySub}>Tap ♥ on a route to save it here</Text>
           </View>
         ) : null
       }
@@ -349,78 +338,66 @@ export default function YouScreen({ navigation }: any) {
   const renderPlacesTab = () => (
     <>
       {/* Home */}
-      <View style={[styles.placeRow, { borderBottomColor: theme.BORDER }]}>
-        <View style={[styles.placeIcon, { backgroundColor: '#E3F2FD' }]}>
-          <Ionicons name="home" size={20} color="#1565C0" />
+      <View style={styles.placeRow}>
+        <View style={[styles.placeIcon, { backgroundColor: Colors.blueLight }]}>
+          <Ionicons name="home" size={20} color={Colors.homeGreen} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.placeLabel, { color: theme.TEXT_SECONDARY }]}>Home</Text>
-          <Text style={[styles.placeName, { color: theme.TEXT }]} numberOfLines={1}>
-            {homePlace ? homePlace.name : 'Not set'}
-          </Text>
+          <Text style={styles.placeLabel}>Home</Text>
+          <Text style={styles.placeName} numberOfLines={1}>{homePlace ? homePlace.name : 'Not set'}</Text>
           {homePlace?.address ? (
-            <Text style={[styles.placeAddress, { color: theme.TEXT_SECONDARY }]} numberOfLines={1}>{homePlace.address}</Text>
+            <Text style={styles.placeAddress} numberOfLines={1}>{homePlace.address}</Text>
           ) : null}
         </View>
-        <TouchableOpacity
-          style={[styles.placeEditBtn, { backgroundColor: theme.SURFACE }]}
-          onPress={() => openAddPlace('home')}
-        >
-          <Text style={[styles.placeEditText, { color: theme.PRIMARY }]}>{homePlace ? 'Change' : 'Set'}</Text>
+        <TouchableOpacity style={styles.placeEditBtn} onPress={() => openAddPlace('home')}>
+          <Text style={styles.placeEditText}>{homePlace ? 'Change' : 'Set'}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Work */}
-      <View style={[styles.placeRow, { borderBottomColor: theme.BORDER }]}>
-        <View style={[styles.placeIcon, { backgroundColor: '#FFF3E0' }]}>
-          <Ionicons name="briefcase" size={20} color="#E65100" />
+      <View style={styles.placeRow}>
+        <View style={[styles.placeIcon, { backgroundColor: 'rgba(249,115,22,0.12)' }]}>
+          <Ionicons name="briefcase" size={20} color="#F97316" />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.placeLabel, { color: theme.TEXT_SECONDARY }]}>Work</Text>
-          <Text style={[styles.placeName, { color: theme.TEXT }]} numberOfLines={1}>
-            {workPlace ? workPlace.name : 'Not set'}
-          </Text>
+          <Text style={styles.placeLabel}>Work</Text>
+          <Text style={styles.placeName} numberOfLines={1}>{workPlace ? workPlace.name : 'Not set'}</Text>
           {workPlace?.address ? (
-            <Text style={[styles.placeAddress, { color: theme.TEXT_SECONDARY }]} numberOfLines={1}>{workPlace.address}</Text>
+            <Text style={styles.placeAddress} numberOfLines={1}>{workPlace.address}</Text>
           ) : null}
         </View>
-        <TouchableOpacity
-          style={[styles.placeEditBtn, { backgroundColor: theme.SURFACE }]}
-          onPress={() => openAddPlace('work')}
-        >
-          <Text style={[styles.placeEditText, { color: theme.PRIMARY }]}>{workPlace ? 'Change' : 'Set'}</Text>
+        <TouchableOpacity style={styles.placeEditBtn} onPress={() => openAddPlace('work')}>
+          <Text style={styles.placeEditText}>{workPlace ? 'Change' : 'Set'}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Favorites */}
-      <View style={[styles.favHeader, { borderBottomColor: theme.BORDER }]}>
-        <Text style={[styles.favTitle, { color: theme.TEXT }]}>Favorite Places</Text>
+      <View style={styles.favHeader}>
+        <Text style={styles.favTitle}>Favorite Places</Text>
         <TouchableOpacity onPress={() => openAddPlace('favorite')}>
-          <Ionicons name="add-circle-outline" size={22} color={theme.PRIMARY} />
+          <Ionicons name="add-circle-outline" size={22} color={Colors.blue} />
         </TouchableOpacity>
       </View>
 
       {otherFaves.length === 0 ? (
-        <View style={[styles.empty, { paddingTop: SPACING.LG }]}>
-          <Ionicons name="bookmark-outline" size={36} color={theme.TEXT_SECONDARY} />
-          <Text style={[styles.emptySub, { color: theme.TEXT_SECONDARY, marginTop: SPACING.SM }]}>
-            Add your favorite Lagos spots
-          </Text>
+        <View style={[styles.empty, { paddingTop: 20 }]}>
+          <Ionicons name="bookmark-outline" size={36} color={Colors.textSecondary} />
+          <Text style={[styles.emptySub, { marginTop: 8 }]}>Add your favorite Lagos spots</Text>
         </View>
       ) : (
         otherFaves.map((fp) => (
-          <View key={fp.id} style={[styles.placeRow, { borderBottomColor: theme.BORDER }]}>
-            <View style={[styles.placeIcon, { backgroundColor: '#F3E5F5' }]}>
-              <Ionicons name="star" size={20} color="#6A1B9A" />
+          <View key={fp.id} style={styles.placeRow}>
+            <View style={[styles.placeIcon, { backgroundColor: 'rgba(167,139,250,0.12)' }]}>
+              <Ionicons name="star" size={20} color="#A78BFA" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.placeName, { color: theme.TEXT }]} numberOfLines={1}>{fp.name}</Text>
+              <Text style={styles.placeName} numberOfLines={1}>{fp.name}</Text>
               {fp.address ? (
-                <Text style={[styles.placeAddress, { color: theme.TEXT_SECONDARY }]} numberOfLines={1}>{fp.address}</Text>
+                <Text style={styles.placeAddress} numberOfLines={1}>{fp.address}</Text>
               ) : null}
             </View>
             <TouchableOpacity onPress={() => handleDeletePlace(fp.id, fp.name)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="trash-outline" size={18} color={theme.TEXT_SECONDARY} />
+              <Ionicons name="trash-outline" size={18} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
         ))
@@ -429,45 +406,42 @@ export default function YouScreen({ navigation }: any) {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.BACKGROUND }]}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="light" />
 
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.BORDER }]}>
-        <View>
-          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>You</Text>
-          {user && <Text style={[styles.headerSub, { color: theme.TEXT_SECONDARY }]}>{user.email}</Text>}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.goBack()} accessibilityLabel="Close" accessibilityRole="button">
+          <Ionicons name="chevron-down" size={22} color={Colors.textPrimary} />
+        </TouchableOpacity>
+        <View style={{ flex: 1, marginLeft: 8 }}>
+          <Text style={styles.headerTitle}>You</Text>
+          {user && <Text style={styles.headerSub}>{user.email}</Text>}
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={[styles.iconBtn, { backgroundColor: theme.SURFACE }]}
-            onPress={() => navigation.navigate('Preferences')}
-          >
-            <Ionicons name="settings-outline" size={20} color={theme.TEXT} />
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Preferences')}>
+            <Ionicons name="settings-outline" size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.iconBtn, { backgroundColor: theme.SURFACE }]}
-            onPress={handleLogout}
-          >
-            <Ionicons name="log-out-outline" size={20} color={theme.TEXT} />
+          <TouchableOpacity style={styles.iconBtn} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Tabs */}
-      <View style={[styles.tabs, { borderBottomColor: theme.BORDER }]}>
+      <View style={styles.tabs}>
         {(['history', 'saved', 'places'] as Tab[]).map((tab) => (
           <TouchableOpacity
             key={tab}
-            style={[styles.tab, activeTab === tab && { borderBottomColor: theme.PRIMARY, borderBottomWidth: 2 }]}
+            style={[styles.tab, activeTab === tab && styles.tabActive]}
             onPress={() => setActiveTab(tab)}
           >
             <Ionicons
               name={tab === 'history' ? 'time-outline' : tab === 'saved' ? 'heart-outline' : 'location-outline'}
               size={16}
-              color={activeTab === tab ? theme.PRIMARY : theme.TEXT_SECONDARY}
+              color={activeTab === tab ? Colors.blue : Colors.textSecondary}
             />
-            <Text style={[styles.tabText, { color: activeTab === tab ? theme.PRIMARY : theme.TEXT_SECONDARY }]}>
+            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
               {tab === 'history' ? 'History' : tab === 'saved' ? 'Saved' : 'Places'}
             </Text>
           </TouchableOpacity>
@@ -477,12 +451,12 @@ export default function YouScreen({ navigation }: any) {
       {/* Content */}
       {loading && history.length === 0 && savedRoutes.length === 0 && favPlaces.length === 0 ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={theme.PRIMARY} />
+          <ActivityIndicator size="large" color={Colors.blue} />
         </View>
       ) : (
         <ScrollView
           contentContainerStyle={styles.content}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.PRIMARY} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.blue} />}
         >
           {activeTab === 'history' && renderHistoryTab()}
           {activeTab === 'saved'   && renderSavedTab()}
@@ -492,46 +466,46 @@ export default function YouScreen({ navigation }: any) {
 
       {/* Add Place Modal */}
       <Modal visible={showAddPlace} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAddPlace(false)}>
-        <SafeAreaView style={[styles.modal, { backgroundColor: theme.BACKGROUND }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: theme.BORDER }]}>
-            <Text style={[styles.modalTitle, { color: theme.TEXT }]}>
+        <SafeAreaView style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>
               {addForm.type === 'home' ? 'Set Home' : addForm.type === 'work' ? 'Set Work' : 'Add Favorite'}
             </Text>
             <TouchableOpacity onPress={() => setShowAddPlace(false)}>
-              <Ionicons name="close" size={24} color={theme.TEXT} />
+              <Ionicons name="close" size={24} color={Colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
           {addForm.type === 'favorite' && (
-            <View style={[styles.labelInput, { borderBottomColor: theme.BORDER }]}>
-              <Text style={[styles.labelHint, { color: theme.TEXT_SECONDARY }]}>Label (e.g. "Church", "Market")</Text>
+            <View style={styles.labelInput}>
+              <Text style={styles.labelHint}>Label (e.g. "Church", "Market")</Text>
               <TextInput
-                style={[styles.labelField, { color: theme.TEXT, borderColor: theme.BORDER }]}
+                style={styles.labelField}
                 value={addForm.label}
                 onChangeText={(t) => setAddForm((p) => ({ ...p, label: t }))}
                 placeholder="Give it a name"
-                placeholderTextColor={theme.TEXT_SECONDARY}
+                placeholderTextColor={Colors.textTertiary}
               />
             </View>
           )}
 
-          <View style={[styles.searchWrap, { borderBottomColor: theme.BORDER }]}>
-            <Ionicons name="search-outline" size={18} color={theme.TEXT_SECONDARY} />
+          <View style={styles.searchWrap}>
+            <Ionicons name="search-outline" size={18} color={Colors.textSecondary} />
             <TextInput
-              style={[styles.searchField, { color: theme.TEXT }]}
+              style={styles.searchField}
               value={addForm.query}
               onChangeText={(t) => setAddForm((p) => ({ ...p, query: t }))}
               placeholder="Search for a place in Lagos..."
-              placeholderTextColor={theme.TEXT_SECONDARY}
+              placeholderTextColor={Colors.textTertiary}
               autoFocus={addForm.type !== 'favorite'}
             />
-            {searchingPlace && <ActivityIndicator size="small" color={theme.PRIMARY} />}
+            {searchingPlace && <ActivityIndicator size="small" color={Colors.blue} />}
           </View>
 
           {savingPlace ? (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={theme.PRIMARY} />
-              <Text style={[{ color: theme.TEXT_SECONDARY, marginTop: SPACING.SM }]}>Saving...</Text>
+              <ActivityIndicator size="large" color={Colors.blue} />
+              <Text style={[styles.emptySub, { marginTop: 8 }]}>Saving...</Text>
             </View>
           ) : (
             <FlatList
@@ -539,21 +513,18 @@ export default function YouScreen({ navigation }: any) {
               keyExtractor={(i) => i.placeId}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.suggestionItem, { borderBottomColor: theme.BORDER }]}
-                  onPress={() => handlePlaceSuggestionSelect(item)}
-                >
-                  <Ionicons name="location-outline" size={18} color={theme.PRIMARY} style={{ marginRight: SPACING.SM }} />
+                <TouchableOpacity style={styles.suggestionItem} onPress={() => handlePlaceSuggestionSelect(item)}>
+                  <Ionicons name="location-outline" size={18} color={Colors.blue} style={{ marginRight: 10 }} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.suggName, { color: theme.TEXT }]}>{item.name}</Text>
-                    {!!item.address && <Text style={[styles.suggAddr, { color: theme.TEXT_SECONDARY }]}>{item.address}</Text>}
+                    <Text style={styles.suggName}>{item.name}</Text>
+                    {!!item.address && <Text style={styles.suggAddr}>{item.address}</Text>}
                   </View>
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
                 addForm.query.trim() && !searchingPlace ? (
                   <View style={styles.empty}>
-                    <Text style={[styles.emptySub, { color: theme.TEXT_SECONDARY }]}>No places found. Try a different search.</Text>
+                    <Text style={styles.emptySub}>No places found. Try a different search.</Text>
                   </View>
                 ) : null
               }
@@ -566,25 +537,31 @@ export default function YouScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Colors.mapBackground },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.sheetBg,
   },
-  headerTitle:  { fontSize: FONT_SIZES.HEADING_2, fontWeight: '700' },
-  headerSub:    { fontSize: FONT_SIZES.SMALL, marginTop: 2 },
-  headerActions: { flexDirection: 'row', gap: SPACING.SM },
+  headerTitle:  { fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.textPrimary },
+  headerSub:    { fontSize: Typography.sm, marginTop: 2, color: Colors.textSecondary },
+  headerActions: { flexDirection: 'row', gap: 8 },
   iconBtn: {
     width: 36, height: 36, borderRadius: 18,
     justifyContent: 'center', alignItems: 'center',
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1, borderColor: Colors.border,
   },
   tabs: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.sheetBg,
   },
   tab: {
     flex: 1,
@@ -592,95 +569,111 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: SPACING.MD,
+    paddingVertical: 12,
   },
-  tabText: { fontSize: FONT_SIZES.SMALL, fontWeight: '600' },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: Colors.blue },
+  tabText:       { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.textSecondary },
+  tabTextActive: { color: Colors.blue },
   content: { paddingBottom: 40 },
-  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.XL },
-  clearBtn: { alignSelf: 'flex-end', padding: SPACING.MD, paddingBottom: 0 },
-  clearBtnText: { fontSize: FONT_SIZES.SMALL, fontWeight: '600' },
+  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+  clearBtn: { alignSelf: 'flex-end', padding: 14, paddingBottom: 0 },
+  clearBtnText: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: '#EF4444' },
   card: {
-    marginHorizontal: SPACING.MD,
-    marginTop: SPACING.MD,
-    padding: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MEDIUM,
+    marginHorizontal: 14,
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 12,
     borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.sheetBg,
   },
   cardRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  cardTitle:  { fontSize: FONT_SIZES.BODY, fontWeight: '700' },
-  cardSub:    { fontSize: FONT_SIZES.SMALL, marginTop: 2 },
-  cardMeta:   { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.SM, marginTop: SPACING.SM },
-  metaChip:   { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  metaText:   { fontSize: FONT_SIZES.SMALL },
-  cardRight:  { alignItems: 'flex-end', gap: SPACING.SM },
-  cardDate:   { fontSize: FONT_SIZES.SMALL },
-  empty: { alignItems: 'center', paddingVertical: SPACING.XXL, paddingHorizontal: SPACING.LG },
-  emptyTitle: { fontSize: FONT_SIZES.HEADING_3, fontWeight: '600', marginTop: SPACING.MD },
-  emptySub:   { fontSize: FONT_SIZES.BODY, textAlign: 'center', marginTop: SPACING.SM },
+  cardTitle:     { fontSize: Typography.md, fontWeight: Typography.bold, color: Colors.textPrimary },
+  cardSub:       { fontSize: Typography.sm, marginTop: 2, color: Colors.textSecondary },
+  cardMeta:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  metaChip:      { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  metaText:      { fontSize: Typography.sm, color: Colors.textSecondary },
+  metaTextBlue:  { fontSize: Typography.sm, color: Colors.blue },
+  cardRight:     { alignItems: 'flex-end', gap: 8 },
+  cardDate:      { fontSize: Typography.sm, color: Colors.textSecondary },
+  empty: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 },
+  emptyTitle: { fontSize: Typography.xl, fontWeight: Typography.semibold, marginTop: 14, color: Colors.textPrimary },
+  emptySub:   { fontSize: Typography.md, textAlign: 'center', marginTop: 8, color: Colors.textSecondary },
   // Places tab
   placeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.MD,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
+    gap: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.divider,
   },
   placeIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  placeLabel:   { fontSize: FONT_SIZES.SMALL, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  placeName:    { fontSize: FONT_SIZES.BODY, fontWeight: '600', marginTop: 1 },
-  placeAddress: { fontSize: FONT_SIZES.SMALL, marginTop: 1 },
-  placeEditBtn: { paddingHorizontal: SPACING.MD, paddingVertical: 6, borderRadius: BORDER_RADIUS.MEDIUM },
-  placeEditText: { fontSize: FONT_SIZES.SMALL, fontWeight: '600' },
+  placeLabel:   { fontSize: Typography.xs, fontWeight: Typography.bold, textTransform: 'uppercase', letterSpacing: 0.5, color: Colors.textSecondary },
+  placeName:    { fontSize: Typography.md, fontWeight: Typography.semibold, marginTop: 1, color: Colors.textPrimary },
+  placeAddress: { fontSize: Typography.sm, marginTop: 1, color: Colors.textSecondary },
+  placeEditBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.blueLight },
+  placeEditText: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.blue },
   favHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    marginTop: SPACING.MD,
+    borderBottomColor: Colors.divider,
+    marginTop: 8,
   },
-  favTitle: { fontSize: FONT_SIZES.BODY, fontWeight: '700' },
+  favTitle: { fontSize: Typography.md, fontWeight: Typography.bold, color: Colors.textPrimary },
   // Modal
-  modal: { flex: 1 },
+  modal: { flex: 1, backgroundColor: Colors.mapBackground },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.sheetBg,
   },
-  modalTitle: { fontSize: FONT_SIZES.HEADING_3, fontWeight: '700' },
+  modalTitle: { fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.textPrimary },
   labelInput: {
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.divider,
   },
-  labelHint: { fontSize: FONT_SIZES.SMALL, marginBottom: SPACING.SM },
+  labelHint: { fontSize: Typography.sm, marginBottom: 8, color: Colors.textSecondary },
   labelField: {
-    fontSize: FONT_SIZES.BODY,
+    fontSize: Typography.md,
     borderWidth: 1,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    padding: SPACING.SM,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    padding: 10,
+    color: Colors.textPrimary,
+    backgroundColor: Colors.surfaceElevated,
   },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.SM,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    borderBottomWidth: 1,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.divider,
+    backgroundColor: Colors.sheetBg,
   },
-  searchField: { flex: 1, fontSize: FONT_SIZES.BODY },
+  searchField: { flex: 1, fontSize: Typography.md, color: Colors.textPrimary },
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.divider,
   },
-  suggName: { fontSize: FONT_SIZES.BODY, fontWeight: '600' },
-  suggAddr: { fontSize: FONT_SIZES.SMALL, marginTop: 2 },
+  suggName: { fontSize: Typography.md, fontWeight: Typography.semibold, color: Colors.textPrimary },
+  suggAddr: { fontSize: Typography.sm, marginTop: 2, color: Colors.textSecondary },
 });

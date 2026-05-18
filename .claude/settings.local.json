@@ -10,7 +10,27 @@
       "Bash(dir \"c:\\\\Users\\\\USER\\\\portfolio\\\\waka-way\\\\client\" /B /A-D)",
       "Bash(dir \"c:\\\\Users\\\\USER\\\\portfolio\\\\waka-way\\\\client\\\\assets\")",
       "Bash(dir \"c:\\\\Users\\\\USER\\\\portfolio\\\\waka-way\\\\client\")",
-      "WebFetch(domain:lara.ng)"
+      "WebFetch(domain:lara.ng)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); const deps = {...p.dependencies, ...p.devDependencies}; ['react-native-reanimated','react-native-gesture-handler','moti','@gorhom/bottom-sheet'].forEach\\(d => console.log\\(d + ':', deps[d] || 'NOT INSTALLED'\\)\\)\")",
+      "Bash(node -e \"const p = require\\('C:/Users/USER/portfolio/waka-way/client/package.json'\\); const deps = {...p.dependencies, ...p.devDependencies}; ['react-native-reanimated','react-native-gesture-handler','moti','@gorhom/bottom-sheet'].forEach\\(d => console.log\\(d + ':', deps[d] || 'NOT INSTALLED'\\)\\)\")",
+      "Bash(node -e \"const p = require\\('C:/Users/USER/portfolio/waka-way/client/package.json'\\); console.log\\('expo:', p.dependencies.expo\\); console.log\\('rn:', p.dependencies['react-native']\\); console.log\\('gesture-handler:', p.dependencies['react-native-gesture-handler']\\);\")",
+      "Bash(npx expo *)",
+      "Bash(node -e \"const p = require\\('C:/Users/USER/portfolio/waka-way/client/package.json'\\); console.log\\('reanimated:', p.dependencies['react-native-reanimated']\\);\")",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('reanimated:', p.dependencies['react-native-reanimated']\\)\")",
+      "Bash(python client/../../../.claude/skills/ui-ux-pro-max/scripts/search.py \"maps navigation transit dark mode mobile\" --design-system -p \"WakaWay\")",
+      "Read(//c/Users/USER/.claude/skills/ui-ux-pro-max/**)",
+      "Bash(python scripts/search.py \"transit navigation map mobile Lagos\" --design-system -p \"WakaWay\")",
+      "Bash(python scripts/search.py \"bottom sheet spring animation gesture\" --domain ux)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('reanimated:', p.dependencies['react-native-reanimated']\\); console.log\\('gesture-handler:', p.dependencies['react-native-gesture-handler']\\); console.log\\('react-native-svg:', p.dependencies['react-native-svg']\\);\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); const deps={...p.dependencies,...p.devDependencies}; ['react-native-safe-area-context','react-native-reanimated','react-native-gesture-handler','expo-location','@expo/vector-icons'].forEach\\(k => console.log\\(k+':', deps[k] || 'NOT INSTALLED'\\)\\);\")",
+      "Bash(node -e \"const p = require\\('./client/node_modules/react-native-reanimated/package.json'\\); console.log\\('version:', p.version\\); console.log\\('exports keys:', Object.keys\\(p.exports || {}\\).slice\\(0, 20\\)\\);\")",
+      "Bash(node -e \"const p = require\\('./client/node_modules/react-native-reanimated/package.json'\\); console.log\\(JSON.stringify\\(Object.keys\\(p\\), null, 2\\)\\);\")",
+      "Bash(node -e \"const p = require\\('./client/node_modules/react-native-worklets/package.json'\\); console.log\\('version:', p.version\\);\")",
+      "Bash(Remove-Item \"c:\\\\Users\\\\USER\\\\portfolio\\\\waka-way\\\\client\\\\metro.config.js\" -Force)",
+      "Bash(ls \"C:\\\\Users\\\\USER\\\\.claude\\\\wakaway-map-ui\" 2>&1)",
+      "Read(//c/Users/USER/.claude/wakaway-map-ui/**)",
+      "Bash(Get-ChildItem -Recurse \"C:\\\\Users\\\\USER\\\\.claude\\\\wakaway-map-ui\")",
+      "Bash(Select-Object FullName, Length)"
     ]
   }
 }

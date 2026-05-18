@@ -3,15 +3,14 @@ import { View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { OfflineBanner } from './components/ui/OfflineBanner';
+import ErrorBoundary from './components/ui/ErrorBoundary';
 import HomeScreen from './screens/HomeScreen';
 import YouScreen from './screens/YouScreen';
 import ContributionScreen from './screens/ContributionScreen';
@@ -29,47 +28,7 @@ import { ToastProvider } from './context/ToastContext';
 
 SplashScreen.preventAutoHideAsync();
 
-const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
-
-function TabNavigator() {
-  const { theme, isDark } = useAppTheme();
-
-  return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName: any;
-
-          if (route.name === 'Explore') {
-            iconName = focused ? 'map' : 'map-outline';
-          } else if (route.name === 'You') {
-            iconName = focused ? 'person' : 'person-outline';
-          } else if (route.name === 'Contribution') {
-            iconName = focused ? 'heart' : 'heart-outline';
-          }
-
-          return <Ionicons name={iconName} size={size} color={color} />;
-        },
-        tabBarActiveTintColor: theme.PRIMARY,
-        tabBarInactiveTintColor: theme.TEXT_SECONDARY,
-        tabBarStyle: {
-          backgroundColor: theme.CARD_BACKGROUND,
-          borderTopColor: theme.BORDER,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-        },
-      })}
-    >
-      <Tab.Screen name="Explore" component={HomeScreen} />
-      <Tab.Screen name="You" component={YouScreen} />
-      <Tab.Screen name="Contribution" component={ContributionScreen} />
-    </Tab.Navigator>
-  );
-}
 
 function AuthStack() {
   return (
@@ -149,45 +108,77 @@ function AppNavigator() {
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
+          animation: 'slide_from_right',
+          animationDuration: 350,
+          gestureEnabled: true,
+          gestureDirection: 'horizontal',
+          fullScreenGestureEnabled: true,
         }}
       >
         {isAuthenticated ? (
           <>
-            <Stack.Screen name="MainTabs" component={TabNavigator} />
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen
+              name="You"
+              component={YouScreen}
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+                gestureEnabled: true,
+              }}
+            />
+            <Stack.Screen
+              name="Contribution"
+              component={ContributionScreen}
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+                gestureEnabled: true,
+              }}
+            />
             <Stack.Screen
               name="Search"
               component={SearchScreen}
               options={{
-                presentation: 'modal',
-                animation: 'slide_from_bottom'
+                presentation: 'formSheet',
+                animation: 'slide_from_bottom',
+                gestureEnabled: true,
               }}
             />
             <Stack.Screen
               name="RouteDetail"
               component={RouteDetailScreen}
               options={{
+                presentation: 'formSheet',
                 animation: 'slide_from_bottom',
-                presentation: 'card'
+                gestureEnabled: true,
               }}
             />
             <Stack.Screen
               name="Notifications"
               component={NotificationsScreen}
-              options={{ animation: 'slide_from_right' }}
+              options={{ animation: 'slide_from_right', gestureEnabled: true }}
             />
             <Stack.Screen
               name="Preferences"
               component={PreferencesScreen}
-              options={{ animation: 'slide_from_right' }}
+              options={{ animation: 'slide_from_right', gestureEnabled: true }}
             />
             <Stack.Screen
               name="Navigation"
               component={NavigationScreen}
-              options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+              options={{
+                animation: 'slide_from_bottom',
+                gestureEnabled: false,
+              }}
             />
           </>
         ) : (
-          <Stack.Screen name="Auth" component={AuthStack} />
+          <Stack.Screen
+            name="Auth"
+            component={AuthStack}
+            options={{ animation: 'fade' }}
+          />
         )}
       </Stack.Navigator>
     </NavigationContainer>
@@ -198,16 +189,18 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <AuthProvider>
-          <ThemeProvider>
-            <ToastProvider>
-              <AppNavigator />
-            </ToastProvider>
-          </ThemeProvider>
-        </AuthProvider>
-      </GestureHandlerRootView>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <AuthProvider>
+            <ThemeProvider>
+              <ToastProvider>
+                <AppNavigator />
+              </ToastProvider>
+            </ThemeProvider>
+          </AuthProvider>
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

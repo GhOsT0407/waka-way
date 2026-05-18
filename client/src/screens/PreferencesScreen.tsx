@@ -5,9 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Switch,
   Alert,
-  Platform,
   TextInput,
   ActivityIndicator,
   Modal,
@@ -16,9 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAppTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
+import { Colors } from '../theme/colors';
+import { Typography } from '../theme/typography';
 import { updateUserProfile } from '../services/supabaseDataService';
 
 const TRANSPORT_PREF_KEY = 'preferredFirstLegTransportMode';
@@ -42,10 +40,9 @@ interface SettingRowProps {
 }
 
 function SettingRow({ icon, iconColor, iconBg, title, subtitle, onPress, rightElement }: SettingRowProps) {
-  const { theme } = useAppTheme();
   return (
     <TouchableOpacity
-      style={[styles.row, { borderBottomColor: theme.BORDER }]}
+      style={styles.row}
       onPress={onPress}
       disabled={!onPress && !rightElement}
       activeOpacity={onPress ? 0.6 : 1}
@@ -54,16 +51,15 @@ function SettingRow({ icon, iconColor, iconBg, title, subtitle, onPress, rightEl
         <Ionicons name={icon as any} size={20} color={iconColor} />
       </View>
       <View style={styles.rowText}>
-        <Text style={[styles.rowTitle, { color: theme.TEXT }]}>{title}</Text>
-        {!!subtitle && <Text style={[styles.rowSub, { color: theme.TEXT_SECONDARY }]}>{subtitle}</Text>}
+        <Text style={styles.rowTitle}>{title}</Text>
+        {!!subtitle && <Text style={styles.rowSub}>{subtitle}</Text>}
       </View>
-      {rightElement ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={theme.TEXT_SECONDARY} /> : null)}
+      {rightElement ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} /> : null)}
     </TouchableOpacity>
   );
 }
 
 export default function PreferencesScreen({ navigation }: any) {
-  const { theme, isDark, themeMode, setThemeMode } = useAppTheme();
   const { user } = useAuth();
 
   const [savedMode, setSavedMode]           = useState<string | null>(null);
@@ -76,19 +72,6 @@ export default function PreferencesScreen({ navigation }: any) {
   useEffect(() => {
     AsyncStorage.getItem(TRANSPORT_PREF_KEY).then((v) => setSavedMode(v));
   }, []);
-
-  const handleThemePress = () => {
-    Alert.alert(
-      'Appearance',
-      'Choose your preferred theme',
-      [
-        { text: 'System default', onPress: () => setThemeMode('system') },
-        { text: 'Light',          onPress: () => setThemeMode('light')  },
-        { text: 'Dark',           onPress: () => setThemeMode('dark')   },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
 
   const handleTransportPress = () => {
     const modes = Object.keys(MODE_LABELS);
@@ -154,57 +137,28 @@ export default function PreferencesScreen({ navigation }: any) {
     }
   };
 
-  const themeLabel = themeMode === 'system' ? 'System default' : themeMode === 'light' ? 'Light' : 'Dark';
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.BACKGROUND }]}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="light" />
 
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.BORDER }]}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="arrow-back" size={24} color={theme.TEXT} />
+          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.TEXT }]}>Preferences</Text>
+        <Text style={styles.headerTitle}>Preferences</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
 
-        {/* Appearance */}
-        <Text style={[styles.section, { color: theme.TEXT_SECONDARY }]}>APPEARANCE</Text>
-        <View style={[styles.group, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
-          <SettingRow
-            icon="contrast-outline"
-            iconColor="#6200EA"
-            iconBg="#EDE7F6"
-            title="Theme"
-            subtitle={themeLabel}
-            onPress={handleThemePress}
-          />
-          <SettingRow
-            icon={isDark ? 'moon' : 'sunny'}
-            iconColor={isDark ? '#7986CB' : '#FFA000'}
-            iconBg={isDark ? '#E8EAF6' : '#FFF8E1'}
-            title="Dark Mode"
-            rightElement={
-              <Switch
-                value={isDark}
-                onValueChange={(v) => setThemeMode(v ? 'dark' : 'light')}
-                trackColor={{ false: theme.BORDER, true: theme.PRIMARY }}
-                thumbColor={Platform.OS === 'android' ? (isDark ? theme.PRIMARY : '#F5F5F5') : undefined}
-              />
-            }
-          />
-        </View>
-
         {/* Transport */}
-        <Text style={[styles.section, { color: theme.TEXT_SECONDARY }]}>TRANSPORT</Text>
-        <View style={[styles.group, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
+        <Text style={styles.section}>TRANSPORT</Text>
+        <View style={styles.group}>
           <SettingRow
             icon="car-outline"
-            iconColor="#E65100"
-            iconBg="#FFF3E0"
+            iconColor="#F97316"
+            iconBg="rgba(249,115,22,0.15)"
             title="Default Transport Mode"
             subtitle={savedMode ? MODE_LABELS[savedMode] : 'Ask me each time'}
             onPress={handleTransportPress}
@@ -212,12 +166,12 @@ export default function PreferencesScreen({ navigation }: any) {
         </View>
 
         {/* Privacy */}
-        <Text style={[styles.section, { color: theme.TEXT_SECONDARY }]}>PRIVACY & DATA</Text>
-        <View style={[styles.group, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
+        <Text style={styles.section}>PRIVACY & DATA</Text>
+        <View style={styles.group}>
           <SettingRow
             icon="time-outline"
-            iconColor="#1565C0"
-            iconBg="#E3F2FD"
+            iconColor={Colors.blue}
+            iconBg={Colors.blueLight}
             title="Clear Search History"
             subtitle="Remove recent searches from this device"
             onPress={handleClearHistory}
@@ -227,20 +181,20 @@ export default function PreferencesScreen({ navigation }: any) {
         {/* Account */}
         {user && (
           <>
-            <Text style={[styles.section, { color: theme.TEXT_SECONDARY }]}>ACCOUNT</Text>
-            <View style={[styles.group, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
+            <Text style={styles.section}>ACCOUNT</Text>
+            <View style={styles.group}>
               <SettingRow
                 icon="person-outline"
-                iconColor="#2E7D32"
-                iconBg="#E8F5E9"
+                iconColor="#34D399"
+                iconBg="rgba(52,211,153,0.12)"
                 title="Display Name"
                 subtitle={displayName || 'Tap to set your name'}
                 onPress={openNameModal}
               />
               <SettingRow
                 icon="mail-outline"
-                iconColor="#1565C0"
-                iconBg="#E3F2FD"
+                iconColor={Colors.blue}
+                iconBg={Colors.blueLight}
                 title="Email"
                 subtitle={user.email}
               />
@@ -249,26 +203,26 @@ export default function PreferencesScreen({ navigation }: any) {
         )}
 
         {/* About */}
-        <Text style={[styles.section, { color: theme.TEXT_SECONDARY }]}>ABOUT</Text>
-        <View style={[styles.group, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
+        <Text style={styles.section}>ABOUT</Text>
+        <View style={styles.group}>
           <SettingRow
             icon="information-circle-outline"
-            iconColor="#1976D2"
-            iconBg="#E3F2FD"
+            iconColor={Colors.blue}
+            iconBg={Colors.blueLight}
             title="App Version"
             subtitle="WakaWay v1.0.0"
           />
           <SettingRow
             icon="map-outline"
-            iconColor="#388E3C"
-            iconBg="#E8F5E9"
+            iconColor="#34D399"
+            iconBg="rgba(52,211,153,0.12)"
             title="Coverage"
             subtitle="Lagos, Nigeria"
           />
           <SettingRow
             icon="shield-checkmark-outline"
-            iconColor="#6A1B9A"
-            iconBg="#F3E5F5"
+            iconColor="#A78BFA"
+            iconBg="rgba(167,139,250,0.12)"
             title="Privacy Policy"
             onPress={() => setShowPrivacyModal(true)}
           />
@@ -285,57 +239,57 @@ export default function PreferencesScreen({ navigation }: any) {
         onRequestClose={() => setShowPrivacyModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.privacyCard, { backgroundColor: theme.CARD_BACKGROUND }]}>
+          <View style={styles.privacyCard}>
             <View style={styles.privacyHeader}>
-              <Text style={[styles.modalTitle, { color: theme.TEXT }]}>Privacy Policy</Text>
+              <Text style={styles.modalTitle}>Privacy Policy</Text>
               <TouchableOpacity onPress={() => setShowPrivacyModal(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close" size={22} color={theme.TEXT_SECONDARY} />
+                <Ionicons name="close" size={22} color={Colors.textSecondary} />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.privacyScroll} showsVerticalScrollIndicator={false}>
-              <Text style={[styles.privacySection, { color: theme.TEXT }]}>Last updated: May 2025</Text>
+              <Text style={styles.privacySection}>Last updated: May 2025</Text>
 
-              <Text style={[styles.privacyHeading, { color: theme.TEXT }]}>1. Data We Collect</Text>
-              <Text style={[styles.privacyBody, { color: theme.TEXT_SECONDARY }]}>
+              <Text style={styles.privacyHeading}>1. Data We Collect</Text>
+              <Text style={styles.privacyBody}>
                 WakaWay collects your device location (GPS) only while the app is open and in use — we do not collect background location. We also store your email address and display name when you create an account.
               </Text>
 
-              <Text style={[styles.privacyHeading, { color: theme.TEXT }]}>2. How We Use Your Data</Text>
-              <Text style={[styles.privacyBody, { color: theme.TEXT_SECONDARY }]}>
+              <Text style={styles.privacyHeading}>2. How We Use Your Data</Text>
+              <Text style={styles.privacyBody}>
                 Location is used solely to calculate routes and show your position on the map. Your email is used for authentication. We do not sell your personal data to third parties.
               </Text>
 
-              <Text style={[styles.privacyHeading, { color: theme.TEXT }]}>3. Search History</Text>
-              <Text style={[styles.privacyBody, { color: theme.TEXT_SECONDARY }]}>
+              <Text style={styles.privacyHeading}>3. Search History</Text>
+              <Text style={styles.privacyBody}>
                 Recent searches are stored locally on your device only. You can clear them at any time from Preferences → Clear Search History.
               </Text>
 
-              <Text style={[styles.privacyHeading, { color: theme.TEXT }]}>4. Third-Party Services</Text>
-              <Text style={[styles.privacyBody, { color: theme.TEXT_SECONDARY }]}>
+              <Text style={styles.privacyHeading}>4. Third-Party Services</Text>
+              <Text style={styles.privacyBody}>
                 WakaWay uses Google Maps for geocoding and map display, and Supabase for authentication and route data storage. Both services operate under their own privacy policies.
               </Text>
 
-              <Text style={[styles.privacyHeading, { color: theme.TEXT }]}>5. Data Security</Text>
-              <Text style={[styles.privacyBody, { color: theme.TEXT_SECONDARY }]}>
+              <Text style={styles.privacyHeading}>5. Data Security</Text>
+              <Text style={styles.privacyBody}>
                 All data transmitted between your device and our servers is encrypted using HTTPS/TLS. Passwords are never stored in plain text.
               </Text>
 
-              <Text style={[styles.privacyHeading, { color: theme.TEXT }]}>6. Your Rights</Text>
-              <Text style={[styles.privacyBody, { color: theme.TEXT_SECONDARY }]}>
+              <Text style={styles.privacyHeading}>6. Your Rights</Text>
+              <Text style={styles.privacyBody}>
                 You may request deletion of your account and associated data at any time by contacting us at support@wakaway.app.
               </Text>
 
-              <Text style={[styles.privacyHeading, { color: theme.TEXT }]}>7. Contact</Text>
-              <Text style={[styles.privacyBody, { color: theme.TEXT_SECONDARY }]}>
+              <Text style={styles.privacyHeading}>7. Contact</Text>
+              <Text style={styles.privacyBody}>
                 Questions about this policy? Email us at support@wakaway.app.
               </Text>
               <View style={{ height: 20 }} />
             </ScrollView>
             <TouchableOpacity
-              style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: theme.PRIMARY, marginTop: SPACING.SM }]}
+              style={[styles.modalBtn, styles.modalBtnPrimary, { marginTop: 8 }]}
               onPress={() => setShowPrivacyModal(false)}
             >
-              <Text style={[styles.modalBtnText, { color: '#fff' }]}>Close</Text>
+              <Text style={styles.modalBtnPrimaryText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -349,34 +303,31 @@ export default function PreferencesScreen({ navigation }: any) {
         onRequestClose={() => setShowNameModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: theme.CARD_BACKGROUND }]}>
-            <Text style={[styles.modalTitle, { color: theme.TEXT }]}>Display Name</Text>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Display Name</Text>
             <TextInput
-              style={[styles.modalInput, { color: theme.TEXT, borderColor: theme.BORDER, backgroundColor: theme.SURFACE }]}
+              style={styles.modalInput}
               value={newName}
               onChangeText={setNewName}
               placeholder="Enter your name"
-              placeholderTextColor={theme.TEXT_SECONDARY}
+              placeholderTextColor={Colors.textTertiary}
               autoFocus
               maxLength={40}
               returnKeyType="done"
               onSubmitEditing={handleSaveName}
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalBtn, { borderColor: theme.BORDER }]}
-                onPress={() => setShowNameModal(false)}
-              >
-                <Text style={[styles.modalBtnText, { color: theme.TEXT_SECONDARY }]}>Cancel</Text>
+              <TouchableOpacity style={styles.modalBtn} onPress={() => setShowNameModal(false)}>
+                <Text style={styles.modalBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: theme.PRIMARY }]}
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
                 onPress={handleSaveName}
                 disabled={savingName}
               >
                 {savingName
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={[styles.modalBtnText, { color: '#fff' }]}>Save</Text>
+                  : <Text style={styles.modalBtnPrimaryText}>Save</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -388,98 +339,118 @@ export default function PreferencesScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Colors.mapBackground },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.sheetBg,
   },
-  headerTitle: { fontSize: FONT_SIZES.HEADING_3, fontWeight: '700' },
-  content:     { paddingTop: SPACING.MD },
+  headerTitle: { fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.textPrimary },
+  content:     { paddingTop: 8 },
   section: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '700',
+    fontSize: Typography.xs,
+    fontWeight: Typography.bold,
     letterSpacing: 0.8,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    marginTop: SPACING.MD,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 16,
+    color: Colors.textSecondary,
+    textTransform: 'uppercase',
   },
   group: {
-    marginHorizontal: SPACING.MD,
-    borderRadius: BORDER_RADIUS.LARGE,
+    marginHorizontal: 16,
+    borderRadius: 14,
     borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.sheetBg,
     overflow: 'hidden',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    gap: SPACING.MD,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.divider,
   },
   rowIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   rowText: { flex: 1 },
-  rowTitle: { fontSize: FONT_SIZES.BODY, fontWeight: '600' },
-  rowSub:   { fontSize: FONT_SIZES.SMALL, marginTop: 2 },
+  rowTitle: { fontSize: Typography.md, fontWeight: Typography.semibold, color: Colors.textPrimary },
+  rowSub:   { fontSize: Typography.sm, marginTop: 2, color: Colors.textSecondary },
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: Colors.scrim,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: SPACING.LG,
+    padding: 24,
   },
   modalCard: {
     width: '100%',
-    borderRadius: BORDER_RADIUS.XL,
-    padding: SPACING.LG,
-    gap: SPACING.MD,
+    borderRadius: 20,
+    padding: 20,
+    gap: 14,
+    backgroundColor: Colors.sheetBg,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   modalTitle: {
-    fontSize: FONT_SIZES.HEADING_3,
-    fontWeight: '700',
-    marginBottom: SPACING.XS,
+    fontSize: Typography.xl,
+    fontWeight: Typography.bold,
+    marginBottom: 4,
+    color: Colors.textPrimary,
   },
   modalInput: {
     borderWidth: 1,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    fontSize: FONT_SIZES.BODY_LARGE,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: Typography.lg,
+    backgroundColor: Colors.surfaceElevated,
+    color: Colors.textPrimary,
   },
   modalActions: {
     flexDirection: 'row',
-    gap: SPACING.SM,
-    marginTop: SPACING.XS,
+    gap: 10,
+    marginTop: 4,
   },
   modalBtn: {
     flex: 1,
-    paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MEDIUM,
+    paddingVertical: 12,
+    borderRadius: 10,
     borderWidth: 1,
+    borderColor: Colors.border,
     alignItems: 'center',
+    backgroundColor: Colors.surfaceElevated,
   },
-  modalBtnPrimary: { borderWidth: 0 },
-  modalBtnText: { fontSize: FONT_SIZES.BODY, fontWeight: '600' },
+  modalBtnPrimary: { borderWidth: 0, backgroundColor: Colors.blue },
+  modalBtnText: { fontSize: Typography.md, fontWeight: Typography.semibold, color: Colors.textSecondary },
+  modalBtnPrimaryText: { fontSize: Typography.md, fontWeight: Typography.semibold, color: '#fff' },
   // Privacy modal
   privacyCard: {
     width: '100%',
     maxHeight: '85%',
-    borderRadius: BORDER_RADIUS.XL,
-    padding: SPACING.LG,
+    borderRadius: 20,
+    padding: 20,
+    backgroundColor: Colors.sheetBg,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   privacyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.MD,
+    marginBottom: 16,
   },
   privacyScroll: { flex: 1 },
-  privacySection: { fontSize: FONT_SIZES.SMALL, marginBottom: SPACING.MD },
-  privacyHeading: { fontSize: FONT_SIZES.BODY, fontWeight: '700', marginTop: SPACING.MD, marginBottom: SPACING.XS },
-  privacyBody: { fontSize: FONT_SIZES.BODY, lineHeight: 22 },
+  privacySection: { fontSize: Typography.sm, marginBottom: 16, color: Colors.textSecondary },
+  privacyHeading: { fontSize: Typography.md, fontWeight: Typography.bold, marginTop: 16, marginBottom: 6, color: Colors.textPrimary },
+  privacyBody: { fontSize: Typography.md, lineHeight: 22, color: Colors.textSecondary },
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
@@ -76,6 +76,17 @@ export function useRealtimeContributions(
     onDeleteContribution,
   } = options;
 
+  // Keep callbacks in refs so they never trigger subscription re-setup
+  const onNewRef = useRef(onNewContribution);
+  const onUpdateRef = useRef(onUpdateContribution);
+  const onDeleteRef = useRef(onDeleteContribution);
+  useEffect(() => { onNewRef.current = onNewContribution; }, [onNewContribution]);
+  useEffect(() => { onUpdateRef.current = onUpdateContribution; }, [onUpdateContribution]);
+  useEffect(() => { onDeleteRef.current = onDeleteContribution; }, [onDeleteContribution]);
+
+  // Stable string key so an inline array doesn't cause re-subscription every render
+  const filterKey = filterTypes ? JSON.stringify([...filterTypes].sort()) : '';
+
   // Fetch initial contributions
   const fetchContributions = useCallback(async () => {
     try {
@@ -110,7 +121,8 @@ export function useRealtimeContributions(
     } finally {
       setLoading(false);
     }
-  }, [filterTypes, excludeExpired]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, excludeExpired]);
 
   useEffect(() => {
     // Fetch initial data
@@ -149,8 +161,7 @@ export function useRealtimeContributions(
           // Add to state (prepend for newest first)
           setContributions((prev) => [newContribution, ...prev]);
 
-          // Call callback if provided
-          onNewContribution?.(newContribution);
+          onNewRef.current?.(newContribution);
         }
       )
       .on(
@@ -162,18 +173,12 @@ export function useRealtimeContributions(
         },
         (payload: RealtimePostgresChangesPayload<Contribution>) => {
           const updatedContribution = payload.new as Contribution;
-
-          console.log('📝 Contribution updated:', updatedContribution.id);
-
-          // Update in state
           setContributions((prev) =>
             prev.map((c) =>
               c.id === updatedContribution.id ? updatedContribution : c
             )
           );
-
-          // Call callback if provided
-          onUpdateContribution?.(updatedContribution);
+          onUpdateRef.current?.(updatedContribution);
         }
       )
       .on(
@@ -185,14 +190,8 @@ export function useRealtimeContributions(
         },
         (payload: RealtimePostgresChangesPayload<Contribution>) => {
           const deletedId = (payload.old as { id: string }).id;
-
-          console.log('🗑️ Contribution deleted:', deletedId);
-
-          // Remove from state
           setContributions((prev) => prev.filter((c) => c.id !== deletedId));
-
-          // Call callback if provided
-          onDeleteContribution?.(deletedId);
+          onDeleteRef.current?.(deletedId);
         }
       )
       .subscribe((status) => {
@@ -207,7 +206,8 @@ export function useRealtimeContributions(
       console.log('Cleaning up realtime subscription');
       supabase.removeChannel(channel);
     };
-  }, [fetchContributions, filterTypes, excludeExpired, onNewContribution, onUpdateContribution, onDeleteContribution]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchContributions, filterKey, excludeExpired]);
 
   return {
     contributions,

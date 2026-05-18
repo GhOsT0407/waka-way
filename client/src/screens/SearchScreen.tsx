@@ -16,14 +16,14 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAppTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
 import { searchRoutes } from '../services/api';
 import { searchPlaces, getPlaceDetails, isWithinLagos } from '../services/placesService';
 import { getFavoritePlaces, FavoritePlace } from '../services/supabaseDataService';
 import type { TransportMode } from '../services/smartRoutingService';
 import TransportModeSelector from '../components/TransportModeSelector';
+import { Colors } from '../theme/colors';
+import { Typography } from '../theme/typography';
 
 const TRANSPORT_PREF_KEY  = 'preferredFirstLegTransportMode';
 const RECENT_SEARCHES_KEY = 'recentSearches';
@@ -53,7 +53,6 @@ interface SearchItem {
 }
 
 export default function SearchScreen({ navigation }: any) {
-  const { theme, isDark } = useAppTheme();
   const { user } = useAuth();
   const [query, setQuery]                 = useState('');
   const [loading, setLoading]             = useState(false);
@@ -231,26 +230,26 @@ export default function SearchScreen({ navigation }: any) {
 
   const renderSearchItem = ({ item }: { item: SearchItem }) => (
     <TouchableOpacity
-      style={[styles.listItem, { borderBottomColor: theme.BORDER }]}
+      style={styles.listItem}
       onPress={() => handleDestinationSelect(item)}
       activeOpacity={0.7}
     >
-      <View style={[styles.iconWrap, { backgroundColor: item.isRecent ? theme.SURFACE : '#E8F5E9' }]}>
+      <View style={styles.iconWrap}>
         <Ionicons
-          name={item.isRecent ? 'time-outline' : 'location-outline'}
-          size={18}
-          color={theme.PRIMARY}
+          name={item.isRecent ? 'time-outline' : 'business-outline'}
+          size={17}
+          color={Colors.textSecondary}
         />
       </View>
       <View style={styles.itemText}>
-        <Text style={[styles.itemName, { color: theme.TEXT }]} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
         {!!item.address && (
-          <Text style={[styles.itemAddress, { color: theme.TEXT_SECONDARY }]} numberOfLines={1}>{item.address}</Text>
+          <Text style={styles.itemAddress} numberOfLines={1}>{item.address}</Text>
         )}
       </View>
       {item.isRecent && (
         <TouchableOpacity onPress={() => removeRecentSearch(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="close" size={16} color={theme.TEXT_SECONDARY} />
+          <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
         </TouchableOpacity>
       )}
     </TouchableOpacity>
@@ -263,23 +262,27 @@ export default function SearchScreen({ navigation }: any) {
   const sectionTitle = query.trim() ? 'Suggestions' : recentSearches.length > 0 ? 'Recent & Popular' : 'Popular Places';
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.BACKGROUND }]}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+    <View style={styles.container}>
+      <StatusBar style="light" />
 
       {/* Header */}
-      <SafeAreaView style={[styles.header, { backgroundColor: theme.CARD_BACKGROUND, borderBottomColor: theme.BORDER }]}>
+      <SafeAreaView style={styles.header}>
         <View style={styles.searchRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="arrow-back" size={24} color={theme.PRIMARY} />
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="chevron-back" size={28} color={Colors.blue} />
           </TouchableOpacity>
 
-          <View style={[styles.inputWrap, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}>
-            <Ionicons name="search-outline" size={18} color={theme.TEXT_SECONDARY} style={{ marginRight: 8 }} />
+          <View style={styles.inputWrap}>
+            <Ionicons name="search" size={16} color={Colors.textSecondary} style={{ marginRight: 8 }} />
             <TextInput
               ref={inputRef}
-              style={[styles.input, { color: theme.TEXT }]}
+              style={styles.input}
               placeholder="Search places in Lagos..."
-              placeholderTextColor={theme.TEXT_SECONDARY}
+              placeholderTextColor={Colors.textSecondary}
               value={query}
               onChangeText={setQuery}
               autoFocus
@@ -290,16 +293,16 @@ export default function SearchScreen({ navigation }: any) {
             />
             {query.length > 0 && (
               <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close-circle" size={18} color={theme.TEXT_SECONDARY} />
+                <Ionicons name="close-circle" size={16} color={Colors.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
         </View>
 
-        {/* Quick chips */}
+        {/* Quick destination chips */}
         <View style={styles.chips}>
           <TouchableOpacity
-            style={[styles.chip, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}
+            style={styles.chip}
             onPress={() => {
               if (homePlace) {
                 handleDestinationSelect({
@@ -309,19 +312,17 @@ export default function SearchScreen({ navigation }: any) {
                   coordinates: { latitude: homePlace.latitude, longitude: homePlace.longitude },
                 });
               } else {
-                Alert.alert(
-                  'Home not set',
-                  'Go to You → Places to set your home location.',
-                  [{ text: 'OK' }]
-                );
+                Alert.alert('Home not set', 'Go to You → Places to set your home location.', [{ text: 'OK' }]);
               }
             }}
           >
-            <Ionicons name="home-outline" size={14} color={theme.PRIMARY} />
-            <Text style={[styles.chipText, { color: theme.PRIMARY }]}>Home</Text>
+            <View style={[styles.chipIcon, { backgroundColor: Colors.homeGreen }]}>
+              <Ionicons name="home" size={12} color="#FFFFFF" />
+            </View>
+            <Text style={styles.chipText}>Home</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.chip, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}
+            style={styles.chip}
             onPress={() => {
               if (workPlace) {
                 handleDestinationSelect({
@@ -331,16 +332,14 @@ export default function SearchScreen({ navigation }: any) {
                   coordinates: { latitude: workPlace.latitude, longitude: workPlace.longitude },
                 });
               } else {
-                Alert.alert(
-                  'Work not set',
-                  'Go to You → Places to set your work location.',
-                  [{ text: 'OK' }]
-                );
+                Alert.alert('Work not set', 'Go to You → Places to set your work location.', [{ text: 'OK' }]);
               }
             }}
           >
-            <Ionicons name="briefcase-outline" size={14} color={theme.PRIMARY} />
-            <Text style={[styles.chipText, { color: theme.PRIMARY }]}>Work</Text>
+            <View style={[styles.chipIcon, { backgroundColor: Colors.workBlue }]}>
+              <Ionicons name="briefcase" size={12} color="#FFFFFF" />
+            </View>
+            <Text style={styles.chipText}>Work</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -348,23 +347,23 @@ export default function SearchScreen({ navigation }: any) {
       {/* Content */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={theme.PRIMARY} />
-          <Text style={[styles.loadingText, { color: theme.TEXT_SECONDARY }]}>
+          <ActivityIndicator size="large" color={Colors.blue} />
+          <Text style={styles.loadingText}>
             Finding public transport routes...
           </Text>
         </View>
       ) : (
         <View style={{ flex: 1 }}>
-          <View style={[styles.sectionHeader, { borderBottomColor: theme.BORDER }]}>
-            <Text style={[styles.sectionTitle, { color: theme.TEXT_SECONDARY }]}>{sectionTitle}</Text>
-            {searching && <ActivityIndicator size="small" color={theme.PRIMARY} />}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+            {searching && <ActivityIndicator size="small" color={Colors.blue} />}
           </View>
 
           {listData.length === 0 && query.trim() && !searching ? (
             <View style={styles.center}>
-              <Ionicons name="search-outline" size={40} color={theme.TEXT_SECONDARY} />
-              <Text style={[styles.emptyText, { color: theme.TEXT_SECONDARY }]}>No places found</Text>
-              <Text style={[styles.emptyHint, { color: theme.TEXT_SECONDARY }]}>Try a different search term</Text>
+              <Ionicons name="search-outline" size={40} color={Colors.textSecondary} />
+              <Text style={styles.emptyText}>No places found</Text>
+              <Text style={styles.emptyHint}>Try a different search term</Text>
             </View>
           ) : (
             <FlatList
@@ -391,75 +390,100 @@ export default function SearchScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: Colors.mapBackground },
+
   header: {
-    paddingHorizontal: SPACING.MD,
-    paddingBottom: SPACING.MD,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: Colors.sheetBg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+    zIndex: 1,
     ...Platform.select({
-      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },
-      android: { elevation: 3 },
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      android: { elevation: 6 },
     }),
   },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.SM,
-    paddingTop: SPACING.SM,
+    gap: 6,
+    paddingTop: 8,
   },
-  backBtn: { padding: 4 },
+  backBtn: { padding: 2 },
   inputWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 6,
-    borderRadius: BORDER_RADIUS.ROUND,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 11 : 9,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceElevated,
     borderWidth: 1,
+    borderColor: Colors.border,
   },
   input: {
     flex: 1,
-    fontSize: FONT_SIZES.BODY,
+    fontSize: Typography.lg,
+    letterSpacing: -0.2,
+    color: Colors.textPrimary,
   },
+
   chips: {
     flexDirection: 'row',
-    gap: SPACING.SM,
-    marginTop: SPACING.MD,
+    gap: 8,
+    marginTop: 12,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: 7,
-    borderRadius: BORDER_RADIUS.ROUND,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: Colors.surfaceElevated,
     borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  chipIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   chipText: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '600',
+    fontSize: Typography.md,
+    fontWeight: Typography.medium,
+    letterSpacing: -0.1,
+    color: Colors.textPrimary,
   },
+
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.divider,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '600',
+    fontSize: Typography.sm,
+    fontWeight: Typography.semibold,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
+    color: Colors.textSecondary,
   },
+
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.MD,
-    gap: SPACING.MD,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.divider,
   },
   iconWrap: {
     width: 36,
@@ -467,34 +491,43 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: Colors.surfaceElevated,
   },
   itemText: { flex: 1 },
   itemName: {
-    fontSize: FONT_SIZES.BODY,
-    fontWeight: '600',
+    fontSize: Typography.lg,
+    fontWeight: Typography.medium,
+    letterSpacing: -0.2,
+    color: Colors.textPrimary,
   },
   itemAddress: {
-    fontSize: FONT_SIZES.SMALL,
+    fontSize: Typography.sm,
     marginTop: 2,
+    color: Colors.textSecondary,
   },
+
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: SPACING.XL,
+    padding: 32,
   },
   loadingText: {
-    marginTop: SPACING.MD,
-    fontSize: FONT_SIZES.BODY,
+    marginTop: 16,
+    fontSize: Typography.lg,
     textAlign: 'center',
+    color: Colors.textSecondary,
   },
   emptyText: {
-    fontSize: FONT_SIZES.HEADING_3,
-    fontWeight: '600',
-    marginTop: SPACING.MD,
+    fontSize: Typography.xl,
+    fontWeight: Typography.semibold,
+    marginTop: 16,
+    letterSpacing: -0.4,
+    color: Colors.textPrimary,
   },
   emptyHint: {
-    fontSize: FONT_SIZES.BODY,
-    marginTop: SPACING.SM,
+    fontSize: Typography.md,
+    marginTop: 8,
+    color: Colors.textSecondary,
   },
 });

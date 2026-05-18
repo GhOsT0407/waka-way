@@ -8,6 +8,7 @@ import {
     Dimensions,
     Platform,
     Animated,
+    ActivityIndicator,
 } from 'react-native';
 import { PanGestureHandler, State as GestureState } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,6 +26,16 @@ import { getRoute } from '../services/api';
 import type { TransportMode } from '../types/routing';
 import { SmartRouteResult, RouteOption } from '../services/smartRoutingService';
 import { addRouteHistory, saveRoute, deleteSavedRoute, getSavedRoutes } from '../services/supabaseDataService';
+import {
+  getActiveIncidents,
+  getIncidentsOnRoute,
+  getRerouteDecision,
+  incidentSummaryText,
+  incidentColor,
+  ScoredIncident,
+  RerouteDecision,
+} from '../services/incidentService';
+import { searchRoutes } from '../services/api';
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -49,6 +60,12 @@ export default function RouteDetailScreen({ route, navigation }: any) {
     const [isRaining, setIsRaining] = useState(false);
     const [isFuelScarce, setIsFuelScarce] = useState(false);
     const [canScroll, setCanScroll] = useState(false);
+
+    // Incident intelligence
+    const [routeIncidents, setRouteIncidents]   = useState<ScoredIncident[]>([]);
+    const [rerouteDecision, setRerouteDecision] = useState<RerouteDecision>('none');
+    const [incidentDismissed, setIncidentDismissed] = useState(false);
+    const [reroutingActive, setReroutingActive] = useState(false);
 
     // Bottom sheet animation
     const sheetHeight = useRef(new Animated.Value(SNAP_POINTS.COLLAPSED)).current;
@@ -100,7 +117,7 @@ export default function RouteDetailScreen({ route, navigation }: any) {
             loadRoute(routeId);
         } else if (activeRoute) {
             checkIfSaved();
-            // Start at EXPANDED so user can see all content
+            checkRouteIncidents();
             Animated.spring(sheetHeight, {
                 toValue: SNAP_POINTS.EXPANDED,
                 friction: 8,
@@ -111,6 +128,46 @@ export default function RouteDetailScreen({ route, navigation }: any) {
             setCanScroll(true);
         }
     }, [routeId, activeRoute]);
+
+    const checkRouteIncidents = async () => {
+        const option =
+            smartRoute?.options.find((o) => o.id === smartRoute.recommendedOptionId) ??
+            smartRoute?.options[0];
+        if (!option) return;
+        const all = await getActiveIncidents();
+        const onRoute = getIncidentsOnRoute(option.legs, all);
+        setRouteIncidents(onRoute);
+        setRerouteDecision(getRerouteDecision(onRoute));
+    };
+
+    const handleReroute = async () => {
+        const option =
+            smartRoute?.options.find((o) => o.id === smartRoute.recommendedOptionId) ??
+            smartRoute?.options[0];
+        if (!option || routeIncidents.length === 0) return;
+        setReroutingActive(true);
+        try {
+            const avoidPoints = routeIncidents.map((i) => ({
+                latitude:  i.latitude,
+                longitude: i.longitude,
+                radiusKm:  i.avoidRadiusKm,
+            }));
+            const result = await searchRoutes({
+                origin:      activeRoute.origin_coords,
+                destination: activeRoute.destination_coords,
+                destinationName: activeRoute.destination,
+                avoidPoints,
+            });
+            if (result?.smartRoute) {
+                setSmartRoute(result.smartRoute);
+                setActiveRoute((prev: any) => ({ ...prev, ...result.legacyRoute }));
+                setRouteIncidents([]);
+                setRerouteDecision('none');
+                setIncidentDismissed(false);
+            }
+        } catch {}
+        setReroutingActive(false);
+    };
 
     // Expand sheet to full height
     const expandSheet = () => {
@@ -324,6 +381,47 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                         bounces={true}
                         nestedScrollEnabled={true}
                     >
+                    {/* ── Incident alert banner ───────────────────────── */}
+                    {rerouteDecision !== 'none' && !incidentDismissed && (
+                        <View style={[
+                            styles.incidentBanner,
+                            { borderLeftColor: incidentColor(rerouteDecision), backgroundColor: incidentColor(rerouteDecision) + '18' },
+                        ]}>
+                            <View style={styles.incidentBannerLeft}>
+                                <Text style={[styles.incidentIcon]}>
+                                    {rerouteDecision === 'auto' ? '🚨' : rerouteDecision === 'suggest' ? '⚠️' : 'ℹ️'}
+                                </Text>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.incidentTitle, { color: incidentColor(rerouteDecision) }]}>
+                                        {rerouteDecision === 'auto'    ? 'Heavy traffic on your route'   :
+                                         rerouteDecision === 'suggest' ? 'Congestion reported ahead'     :
+                                         'Minor incident near your route'}
+                                    </Text>
+                                    <Text style={styles.incidentSub} numberOfLines={2}>
+                                        {incidentSummaryText(routeIncidents)}
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={styles.incidentActions}>
+                                {(rerouteDecision === 'auto' || rerouteDecision === 'suggest') && (
+                                    <TouchableOpacity
+                                        style={[styles.rerouteBtn, { backgroundColor: incidentColor(rerouteDecision) }]}
+                                        onPress={handleReroute}
+                                        disabled={reroutingActive}
+                                    >
+                                        {reroutingActive
+                                            ? <ActivityIndicator size="small" color="#fff" />
+                                            : <Text style={styles.rerouteBtnText}>Reroute</Text>
+                                        }
+                                    </TouchableOpacity>
+                                )}
+                                <TouchableOpacity onPress={() => setIncidentDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Ionicons name="close" size={18} color={theme.TEXT_SECONDARY} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
+
                     {/* Smart Route Options - Show multiple route choices */}
                     {smartRoute && showSmartOptions ? (
                         <SmartRouteOptions
@@ -682,4 +780,40 @@ const styles = StyleSheet.create({
     sheetContentContainer: {
         paddingBottom: 120,
     },
+
+    // Incident banner
+    incidentBanner: {
+        marginHorizontal: 16,
+        marginBottom: 12,
+        borderRadius: 12,
+        borderLeftWidth: 4,
+        padding: 12,
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: 10,
+    },
+    incidentBannerLeft: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 10,
+    },
+    incidentIcon:  { fontSize: 20, marginTop: 1 },
+    incidentTitle: { fontSize: 13, fontWeight: '700', marginBottom: 3 },
+    incidentSub:   { fontSize: 12, color: '#94A3B8', lineHeight: 16 },
+    incidentActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flexShrink: 0,
+    },
+    rerouteBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        minWidth: 70,
+        alignItems: 'center',
+    },
+    rerouteBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });
