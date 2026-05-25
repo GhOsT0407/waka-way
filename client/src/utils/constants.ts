@@ -55,7 +55,7 @@ export const FONT_SIZES = {
 
 export const API_BASE_URL = __DEV__
   ? 'http://localhost:8000/api/v1'
-  : 'https://api.wakaway.com/api/v1';
+  : 'https://waka-way-production.up.railway.app/api/v1';
 
 // Set to true to use local mock data (no Django backend required)
 export const USE_MOCK_DATA = false;
