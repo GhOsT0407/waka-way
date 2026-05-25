@@ -115,6 +115,9 @@ export const FERRY_ROUTES: Array<[string, string]> = [
   ['Five Cowries (Falomo)', 'Marina Ferry'],
   ['Badore Jetty',      'Marina Ferry'],
   ['Majidun Awori Ferry', 'Ebute-Ero Jetty'],
+  ['Majidun Awori Ferry', 'Ipakodo (Ikorodu)'],
+  ['Ijegun Ferry', 'Liverpool Apapa'],
+  ['Ijegun Ferry', 'Marina Ferry'],
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -275,6 +278,59 @@ export const DANFO_HUBS: Stop[] = [
   { name: 'Ilasamaja',         latitude: 6.5189, longitude: 3.3195, type: 'bus_stop',   corridor: 'danfo_hub' },
   { name: 'Shogunle',          latitude: 6.5673, longitude: 3.3382, type: 'bus_stop',   corridor: 'danfo_hub' },
   { name: 'National Theatre',  latitude: 6.4934, longitude: 3.3681, type: 'bus_stop',   corridor: 'danfo_hub' },
+
+  // ── Lekki Phase 2 / Expressway ────────────────────────────────
+  { name: 'Lekki 2nd Roundabout', latitude: 6.4358, longitude: 3.4624, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Lekki 3rd Roundabout', latitude: 6.4346, longitude: 3.4812, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Ikota',                latitude: 6.4346, longitude: 3.4912, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Lekki Market',         latitude: 6.4380, longitude: 3.4712, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Osapa London',         latitude: 6.4332, longitude: 3.5145, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Oral Estate',          latitude: 6.4315, longitude: 3.5345, type: 'bus_stop',        corridor: 'danfo_hub' },
+
+  // ── Epe corridor (beyond Ajah on Lekki-Epe Expressway) ───────
+  { name: 'Ogombo',               latitude: 6.4178, longitude: 3.5901, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Abijo',                latitude: 6.4258, longitude: 3.6345, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Lakowe',               latitude: 6.4212, longitude: 3.6612, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Ibeju',                latitude: 6.4389, longitude: 3.7256, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Ejinrin',              latitude: 6.5284, longitude: 3.8498, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Itokin',               latitude: 6.6452, longitude: 3.8712, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Epe',                  latitude: 6.5767, longitude: 3.9786, type: 'major_hub',       corridor: 'danfo_hub' },
+
+  // ── Victoria Island (additional stops) ───────────────────────
+  { name: 'Ozumba Mbadiwe',       latitude: 6.4320, longitude: 3.4325, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Bar Beach',            latitude: 6.4278, longitude: 3.4270, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Oniru',                latitude: 6.4452, longitude: 3.4512, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Ligali Ayorinde',      latitude: 6.4315, longitude: 3.4365, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Adetokunbo Ademola',   latitude: 6.4298, longitude: 3.4189, type: 'bus_stop',        corridor: 'danfo_hub' },
+
+  // ── Lagos Island inner ────────────────────────────────────────
+  { name: 'Broad Street',         latitude: 6.4544, longitude: 3.3942, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Tinubu Square',        latitude: 6.4547, longitude: 3.3918, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Carter Bridge',        latitude: 6.4617, longitude: 3.3784, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Eko Bridge',           latitude: 6.4668, longitude: 3.3768, type: 'bus_stop',        corridor: 'danfo_hub' },
+
+  // ── Amuwo-Odofin ──────────────────────────────────────────────
+  { name: 'Amuwo-Odofin',         latitude: 6.4740, longitude: 3.2968, type: 'major_hub',       corridor: 'danfo_hub' },
+  { name: 'Apple Junction',       latitude: 6.4724, longitude: 3.3052, type: 'major_junction',  corridor: 'danfo_hub' },
+  { name: 'Kirikiri',             latitude: 6.4626, longitude: 3.3051, type: 'bus_stop',        corridor: 'danfo_hub' },
+
+  // ── Magodo / Shangisha ────────────────────────────────────────
+  { name: 'Shangisha',            latitude: 6.6234, longitude: 3.3612, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Magodo Phase 1',       latitude: 6.6125, longitude: 3.3685, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Magodo Phase 2',       latitude: 6.6189, longitude: 3.3724, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Isheri-Oshun',         latitude: 6.6334, longitude: 3.3478, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Omole Phase 1',        latitude: 6.6078, longitude: 3.3534, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Omole Phase 2',        latitude: 6.6145, longitude: 3.3589, type: 'bus_stop',        corridor: 'danfo_hub' },
+
+  // ── Alimosho / Meiran ─────────────────────────────────────────
+  { name: 'Meiran',               latitude: 6.6178, longitude: 3.2789, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Ekoro Road',           latitude: 6.6156, longitude: 3.2512, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Alimosho',             latitude: 6.5754, longitude: 3.2234, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Alakuko',              latitude: 6.6189, longitude: 3.2215, type: 'bus_stop',        corridor: 'danfo_hub' },
+
+  // ── Badagry corridor (additional) ────────────────────────────
+  { name: 'Ajara',                latitude: 6.4250, longitude: 2.9200, type: 'bus_stop',        corridor: 'danfo_hub' },
+  { name: 'Seme Border',          latitude: 6.3548, longitude: 2.7122, type: 'major_junction',  corridor: 'danfo_hub' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
