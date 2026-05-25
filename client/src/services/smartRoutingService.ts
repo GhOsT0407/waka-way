@@ -124,7 +124,6 @@ const SPEEDS: Record<TransportMode, number> = {
   okada: 30,
   danfo: 14,
   brt:   28,
-  ferry: 25,
   rail:  60,
   uber:  35,
   bolt:  35,
@@ -161,11 +160,6 @@ function calcPrice(distKm: number, mode: TransportMode): { min: number; max: num
       if (distKm <= 15) return { min: 400, max: 600 };
       return               { min: 500, max: 700 };
 
-    case 'ferry':
-      return distKm <= 10
-        ? { min: 1000, max: 1500 }
-        : { min: 1500, max: 2500 };
-
     case 'uber':
     case 'bolt':
       return distKm <= 5
@@ -190,7 +184,6 @@ function modeIcon(mode: TransportMode): string {
     okada: 'bicycle-outline',
     danfo: 'bus-outline',
     brt:   'bus',
-    ferry: 'boat-outline',
     rail:  'train-outline',
     uber:  'car-sport-outline',
     bolt:  'car-sport-outline',
@@ -235,8 +228,6 @@ import {
   BRT_ABULE_EGBA_STOPS,
   BLUE_LINE_STOPS,
   RED_LINE_STOPS,
-  FERRY_TERMINALS,
-  FERRY_ROUTES,
   DANFO_HUBS,
   ALL_STOPS,
 } from '../data/lagosStops';
@@ -317,7 +308,6 @@ function lagosInstruction(mode: TransportMode, from: string, to: string): string
     case 'okada': return `Board Okada at ${from}, ride to ${to}`;
     case 'danfo': return `Board Danfo at ${from} heading ${to}`;
     case 'brt':   return `Enter BRT at ${from}, alight at ${to}`;
-    case 'ferry': return `Board ferry at ${from} jetty, disembark at ${to}`;
     case 'rail':  return `Board train at ${from} station, alight at ${to}`;
     case 'uber':
     case 'bolt':  return `Take ${mode === 'uber' ? 'Uber' : 'Bolt'} from ${from} to ${to}`;
@@ -332,7 +322,6 @@ function lagosPidginInstruction(mode: TransportMode, from: string, to: string): 
     case 'okada': return `Carry okada from ${from} go ${to}`;
     case 'danfo': return `Enter danfo for ${from} side, tell conductor "${to}!"`;
     case 'brt':   return `Enter BRT for ${from} busstop, come down for ${to}`;
-    case 'ferry': return `Enter boat for ${from} jetty, commot for ${to}`;
     case 'rail':  return `Enter train for ${from} station, come down for ${to}`;
     case 'uber':
     case 'bolt':  return `Call ${mode === 'uber' ? 'Uber' : 'Bolt'} from ${from} go ${to}`;
@@ -497,50 +486,6 @@ function buildBRTRoute(
   return null;
 }
 
-/** Build a ferry route if there's a viable terminal pair */
-function buildFerryRoute(
-  origin: Location,
-  destination: Location,
-  pref?: TransportMode
-): RouteOption | null {
-  const originTerminal = nearestStop(origin.latitude, origin.longitude, FERRY_TERMINALS);
-  const destTerminal   = nearestStop(destination.latitude, destination.longitude, FERRY_TERMINALS);
-  if (!originTerminal || !destTerminal) return null;
-  if (originTerminal.name === destTerminal.name) return null;
-
-  // Check if there's a direct ferry route between these terminals
-  const hasRoute = FERRY_ROUTES.some(
-    ([a, b]) =>
-      (a === originTerminal.name && b === destTerminal.name) ||
-      (b === originTerminal.name && a === destTerminal.name)
-  );
-  if (!hasRoute) return null;
-
-  const walkToTerminal  = calculateDistance(origin.latitude, origin.longitude, originTerminal.latitude, originTerminal.longitude);
-  const walkFromTerminal = calculateDistance(destTerminal.latitude, destTerminal.longitude, destination.latitude, destination.longitude);
-
-  // Ferry only worth it if it saves real distance
-  const ferryDist = calculateDistance(originTerminal.latitude, originTerminal.longitude, destTerminal.latitude, destTerminal.longitude);
-  if (ferryDist < 1) return null;
-  if (walkToTerminal > 5 || walkFromTerminal > 5) return null;
-
-  const legs: RouteLeg[] = [];
-
-  if (walkToTerminal >= 0.05) {
-    const mode = connectorMode(origin.latitude, origin.longitude, originTerminal.latitude, originTerminal.longitude, walkToTerminal, pref);
-    legs.push(buildLeg(mode, origin, originTerminal));
-  }
-
-  legs.push(buildLeg('ferry', originTerminal, destTerminal));
-
-  if (walkFromTerminal >= 0.05) {
-    const mode = connectorMode(destTerminal.latitude, destTerminal.longitude, destination.latitude, destination.longitude, walkFromTerminal);
-    legs.push(buildLeg(mode, destTerminal, destination));
-  }
-
-  return assembleOption(uid(), 'segmented', 'Ferry Route', `Via ${originTerminal.name} → ${destTerminal.name}`, legs, ['Ferry', 'Scenic']);
-}
-
 /** Build a danfo multimodal route via major hubs */
 function buildDanfoRoute(
   origin: Location,
@@ -674,10 +619,6 @@ export function calculateSmartRoute(
   const brtRoute = buildBRTRoute(origin, destination, pref);
   if (brtRoute) options.push(brtRoute);
 
-  // Ferry — internal guard rejects if no viable terminal pair or ferry leg < 1km
-  const ferryRoute = buildFerryRoute(origin, destination, pref);
-  if (ferryRoute) options.push(ferryRoute);
-
   // Danfo/Keke — always included; buildDanfoRoute handles micro trips internally
   const danfoRoute = buildDanfoRoute(origin, destination, pref);
   options.push(danfoRoute);
@@ -789,8 +730,7 @@ export function calculateSmartRoute(
 }
 
 function pickRecommendationReason(opt: RouteOption): string {
-  if (opt.tags.includes('BRT'))   return 'BRT runs on dedicated lanes — more reliable in traffic';
-  if (opt.tags.includes('Ferry')) return 'Waterway avoids road traffic completely';
-  if (opt.isFastest)              return 'Quickest route for this trip';
+  if (opt.tags.includes('BRT')) return 'BRT runs on dedicated lanes — more reliable in traffic';
+  if (opt.isFastest)            return 'Quickest route for this trip';
   return 'Best balance of speed and cost for Lagos';
 }

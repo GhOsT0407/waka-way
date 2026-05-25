@@ -50,7 +50,6 @@ const ROUTING_CONFIG = {
   OKADA_SPEED: 35,
   DANFO_SPEED: 20,                        // Includes stops
   BRT_SPEED: 30,
-  FERRY_SPEED: 25,
   
   // Arrival threshold
   ARRIVAL_NUDGE_DISTANCE_M: 300,
@@ -77,7 +76,6 @@ function calculateDuration(distanceKm: number, mode: TransitMode): number {
     okada: ROUTING_CONFIG.OKADA_SPEED,
     danfo: ROUTING_CONFIG.DANFO_SPEED,
     brt: ROUTING_CONFIG.BRT_SPEED,
-    ferry: ROUTING_CONFIG.FERRY_SPEED,
     rail: ROUTING_CONFIG.BRT_SPEED * 1.5,
     uber: ROUTING_CONFIG.KEKE_SPEED * 1.2,
     bolt: ROUTING_CONFIG.KEKE_SPEED * 1.2,
@@ -109,7 +107,6 @@ function getModeIcon(mode: TransitMode): string {
     okada: 'bicycle-outline',
     danfo: 'bus-outline',
     brt: 'bus',
-    ferry: 'boat-outline',
     rail: 'train-outline',
     uber: 'car-sport-outline',
     bolt: 'car-sport-outline',

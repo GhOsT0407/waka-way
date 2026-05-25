@@ -40,9 +40,6 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
   okada_short_trip_max: 350,      // ₦350 max for short trips
   okada_rate_per_km: 80,          // ₦80 per km
   
-  // Ferry
-  ferry_base_fare: 1000,          // ₦1000 flat rate (most routes)
-  
   // Surcharges
   night_surcharge_percent: 30,    // 30% night surcharge (8PM - 6AM)
   peak_surcharge_percent: 15,     // 15% during rush hours
@@ -350,23 +347,6 @@ export function calculateOkadaPrice(
   };
 }
 
-/**
- * Calculate Ferry price
- */
-export function calculateFerryPrice(
-  config: PricingConfig = DEFAULT_PRICING_CONFIG
-): PriceEstimate {
-  return {
-    base_fare: config.ferry_base_fare,
-    distance_fare: 0,
-    time_surcharge: 0,
-    safety_surcharge: 0,
-    total: config.ferry_base_fare,
-    currency: 'NGN',
-    breakdown: `Ferry fare: ₦${config.ferry_base_fare}`,
-  };
-}
-
 // ============================================================
 // MAIN PRICING FUNCTION
 // ============================================================
@@ -406,9 +386,6 @@ export function calculatePrice(options: PricingOptions): PriceEstimate {
     
     case 'okada':
       return calculateOkadaPrice(distanceKm, departureTime, forcedVehicle, config);
-    
-    case 'ferry':
-      return calculateFerryPrice(config);
     
     case 'uber':
     case 'bolt':

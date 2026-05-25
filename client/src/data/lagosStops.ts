@@ -13,7 +13,7 @@ export interface Stop {
   latitude: number;
   longitude: number;
   type?: string;
-  corridor?: 'brt' | 'blue_line' | 'red_line' | 'ferry' | 'danfo_hub';
+  corridor?: 'brt' | 'blue_line' | 'red_line' | 'danfo_hub';
   lineIndex?: number;
   corridorId?: string;
 }
@@ -85,39 +85,6 @@ export const RED_LINE_STOPS: Stop[] = [
   { name: 'Agege Rail',     latitude: 6.6219, longitude: 3.3090, type: 'rail_station', corridor: 'red_line', lineIndex: 6 },
   { name: 'Iju',            latitude: 6.6345, longitude: 3.2761, type: 'rail_station', corridor: 'red_line', lineIndex: 7 },
   { name: 'Agbado',         latitude: 6.6516, longitude: 3.2477, type: 'rail_station', corridor: 'red_line', lineIndex: 8 },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LagFerry / Metro Ferry terminals (2024)
-// ─────────────────────────────────────────────────────────────────────────────
-export const FERRY_TERMINALS: Stop[] = [
-  { name: 'Marina Ferry',            latitude: 6.4542, longitude: 3.3944, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Five Cowries (Falomo)',    latitude: 6.4508, longitude: 3.4259, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Ebute-Ero Jetty',         latitude: 6.4566, longitude: 3.3794, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Ipakodo (Ikorodu)',        latitude: 6.6094, longitude: 3.5038, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Mile 2 Ferry',            latitude: 6.4648, longitude: 3.3117, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Liverpool Apapa',         latitude: 6.4434, longitude: 3.3611, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Badore Jetty',            latitude: 6.4432, longitude: 3.5690, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Majidun Awori Ferry',     latitude: 6.6045, longitude: 3.4189, type: 'ferry_terminal', corridor: 'ferry' },
-  { name: 'Ijegun Ferry',            latitude: 6.5165, longitude: 3.2812, type: 'ferry_terminal', corridor: 'ferry' },
-];
-
-// Ferry route pairs (which terminals are directly connected)
-export const FERRY_ROUTES: Array<[string, string]> = [
-  ['Ipakodo (Ikorodu)', 'Five Cowries (Falomo)'],
-  ['Ipakodo (Ikorodu)', 'Ebute-Ero Jetty'],
-  ['Ipakodo (Ikorodu)', 'Marina Ferry'],
-  ['Mile 2 Ferry',              'Liverpool Apapa'],
-  ['Mile 2 Ferry',              'Marina Ferry'],
-  ['Liverpool Apapa',           'Five Cowries (Falomo)'],
-  ['Liverpool Apapa',           'Ebute-Ero Jetty'],
-  ['Ebute-Ero Jetty',           'Marina Ferry'],
-  ['Five Cowries (Falomo)', 'Marina Ferry'],
-  ['Badore Jetty',      'Marina Ferry'],
-  ['Majidun Awori Ferry', 'Ebute-Ero Jetty'],
-  ['Majidun Awori Ferry', 'Ipakodo (Ikorodu)'],
-  ['Ijegun Ferry', 'Liverpool Apapa'],
-  ['Ijegun Ferry', 'Marina Ferry'],
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -340,6 +307,5 @@ export const ALL_STOPS: Stop[] = [
   ...BRT_STOPS,
   ...BLUE_LINE_STOPS,
   ...RED_LINE_STOPS,
-  ...FERRY_TERMINALS,
   ...DANFO_HUBS,
 ];

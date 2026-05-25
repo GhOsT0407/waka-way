@@ -125,7 +125,6 @@ const StepCard: React.FC<StepCardProps> = ({
       case 'okada': return '#FF5722';
       case 'danfo': return '#FFC107';
       case 'brt': return '#2196F3';
-      case 'ferry': return '#00BCD4';
       case 'rail': return '#E91E63';
       default: return theme.PRIMARY;
     }

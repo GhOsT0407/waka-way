@@ -29,7 +29,6 @@ export type TransportMode =
   | 'okada'     // Motorcycle
   | 'danfo'     // Yellow minibus
   | 'brt'       // Bus Rapid Transit (Primero/LAGBUS)
-  | 'ferry'     // Lagos ferry (LagFerry)
   | 'rail'      // Blue/Red Line rail
   | 'uber'      // Ride-hailing
   | 'bolt';     // Ride-hailing
@@ -44,12 +43,11 @@ export type LegType =
   | 'intermediate'  // Transfer point
   | 'last_mile';    // Final leg to destination
 
-export type LandmarkType = 
+export type LandmarkType =
   | 'keke_stand'
   | 'okada_junction'
   | 'bus_stop'
   | 'brt_station'
-  | 'ferry_terminal'
   | 'junction'
   | 'market'
   | 'mall'
@@ -170,9 +168,6 @@ export interface PricingConfig {
   okada_short_trip_max: number;
   okada_rate_per_km: number;
   
-  // Ferry
-  ferry_base_fare: number;
-  
   // Surcharges
   night_surcharge_percent: number;      // 20-50%
   peak_surcharge_percent: number;       // 10-30%
@@ -272,7 +267,6 @@ export interface RoutingRequest {
   avoid_walking?: boolean;
   max_walk_distance_meters?: number;  // Default 1200m (1.2km)
   prefer_brt?: boolean;
-  prefer_ferry?: boolean;
   
   // Safety preferences
   avoid_danger_zones?: boolean;

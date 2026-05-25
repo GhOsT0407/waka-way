@@ -15,7 +15,6 @@ const TRANSPORT_RULES: Partial<Record<TransportMode, { minKm: number; maxKm: num
   okada: { minKm: 0.5, maxKm: 8.0,  firstLegOnly: true  },
   danfo: { minKm: 3.0, maxKm: 50.0, firstLegOnly: false },
   brt:   { minKm: 5.0, maxKm: 60.0, firstLegOnly: false },
-  ferry: { minKm: 2.0, maxKm: 30.0, firstLegOnly: false },
 };
 
 export interface RouteLeg {
