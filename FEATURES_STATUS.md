@@ -1,269 +1,106 @@
-# WakaWay - Features Status
+# WakaWay — Features Status
 
-This document tracks the current implementation status of WakaWay features.
-
----
-
-## ✅ Fully Implemented
-
-### Frontend UI Components
-- ✅ Home Screen with header, welcome message, search bar, transport mode filters, quick actions, popular destinations
-- ✅ Search Screen with autocomplete, recent searches, popular places, route search functionality
-- ✅ Route Detail Screen with step-by-step directions, map view, route information
-- ✅ Contribution Screen (User Reports) with form submission, contribution types, location-based reporting
-- ✅ Map component (`WakaWayMapView`) with user location, markers, route polylines
-- ✅ Route components (RouteCard, RouteStepCard)
-- ✅ Basic navigation setup with all screens connected
-
-### Backend
-- ✅ Django REST Framework setup with proper project structure
-- ✅ Database models (all 10 models: City, TransportStop, TransportRoute, RouteSegment, Fare, UserReport, UserFavoritePlace, UserRouteHistory, TransportMode, RouteSuggestion)
-- ✅ Serializers for all models
-- ✅ Admin panel with all models registered
-- ✅ API root endpoint (`/api/v1/`)
-- ✅ Health check endpoint (`/api/v1/health/`)
-
-### Location Services
-- ✅ Location permission handling
-- ✅ Current location detection with GPS
-- ✅ Reverse geocoding (coordinates to address)
-- ✅ Forward geocoding (address to coordinates)
-- ✅ Location watching for real-time updates (implemented but not actively used)
-
-### API Integration
-- ✅ API client setup with Axios, interceptors, error handling
-- ✅ API endpoints defined and structured
-- ✅ Mock data system for development
-- ✅ API functions for cities, stops, routes, reports
+Last updated: 2026-05-19
 
 ---
 
-## 🔄 Partially Implemented
+## Fully Implemented
 
-### Map Integration
-- ✅ Map component created (`WakaWayMapView`) with full functionality
-- ✅ Location service created (`locationService.ts`) with all features working
-- ✅ User location detection and display
-- ⚠️ **Google Maps API Key Required** - Currently using placeholder, needs real API key for directions
-- ⚠️ Route polyline display (works with mock data, needs real route data)
-- ⚠️ Transport stop markers (frontend ready, needs backend data)
+### Screens & Navigation
+- **OnboardingScreen** — 3-slide carousel, AsyncStorage flag, fade-out transition
+- **LoginScreen** — animated focus fields, spring press button, mock auth support
+- **SignupScreen** — full validation (email format, password length/match), mock auth support
+- **HomeScreen** — search-first design, popular routes FlatList, animated search overlay, GPS origin chip
+- **SearchScreen** — autocomplete, recent searches (AsyncStorage), places API integration
+- **RouteDetailScreen** — SmartRouteOptions with fare cards, difficulty chips, leg timeline
+- **NavigationScreen** — real-time location tracking, turn-by-turn RouteGuide, map view
+- **CommunityMapView** — alert markers, incident reporting form, AlertBottomSheet
+- **ContributionScreen** — submit route/fare corrections with location
+- **NotificationsScreen** — alert feed
+- **YouScreen** — profile, settings, dark mode toggle
 
-### Route Search & Calculation
-- ✅ Frontend route search UI with autocomplete and suggestions
-- ✅ Route display and step-by-step directions
-- ✅ Multi-modal route options (Bus, Keke, Okada, Walk)
-- ⚠️ **Backend route search endpoint missing** - Currently uses mock data
-- ⚠️ Real route calculation algorithm needed
-- ⚠️ Integration with Google Directions API partially implemented
+### Custom Routing Engine (`smartRoutingService.ts`)
+- 29 Lagos stops with real GPS coordinates
+- Multi-modal route calculation: walk → keke/okada → danfo/BRT → walk
+- First-mile pivot (keke/okada suggested when walking > 1.2 km)
+- Incident avoidance routing with 300 m buffer
+- Dynamic pricing: peak hours (7–9 am, 5–8 pm), night rates, per-mode base fares
+- Pidgin/local instructions per leg
+- Difficulty derivation: EASY (≤2 transit legs), MODERATE (3), COMPLEX (4+)
+- Fare range display (min–max based on route variability)
 
-### User Reports (Contributions)
-- ✅ Complete frontend UI for submitting reports
-- ✅ Form validation and location-based reporting
-- ✅ Contribution types and status tracking
-- ⚠️ **Backend API for reports not implemented** - Data stored locally only
-- ⚠️ Report submission to server needed
+### Design System
+- `LightColors` / `DarkColors` token sets in `theme/colors.ts`
+- `useAppTheme()` hook — `theme`, `isDark`, `toggleTheme`, `tokens`, `light`, `dark`
+- Full dark mode support across all redesigned screens
+- Transport mode color coding: Danfo #F5C518, BRT #1A5BDB, Keke #2D7A4F, Okada #D93025
+- DM Sans typography scale (xs→hero)
+
+### Backend (Django)
+- All 10 database models defined and registered in admin
+- DRF serializers for all models
+- Health check endpoint (`GET /api/v1/health/`)
+- Auth endpoints (registration, login via DRF tokens)
+- Soft-delete migration applied (0003)
+- Idempotency key support on reports
+
+### Infrastructure
+- Offline map tile caching (`offlineMapCache.ts`)
+- Location service with permission handling, reverse geocoding
+- API client (Axios) with interceptors and error handling
+- Toast notification system
+- Error boundary component
+- Offline banner component
 
 ---
 
-## ❌ Not Yet Implemented
+## Partially Implemented
 
 ### Backend API Endpoints
-- ❌ `/api/v1/cities/` - List and detail cities
-- ❌ `/api/v1/stops/` - List transport stops
-- ❌ `/api/v1/stops/nearby/` - Find nearby stops (CRITICAL for map markers)
-- ❌ `/api/v1/routes/search/` - Search routes between locations (CRITICAL)
-- ❌ `/api/v1/routes/{id}/` - Get route details
-- ❌ `/api/v1/suggestions/` - Get route suggestions
-- ❌ `/api/v1/reports/` - Create and view user reports
-- ❌ `/api/v1/fares/` - Fare calculation and information
+- Route search: frontend calls the custom routing engine directly (client-side); no `/api/v1/routes/search/` endpoint yet
+- Reports: frontend submits to AsyncStorage; backend model exists but write endpoint not wired
+- Stops: models exist; `/api/v1/stops/nearby/` not implemented
 
-### Backend Services
-- ❌ Route calculation service (algorithm to find optimal routes)
-- ❌ Multi-modal route combination logic
-- ❌ Distance and time estimation
-- ❌ Real geocoding service integration (currently using Expo Location)
-- ❌ Fare calculation based on distance and transport mode
-- ❌ Route optimization algorithms
-
-### Real Data Integration
-- ❌ Actual transport stop data for Lagos/Abuja
-- ❌ Real route data and schedules
-- ❌ Live fare information
-- ❌ Real-time transport availability
-- ❌ User-generated content integration
-
-### Advanced Features
-- ❌ Saved favorite places (backend storage)
-- ❌ Route history (backend storage)
-- ❌ Offline mode with cached routes
-- ❌ Real-time navigation with turn-by-turn
-- ❌ Push notifications for route updates
-- ❌ Social features (sharing routes, ratings)
+### Map Integration
+- Map renders correctly; route polylines work with mock data
+- Google Maps API key required for full directions — uses `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`
+- Transport stop markers: frontend ready, needs real stop data from backend
 
 ---
 
-## 🛠️ Setup Required
+## Not Yet Implemented
 
-### Google Maps API Setup
+### Backend
+- `/api/v1/routes/search/` — route search using server-side engine
+- `/api/v1/stops/` and `/api/v1/stops/nearby/` — stop listings
+- `/api/v1/reports/` write endpoint — persist user reports to DB
+- `/api/v1/fares/` — fare lookup by route
+- Push notifications (backend trigger)
+- PostgreSQL + PostGIS migration (currently SQLite)
 
-To enable the map functionality, you need to:
-
-1. **Get Google Maps API Key**:
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select existing
-   - Enable "Maps SDK for Android" and "Maps SDK for iOS"
-   - Create API key
-   - (Optional) Restrict API key to your app
-
-2. **Configure in `app.json`**:
-   ```json
-   {
-     "ios": {
-       "config": {
-         "googleMapsApiKey": "YOUR_IOS_API_KEY_HERE"
-       }
-     },
-     "android": {
-       "config": {
-         "googleMaps": {
-           "apiKey": "YOUR_ANDROID_API_KEY_HERE"
-         }
-       }
-     }
-   }
-   ```
-
-3. **For Expo Go (Testing)**:
-   - Maps work without API key but with limitations
-   - For full features, you'll need to build a development build
-
-4. **Restart Expo**:
-   ```bash
-   npx expo start --clear
-   ```
-
-### Backend API Endpoints Setup
-
-The backend needs API view implementations. See `IMPLEMENTATION_ROADMAP.md` for details.
+### Features
+- Saved favourite places (backend storage; UI shows static mock)
+- Route history (model exists; not surfaced in UI)
+- Real-time transport availability
+- Voice navigation
+- Offline route caching (map tiles cached; full route data not yet persisted)
 
 ---
 
-## 🎯 Next Steps (Priority Order)
+## Development Mode Flags
 
-### High Priority (Immediate - Week 1-2)
-1. **Set up Google Maps API Key**
-   - Get API key from Google Cloud Console
-   - Enable Maps SDK for Android/iOS and Directions API
-   - Update `constants.ts` and `app.json` with real key
-   - Test map directions functionality
+```ts
+// client/src/utils/constants.ts
+USE_MOCK_AUTH = true   // any credentials log in; no backend needed
+USE_MOCK_DATA = true   // uses smartRoutingService directly; no API call
+```
 
-2. **Implement Core Backend API Endpoints**
-   - Cities endpoint (`/api/v1/cities/`)
-   - Nearby stops endpoint (`/api/v1/stops/nearby/`)
-   - Route search endpoint (`/api/v1/routes/search/`)
-
-### Medium Priority (Week 3-4)
-3. **Route Calculation Service**
-   - Basic route finding algorithm
-   - Multi-modal route combination
-   - Distance and time calculation
-
-4. **Real Data Integration**
-   - Add Lagos transport stop data
-   - Create sample routes
-   - Test with real coordinates
-
-### Low Priority (Week 5+)
-5. **Advanced Features**
-   - User reports backend API
-   - Saved places functionality
-   - Route history
-   - Push notifications
-
-### Low Priority
-7. **Additional Features**
-   - Saved places
-   - Route history
-   - Offline mode
-   - Real-time navigation
+Set to `false` to connect to a live backend.
 
 ---
 
-## 📝 Current Limitations
+## Known Issues
 
-### Map & Location
-- ⚠️ **Google Maps API key required** for directions functionality
-- ⚠️ Limited features in Expo Go (use development build for full features)
-- ⚠️ No transport stop markers yet (needs backend data and API key)
-- ✅ Location services fully working
-- ✅ Reverse geocoding working
-
-### Data & Backend
-- ⚠️ Using mock data for all functionality
-- ⚠️ No real transport data in database
-- ⚠️ Backend API endpoints not implemented
-- ⚠️ SQLite instead of PostGIS (limited geospatial features)
-- ✅ Database models and admin panel ready
-
-### User Experience
-- ✅ Full UI/UX implemented and functional
-- ✅ All screens and navigation working
-- ✅ Form validation and error handling
-- ⚠️ No real data means limited testing scenarios
-
----
-
-## 🔍 Testing Checklist
-
-### Map Testing
-- [ ] Map loads correctly
-- [ ] User location appears on map
-- [ ] Center user location button works
-- [ ] Map pan and zoom work
-- [ ] Markers display correctly (when data available)
-
-### Location Testing
-- [ ] Location permission prompt appears
-- [ ] Current location detected correctly
-- [ ] Address reverse geocoding works
-- [ ] Location updates work (if enabled)
-
-### API Testing
-- [ ] Health check endpoint works
-- [ ] API client can connect to backend
-- [ ] Error handling works correctly
-- [ ] Loading states display correctly
-
----
-
-## 🐛 Known Issues
-
-1. **Map not displaying**: 
-   - Check Google Maps API key configuration
-   - Try clearing cache: `npx expo start --clear`
-   - Verify location permissions
-
-2. **Location not working**:
-   - Check device location permissions
-   - Try on physical device (simulator may have issues)
-   - Check location services are enabled
-
-3. **API connection errors**:
-   - Verify backend server is running on port 8000
-   - Check API_BASE_URL in constants.ts
-   - For Android emulator, use `10.0.2.2:8000` instead of `localhost`
-   - For physical device, use your computer's IP address
-
----
-
-## 📚 Resources
-
-- [React Native Maps Documentation](https://github.com/react-native-maps/react-native-maps)
-- [Expo Location Documentation](https://docs.expo.dev/versions/latest/sdk/location/)
-- [Google Maps Platform](https://developers.google.com/maps/documentation)
-- [Django REST Framework](https://www.django-rest-framework.org/)
-
----
-
-**Last Updated**: December 22, 2025 (Status verified against actual codebase)
-
+1. **Google Maps API key** — map direction lines require a real key; configure in `.env` as `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`
+2. **Android emulator** — use `10.0.2.2:8000` instead of `localhost` for backend URL
+3. **Physical device** — use your machine's local IP address for `EXPO_PUBLIC_API_BASE_URL`

@@ -1,150 +1,95 @@
-# WakaWay - Nigerian Transport Navigation App
+# WakaWay — Lagos Transport Navigation App
 
-**Find your WakaWay** - A mobile app designed to help Nigerians navigate local transport options like buses (danfo), keke (tricycles), okada (motorbikes), and walking.
-
-![WakaWay Logo](https://via.placeholder.com/200x200/2ECC71/FFFFFF?text=W)
+**Move Smart. Move Local.** — A mobile app helping Lagos newcomers navigate informal transport: danfo, BRT, keke, okada, and molue.
 
 ---
 
-## 📱 Overview
+## Overview
 
-WakaWay is a location-based navigation app that helps users in Nigerian urban areas find the best routes using local transport modes. The app suggests route combinations, provides step-by-step instructions, estimates fares and travel times, and allows users to contribute route updates.
+WakaWay is a React Native app built for people who are new to Lagos and unfamiliar with the city's informal transit network. It calculates multi-modal routes, shows fare estimates before you board, and gives step-by-step guidance — including pidgin instructions and landmark-based directions that match how Lagosians actually navigate.
 
-### Core Features (MVP)
-
-- ✅ **GPS Location Detection**: Automatically detects user's current location
-- ✅ **Destination Search**: Search for destinations via address or landmark
-- ✅ **Multi-Modal Route Suggestions**: Combines bus, keke, okada, and walking
-- ✅ **Step-by-Step Instructions**: Detailed navigation guidance
-- ✅ **Fare Estimates**: Shows estimated cost for each route option
-- ✅ **Travel Time**: Displays approximate travel duration
-- ✅ **Map Visualization**: Visual route display on map
-- ✅ **User Reports**: Crowdsourced route and fare updates
+The core problem: Lagos has no transit API. Danfo, keke, and okada routes exist only in the heads of locals. WakaWay solves this with a custom routing engine that encodes 29 Lagos stops and calculates realistic routes without any external transit data.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Frontend
-- **React Native** with **Expo** for rapid development
-- **TypeScript** for type safety
-- **React Navigation** for screen navigation
-- **React Native Maps** for map visualization
-- **Expo Location** for GPS services
+- **React Native** + **Expo** (TypeScript)
+- **React Navigation** — stack + bottom tab navigation
+- **Expo Location** — GPS, reverse geocoding
+- **React Native Maps** — map display and route polylines
+- **AsyncStorage** — offline caching, onboarding state
 
 ### Backend
-- **Django** + **Django REST Framework** for API
-- **PostgreSQL** + **PostGIS** for geospatial data
-- **Python 3.10+**
-
-### Maps & Location
-- **Google Maps SDK** or **OpenStreetMap** via React Native Maps
-- **Expo Location** for GPS services
-- **OSM Nominatim** or **Google Places** for geocoding
+- **Django** + **Django REST Framework**
+- **SQLite** (dev) → PostgreSQL (production target)
+- **Python 3.13**
 
 ---
 
-## 🏆 The "Backend" Win
+## Design System
 
-Built a **custom multimodal routing engine** that calculates routes with:
+- **Accent**: Danfo orange `#E8541A` (light) / `#FF6B35` (dark)
+- **Background**: Warm white `#F8F7F5`
+- **Typography**: DM Sans — xs/10, sm/12, md/14, lg/16, xl/20, xxl/24, hero/32
+- **Style**: Flat design, zero shadows on cards, color creates hierarchy
+- **Transport colors**: Danfo `#F5C518` · BRT `#1A5BDB` · Keke `#2D7A4F` · Okada `#D93025`
+- **Dark mode**: Full support via `ThemeContext` (`useAppTheme()` hook)
 
-| Feature | Description |
-|---------|-------------|
-| **First-Mile Pivot** | Automatically suggests keke/okada if walking exceeds 1.2km |
-| **Danger Zone Avoidance** | Routes around unsafe areas with 300m buffer |
-| **Dynamic Pricing** | Peak hours, night rates, and Lagos-specific fares |
-| **Multi-Modal Segments** | Intelligently combines walk/keke/okada/danfo/BRT/ferry |
-| **Contextual Guides** | Step-by-step instructions with landmark references |
-
-The engine generates Lagos-specific transit routes **without relying on traditional transit APIs** that don't cover informal Nigerian transport (danfo, keke, okada). It uses realistic speed estimates per mode and calculates accurate fare estimates based on current pricing.
+Design tokens live in `client/src/theme/colors.ts` (`LightColors`, `DarkColors`) and `client/src/context/ThemeContext.tsx`.
 
 ---
 
-## 📁 Project Structure
+## The Custom Routing Engine
+
+The engine in `client/src/services/smartRoutingService.ts` calculates routes with no external transit API:
+
+| Feature | Detail |
+|---|---|
+| Stop network | 29 Lagos stops with real coordinates |
+| First-mile pivot | Suggests keke/okada when walking > 1.2 km |
+| Incident avoidance | Routes around reported hazards with 300 m buffer |
+| Dynamic pricing | Peak hours (7–9 am, 5–8 pm), night rates, per-mode fares |
+| Pidgin instructions | Each leg gets a localised instruction ("Enter danfo wey dey go CMS") |
+| Difficulty rating | EASY (≤2 transit legs) · MODERATE (3) · COMPLEX (4+) |
+
+---
+
+## Project Structure
 
 ```
 waka-way/
-├── client/                 # React Native/Expo frontend
-│   ├── src/
-│   │   ├── screens/        # Screen components
-│   │   ├── components/     # Reusable components
-│   │   ├── services/       # API & business logic
-│   │   ├── utils/          # Utilities & constants
-│   │   └── types/          # TypeScript types
-│   └── package.json
+├── client/                        # React Native / Expo
+│   └── src/
+│       ├── screens/               # HomeScreen, SearchScreen, RouteDetailScreen,
+│       │                          #   NavigationScreen, ContributionScreen,
+│       │                          #   NotificationsScreen, YouScreen,
+│       │                          #   LoginScreen, SignupScreen, OnboardingScreen
+│       ├── components/
+│       │   ├── SmartRouteOptions  # Route cards with fare, difficulty, leg timeline
+│       │   ├── FareEstimateCard   # Dominant fare display
+│       │   ├── TransportModeSelector
+│       │   ├── map/               # CommunityMapView, AlertMarkers, AlertBottomSheet
+│       │   ├── routing/           # RouteGuide (turn-by-turn)
+│       │   └── ui/                # Toast, OfflineBanner, ErrorBoundary, PlacesRow
+│       ├── context/               # ThemeContext, AuthContext, ToastContext
+│       ├── services/              # smartRoutingService, locationService, apiClient
+│       ├── theme/                 # colors.ts, typography.ts
+│       └── utils/                 # constants.ts, offlineMapCache, mapUtils
 │
-├── server/                 # Django backend
-│   └── backend/
-│       ├── core/           # Main app
-│       │   ├── models.py   # Database models
-│       │   ├── serializers.py
-│       │   ├── views.py
-│       │   └── services/   # Business logic
-│       └── backend/        # Project settings
-│
-└── Documentation/          # Design & planning docs
-    ├── DESIGN_DOCUMENTATION.md
-    ├── DATABASE_SCHEMA.md
-    ├── CODE_STRUCTURE.md
-    ├── UX_FLOWS.md
-    └── IMPLEMENTATION_ROADMAP.md
+└── server/backend/                # Django backend
+    ├── core/                      # models, serializers, views, urls
+    ├── routing/                   # (new) routing endpoints
+    ├── stops/                     # (new) stops endpoints
+    └── backend/                   # Django settings
 ```
 
 ---
 
-## 📚 Documentation
+## Getting Started
 
-### Design & Planning
-- **[Design Documentation](DESIGN_DOCUMENTATION.md)**: Complete UI/UX design system, wireframes, and mockups
-- **[Database Schema](DATABASE_SCHEMA.md)**: Detailed database models and relationships
-- **[Code Structure](CODE_STRUCTURE.md)**: Project architecture and component organization
-- **[UX Flows](UX_FLOWS.md)**: User experience flows and Nigerian context considerations
-- **[Implementation Roadmap](IMPLEMENTATION_ROADMAP.md)**: 12-week development plan
-
-### Quick Links
-- [Color Palette](#-brand-colors)
-- [Typography](#-typography)
-- [API Endpoints](CODE_STRUCTURE.md#api-design)
-- [Database Models](DATABASE_SCHEMA.md#database-models)
-
----
-
-## 🎨 Brand Identity
-
-### Colors
-
-- **Lagos Green**: `#2ECC71` (Primary)
-- **Vibrant Purple**: `#6C63FF` (Secondary)
-- **Okada Orange**: `#FFA726` (Accent)
-- **Soft White**: `#F7F7F7` (Background)
-- **Deep Charcoal**: `#222222` (Text)
-
-### Typography
-
-- **Primary**: Poppins (Regular, Medium, Semi-Bold, Bold)
-- **Display**: Raleway Bold
-- **Alternative**: Nunito Sans
-
-### Taglines
-
-- "Find your WakaWay"
-- "Move Smart. Move Local"
-- "Your Way. The Naija Way"
-- "Waka easy, anywhere you dey."
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js 18+ and npm/yarn
-- Python 3.10+
-- PostgreSQL 14+ with PostGIS extension
-- Expo CLI (`npm install -g expo-cli`)
-- Git
-
-### Frontend Setup
+### Frontend
 
 ```bash
 cd client
@@ -152,160 +97,66 @@ npm install
 npx expo start
 ```
 
-### Backend Setup
+### Backend
 
 ```bash
 cd server/backend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+venv\Scripts\activate        # Windows
 pip install -r requirements.txt
-
-# Set up database
-createdb wakaway_db
-psql -d wakaway_db -c "CREATE EXTENSION postgis;"
-
-# Run migrations
-python manage.py makemigrations
 python manage.py migrate
-
-# Create superuser
-python manage.py createsuperuser
-
-# Run server
 python manage.py runserver
 ```
 
 ### Environment Variables
 
-Create `.env` files for configuration:
-
 **Frontend** (`client/.env`):
 ```
-API_BASE_URL=http://localhost:8000/api/v1
-GOOGLE_MAPS_API_KEY=your_key_here
+EXPO_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_key_here
 ```
 
 **Backend** (`server/backend/.env`):
 ```
 SECRET_KEY=your_secret_key
 DEBUG=True
-DATABASE_URL=postgresql://user:password@localhost:5432/wakaway_db
+DATABASE_URL=sqlite:///db.sqlite3
 ```
 
----
+### Development Mode Flags
 
-## 📱 Features in Detail
+Two flags in `client/src/utils/constants.ts` control mock behaviour:
 
-### 1. Route Search
-- Enter destination via search bar
-- Select from recent searches or popular destinations
-- View multiple route options with time, fare, and distance
-- Filter by transport mode (bus, keke, okada, walk)
+```ts
+USE_MOCK_AUTH = true   // skip real auth; any email/password logs in
+USE_MOCK_DATA = true   // use local mock routes; no backend required
+```
 
-### 2. Step-by-Step Navigation
-- Detailed instructions for each step
-- Visual map with route overlay
-- Transport mode icons and indicators
-- Distance and time per step
-- Fare breakdown
-
-### 3. Map Visualization
-- User's current location
-- Route path with polyline
-- Transport stops marked
-- Destination marker
-- Interactive map controls
-
-### 4. User Reports
-- Report incorrect fare information
-- Report route disruptions
-- Report new routes
-- Report stop location changes
-- Crowdsourced verification system
-
-### 5. Favorite Places
-- Save frequently visited locations
-- Quick access from home screen
-- Custom naming (Home, Office, etc.)
+Set both to `false` when connecting to a real backend.
 
 ---
 
-## 🗺️ Supported Cities (MVP)
+## Screens
 
-- **Lagos** (Initial launch)
-- **Abuja** (Phase 2)
-
----
-
-## 🔮 Future Features
-
-### Phase 2
-- Real-time navigation with turn-by-turn directions
-- Offline mode with cached routes
-- User authentication and profiles
-- Route history
-- Payment integration
-
-### Phase 3
-- ML-based route optimization
-- Live traffic updates
-- Driver/hawker ratings
-- Emergency contacts and SOS
-- Voice navigation in Nigerian languages
+| Screen | Description |
+|---|---|
+| **Onboarding** | 3-slide intro (dark bg, per-slide accent) — shown once |
+| **Login / Signup** | Warm white, orange accent, animated focus fields |
+| **Home** | Search-first; popular routes list; no map on home |
+| **Search** | Full-screen overlay; autocomplete; recent searches |
+| **Route Detail** | SmartRouteOptions cards — fare dominant, leg timeline |
+| **Navigation** | Turn-by-turn with real-time location tracking |
+| **Community Map** | Alert markers; report incident form |
+| **Contribution** | Submit route/fare corrections |
+| **Notifications** | Alert feed |
+| **You** | Profile, settings, dark mode toggle |
 
 ---
 
-## 🤝 Contributing
+## Current Status
 
-This is currently a private project. For future contributions:
+**Phase**: Functional MVP — all screens implemented, custom routing engine live, UI fully redesigned to danfo-orange design system.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+The app runs end-to-end in mock mode without a backend. Backend models and admin panel are ready; API endpoints are partially implemented.
 
----
-
-## 📄 License
-
-[Add your license here]
-
----
-
-## 👥 Team
-
-[Add team members here]
-
----
-
-## 📞 Contact
-
-[Add contact information here]
-
----
-
-## 🙏 Acknowledgments
-
-- Nigerian transport community for route information
-- OpenStreetMap for map data
-- All beta testers and early users
-
----
-
-## 📊 Development Status
-
-**Current Phase**: Design & Planning ✅
-
-**Next Steps**: 
-1. Set up development environments
-2. Begin MVP development (Week 1)
-3. Data collection for Lagos routes
-4. API development
-5. Frontend implementation
-
-See [Implementation Roadmap](IMPLEMENTATION_ROADMAP.md) for detailed timeline.
-
----
-
-**Find your WakaWay!** 🚀
-
+See [FEATURES_STATUS.md](FEATURES_STATUS.md) for a detailed breakdown.

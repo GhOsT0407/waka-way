@@ -9,7 +9,8 @@ import {
   PanResponder,
   ActivityIndicator,
 } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapboxGL from '@rnmapbox/maps';
+import { initMapbox, toLngLat } from '../utils/mapboxInit';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,25 +28,14 @@ import {
 } from '../services/incidentService';
 import { searchRoutes } from '../services/api';
 
+initMapbox();
+
 const ADVANCE_THRESHOLD_M = 80;
 const PEEK_HEIGHT = 72;
 
 // Critically damped spring — no bounce, smooth deceleration
 const SPRING = { tension: 100, friction: 20, useNativeDriver: true } as const;
 
-const DARK_MAP_STYLE = [
-  { elementType: 'geometry',           stylers: [{ color: '#0f172a' }] },
-  { elementType: 'labels.icon',        stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.fill',   stylers: [{ color: '#94a3b8' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0f172a' }] },
-  { featureType: 'road',               elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
-  { featureType: 'road.arterial',      elementType: 'geometry', stylers: [{ color: '#243044' }] },
-  { featureType: 'road.highway',       elementType: 'geometry', stylers: [{ color: '#334155' }] },
-  { featureType: 'water',              elementType: 'geometry', stylers: [{ color: '#0c1322' }] },
-  { featureType: 'poi',                stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit',            stylers: [{ visibility: 'off' }] },
-  { featureType: 'administrative',     elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
-];
 
 const LEG_COLORS: Record<string, string> = {
   walk:  '#29B6F6',
@@ -93,7 +83,7 @@ export default function NavigationScreen({ route, navigation }: any) {
   };
 
   const legs: RouteLeg[] = option.legs;
-  const mapRef = useRef<MapView>(null);
+  const cameraRef = useRef<MapboxGL.Camera>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const currentLegRef = useRef(0);
 
@@ -260,10 +250,11 @@ export default function NavigationScreen({ route, navigation }: any) {
             }
           }
 
-          mapRef.current?.animateToRegion(
-            { ...coord, latitudeDelta: 0.012, longitudeDelta: 0.012 },
-            600,
-          );
+          cameraRef.current?.setCamera({
+            centerCoordinate: toLngLat(coord.latitude, coord.longitude),
+            zoomLevel: 15,
+            animationDuration: 600,
+          });
         },
       );
     })();
@@ -273,7 +264,11 @@ export default function NavigationScreen({ route, navigation }: any) {
 
   const endJourney = () => {
     locationSubRef.current?.remove();
-    navigation.goBack();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Home' as never);
+    }
   };
 
   const legColor = (i: number) =>
@@ -284,67 +279,83 @@ export default function NavigationScreen({ route, navigation }: any) {
   return (
     <View style={styles.container}>
       {/* Full-screen dark map */}
-      <MapView
-        ref={mapRef}
+      <MapboxGL.MapView
         style={StyleSheet.absoluteFill}
-        provider={PROVIDER_GOOGLE}
-        customMapStyle={DARK_MAP_STYLE}
-        showsUserLocation={false}
-        showsCompass={false}
-        showsMyLocationButton={false}
-        toolbarEnabled={false}
+        styleURL={MapboxGL.StyleURL.Dark}
+        logoEnabled={false}
+        attributionEnabled={false}
+        compassEnabled={false}
         onPress={() => collapseSheet()}
-        initialRegion={{
-          latitude: legs[0]?.from.latitude ?? 6.5244,
-          longitude: legs[0]?.from.longitude ?? 3.3792,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }}
       >
-        {legs.map((leg, i) => (
-          <Polyline
-            key={i}
-            coordinates={[
-              { latitude: leg.from.latitude, longitude: leg.from.longitude },
-              { latitude: leg.to.latitude, longitude: leg.to.longitude },
-            ]}
-            strokeWidth={i === currentLegIndex ? 7 : 4}
-            strokeColor={legColor(i)}
-          />
-        ))}
+        <MapboxGL.Camera
+          ref={cameraRef}
+          defaultSettings={{
+            centerCoordinate: toLngLat(
+              legs[0]?.from.latitude ?? 6.5244,
+              legs[0]?.from.longitude ?? 3.3792,
+            ),
+            zoomLevel: 14,
+          }}
+        />
 
+        {/* Route leg polylines — one ShapeSource per leg for individual colours */}
+        {legs.map((leg, i) => {
+          const geoJSON: GeoJSON.Feature<GeoJSON.LineString> = {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                toLngLat(leg.from.latitude, leg.from.longitude),
+                toLngLat(leg.to.latitude,   leg.to.longitude),
+              ],
+            },
+            properties: {},
+          };
+          return (
+            <MapboxGL.ShapeSource key={`route-${i}`} id={`route-${i}`} shape={geoJSON}>
+              <MapboxGL.LineLayer
+                id={`line-${i}`}
+                style={{
+                  lineColor: legColor(i),
+                  lineWidth: i === currentLegIndex ? 7 : 4,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+            </MapboxGL.ShapeSource>
+          );
+        })}
+
+        {/* Waypoint dots */}
         {legs.map((leg, i) => {
           const isCurrent = i === currentLegIndex;
-          const isFinal = i === legs.length - 1;
+          const isFinal   = i === legs.length - 1;
           return (
-            <Marker
+            <MapboxGL.MarkerView
               key={`wp-${i}`}
-              coordinate={{ latitude: leg.to.latitude, longitude: leg.to.longitude }}
-              title={leg.to.name}
-              anchor={{ x: 0.5, y: 0.5 }}
+              coordinate={toLngLat(leg.to.latitude, leg.to.longitude)}
             >
               <View
                 style={[
                   styles.waypointDot,
-                  isFinal && styles.waypointFinal,
+                  isFinal   && styles.waypointFinal,
                   isCurrent && !isFinal && styles.waypointCurrent,
                 ]}
               />
-            </Marker>
+            </MapboxGL.MarkerView>
           );
         })}
 
+        {/* Custom user location dot with pulse */}
         {userCoords && (
-          <Marker coordinate={userCoords} anchor={{ x: 0.5, y: 0.5 }}>
+          <MapboxGL.MarkerView coordinate={toLngLat(userCoords.latitude, userCoords.longitude)}>
             <View style={styles.userOuter}>
-              <Animated.View
-                style={[styles.userPulse, { transform: [{ scale: pulseAnim }] }]}
-              />
+              <Animated.View style={[styles.userPulse, { transform: [{ scale: pulseAnim }] }]} />
               <View style={styles.userDot} />
             </View>
-          </Marker>
+          </MapboxGL.MarkerView>
         )}
-      </MapView>
+      </MapboxGL.MapView>
 
       {/* Live incident banner */}
       {liveDecision !== 'none' && !incidentDismissed && (

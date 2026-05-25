@@ -30,7 +30,30 @@
       "Bash(ls \"C:\\\\Users\\\\USER\\\\.claude\\\\wakaway-map-ui\" 2>&1)",
       "Read(//c/Users/USER/.claude/wakaway-map-ui/**)",
       "Bash(Get-ChildItem -Recurse \"C:\\\\Users\\\\USER\\\\.claude\\\\wakaway-map-ui\")",
-      "Bash(Select-Object FullName, Length)"
+      "Bash(Select-Object FullName, Length)",
+      "Bash(venv/Scripts/pip install *)",
+      "PowerShell(python -m pip install gunicorn==21.2.0 --target server\\\\backend\\\\venv\\\\Lib\\\\site-packages 2>&1)",
+      "Bash(python -c \"from routing.lagos_stops import ALL_STOPS, BRT_IKORODU_STOPS, FERRY_ROUTES; print\\(f'ALL_STOPS: {len\\(ALL_STOPS\\)} stops, BRT Ikorodu: {len\\(BRT_IKORODU_STOPS\\)}, Ferry routes: {len\\(FERRY_ROUTES\\)}'\\)\")",
+      "Bash(python -c ' *)",
+      "Skill(ui-ux-pro-max)",
+      "Skill(ui-ux-pro-max:*)",
+      "Bash(python scripts/search.py \"transit navigation map Lagos minimal dark\" --design-system -p \"WakaWay\" -f markdown)",
+      "Bash(python3 \"C:\\\\Users\\\\USER\\\\.claude\\\\skills\\\\ui-ux-pro-max\\\\scripts\\\\search.py\" \"Lagos navigation transit mobile app dark theme green accent minimal\" --design-system -p \"WakaWay\")",
+      "Bash(python3 \"C:\\\\Users\\\\USER\\\\.claude\\\\skills\\\\ui-ux-pro-max\\\\scripts\\\\search.py\" \"dark green accent navigation maps\" --domain color -n 5)",
+      "Bash(python3 \"C:\\\\Users\\\\USER\\\\.claude\\\\skills\\\\ui-ux-pro-max\\\\scripts\\\\search.py\" \"dark mode minimal clean\" --domain style -n 3)",
+      "Read(//c/Users/USER/.claude/projects/c--Users-USER-portfolio-waka-way/memory/**)",
+      "Bash(powershell -Command ' *)",
+      "Bash(python \"C:/Users/USER/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"transit navigation mobile Lagos informal transport budget minimalist\" --design-system -p \"Wakaway\")",
+      "Bash(python \"C:/Users/USER/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"skeleton loading bottom sheet empty state toast search\" --domain ux -n 8)",
+      "Bash(python \"C:/Users/USER/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"flat minimalism mobile utility warm\" --domain style -n 5)",
+      "Bash(python \"C:/Users/USER/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"list navigation safe area touch target FlatList\" --stack react-native)",
+      "Bash(gh repo *)",
+      "Bash(git -C \"c:/Users/USER/portfolio/waka-way\" remote -v)",
+      "Bash(git -C \"c:/Users/USER/portfolio/waka-way\" log --oneline -5)",
+      "Bash(git -C \"c:/Users/USER/portfolio/waka-way\" status --short)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\USER\\.claude\\projects\\c--Users-USER-portfolio-waka-way\\memory"
     ]
   }
 }

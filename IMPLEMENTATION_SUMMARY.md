@@ -6,7 +6,20 @@ Successfully implemented comprehensive support for Lagos transport network corri
 
 ## What Was Built
 
-### Phase 1: Database Models ✅
+### Phase 0.5: Core Models + Soft Delete / Idempotency (migrations 0001–0003) ✅
+Migrations applied to the Django backend:
+
+| Migration | What it adds |
+|-----------|-------------|
+| `0001_initial` | 10 core models: City, TransportStop, TransportRoute, RouteSegment, Fare, RouteSuggestion, RouteStep, UserReport, UserFavoritePlace, UserRouteHistory |
+| `0002_corridor_models` | Corridor, CorridorStop, StopConnection |
+| `0003_soft_deletes_and_idempotency` | `deleted_at` on UserReport + UserFavoritePlace; `idempotency_key` on UserReport |
+
+**Total: 13 models, 3 migrations.**
+
+---
+
+### Phase 1: Corridor Models ✅
 Created 3 new Django models with proper relationships and indexing:
 
 | Model | Purpose | Key Fields |
@@ -141,15 +154,17 @@ const corridor: CorridorDetail = await getCorridorDetail(1);
 
 ## Files Changed/Created
 
-### Backend (9 files)
-1. ✅ `core/models.py` - 3 new models (Corridor, CorridorStop, StopConnection)
-2. ✅ `core/migrations/0002_corridor_models.py` - Django migration
-3. ✅ `core/serializers.py` - 4 new serializers
-4. ✅ `core/views.py` - 3 new viewsets
-5. ✅ `core/urls.py` - New file with router configuration
-6. ✅ `core/management/commands/seed_lagos_corridors.py` - Data seeding command
-7. ✅ `backend/urls.py` - Updated to include core URLs
-8. ✅ `waka_way_corridors.json` - Corridor seed data (8 corridors, 79 stops, 40+ connections)
+### Backend (10 files)
+1. ✅ `core/models.py` - 13 models total (10 initial + 3 corridor)
+2. ✅ `core/migrations/0001_initial.py` - 10 core models
+3. ✅ `core/migrations/0002_corridor_models.py` - Corridor, CorridorStop, StopConnection
+4. ✅ `core/migrations/0003_soft_deletes_and_idempotency.py` - `deleted_at` + `idempotency_key`
+5. ✅ `core/serializers.py` - 4 new corridor serializers
+6. ✅ `core/views.py` - 3 new viewsets
+7. ✅ `core/urls.py` - Router configuration
+8. ✅ `core/management/commands/seed_lagos_corridors.py` - Data seeding command
+9. ✅ `backend/urls.py` - Updated to include core URLs
+10. ✅ `waka_way_corridors.json` - Corridor seed data (8 corridors, 79 stops, 40+ connections)
 
 ### Frontend (3 files)
 1. ✅ `src/types/corridor.ts` - New corridor type definitions

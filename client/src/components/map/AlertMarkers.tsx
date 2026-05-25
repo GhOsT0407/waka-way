@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { Marker, Circle, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -217,7 +217,7 @@ export const AlertMarkers: React.FC<AlertMarkersProps> = ({
                         {formatRelativeTime(contribution.created_at)}
                       </Text>
                       <View style={styles.calloutStats}>
-                        <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
+                        <Ionicons name="checkmark-circle" size={14} color="#22C55E" />
                         <Text style={styles.calloutStatText}>{contribution.confirms}</Text>
                         <Ionicons name="close-circle" size={14} color="#F44336" />
                         <Text style={styles.calloutStatText}>{contribution.dismisses}</Text>
@@ -299,14 +299,16 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   calloutContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1C2333',
     borderRadius: 12,
     padding: 12,
     minWidth: 200,
     maxWidth: 280,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.5,
     shadowRadius: 8,
     elevation: 5,
   },
@@ -331,12 +333,12 @@ const styles = StyleSheet.create({
   calloutTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#F1F5F9',
     marginBottom: 4,
   },
   calloutDescription: {
     fontSize: 14,
-    color: '#666666',
+    color: '#94A3B8',
     lineHeight: 18,
     marginBottom: 8,
   },
@@ -353,7 +355,7 @@ const styles = StyleSheet.create({
   },
   calloutTime: {
     fontSize: 12,
-    color: '#999999',
+    color: '#64748B',
   },
   calloutStats: {
     flexDirection: 'row',
@@ -362,7 +364,7 @@ const styles = StyleSheet.create({
   },
   calloutStatText: {
     fontSize: 12,
-    color: '#666666',
+    color: '#94A3B8',
     marginRight: 8,
   },
   dangerWarning: {

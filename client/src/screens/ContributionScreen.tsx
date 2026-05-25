@@ -198,9 +198,9 @@ export default function ContributionScreen({ navigation }: any) {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'approved': return '#4CAF50';
-      case 'rejected': return '#F44336';
-      default: return '#FF9800';
+      case 'approved': return '#22C55E';
+      case 'rejected': return '#F87171';
+      default: return '#F59E0B';
     }
   };
 
@@ -315,7 +315,7 @@ export default function ContributionScreen({ navigation }: any) {
       <StatusBar style="auto" />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Close" accessibilityRole="button">
+        <TouchableOpacity onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Close" accessibilityRole="button">
           <Ionicons name="chevron-down" size={22} color={theme.TEXT} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.TEXT, flex: 1, textAlign: 'center' }]}>Community</Text>
@@ -422,29 +422,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: SPACING.MD,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.07)',
   },
   headerTitle: {
-    fontSize: FONT_SIZES.HEADING_2,
+    fontSize: 17,
     fontWeight: '700',
     flex: 1,
+    letterSpacing: -0.2,
   },
   addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   viewToggleContainer: {
     flexDirection: 'row',
     marginHorizontal: SPACING.MD,
-    marginVertical: SPACING.SM,
-    backgroundColor: '#F0F0F0',
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    padding: 4,
+    marginTop: SPACING.SM,
+    marginBottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 12,
+    padding: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.07)',
   },
   viewToggleButton: {
     flex: 1,
@@ -452,8 +457,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.XS,
-    paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.SMALL,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   viewToggleText: {
     fontSize: FONT_SIZES.SMALL,
@@ -461,20 +466,23 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     padding: SPACING.MD,
-    backgroundColor: 'rgba(46, 125, 50, 0.1)',
+    backgroundColor: 'rgba(34,197,94,0.08)',
     marginHorizontal: SPACING.MD,
     marginBottom: SPACING.MD,
     borderRadius: BORDER_RADIUS.MEDIUM,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(34,197,94,0.2)',
   },
   infoText: {
     fontSize: FONT_SIZES.SMALL,
     lineHeight: 20,
   },
   contributionItem: {
-    margin: SPACING.MD,
+    marginHorizontal: SPACING.MD,
+    marginBottom: SPACING.SM,
     padding: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   contributionHeader: {
     flexDirection: 'row',
@@ -539,35 +547,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.SM,
     padding: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     minWidth: '45%',
   },
   typeOptionText: {
     fontSize: FONT_SIZES.SMALL,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   input: {
-    borderWidth: 1,
-    borderRadius: BORDER_RADIUS.MEDIUM,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
     padding: SPACING.MD,
     fontSize: FONT_SIZES.BODY,
     marginBottom: SPACING.SM,
+    minHeight: 48,
   },
   textArea: {
-    borderWidth: 1,
-    borderRadius: BORDER_RADIUS.MEDIUM,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
     padding: SPACING.MD,
     fontSize: FONT_SIZES.BODY,
-    height: 100,
+    height: 110,
     textAlignVertical: 'top',
   },
   submitButton: {
-    padding: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MEDIUM,
+    paddingVertical: 15,
+    paddingHorizontal: SPACING.MD,
+    borderRadius: 28,
     alignItems: 'center',
     marginTop: SPACING.MD,
+    marginBottom: SPACING.LG,
   },
   submitButtonText: {
     color: '#FFFFFF',

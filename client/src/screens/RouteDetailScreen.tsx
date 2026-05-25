@@ -118,14 +118,15 @@ export default function RouteDetailScreen({ route, navigation }: any) {
         } else if (activeRoute) {
             checkIfSaved();
             checkRouteIncidents();
+            // Start in COLLAPSED so the map is visible; user swipes up to expand
             Animated.spring(sheetHeight, {
-                toValue: SNAP_POINTS.EXPANDED,
+                toValue: SNAP_POINTS.COLLAPSED,
                 friction: 8,
                 tension: 50,
                 useNativeDriver: false,
             }).start();
-            currentSnapPoint.current = SNAP_POINTS.EXPANDED;
-            setCanScroll(true);
+            currentSnapPoint.current = SNAP_POINTS.COLLAPSED;
+            setCanScroll(false);
         }
     }, [routeId, activeRoute]);
 
@@ -323,18 +324,28 @@ export default function RouteDetailScreen({ route, navigation }: any) {
 
                 {/* Header Gradient */}
                 <LinearGradient
-                    colors={['rgba(0,0,0,0.5)', 'transparent']}
+                    colors={['rgba(0,0,0,0.65)', 'rgba(0,0,0,0.15)', 'transparent']}
                     style={styles.headerGradient}
                 />
 
-                {/* Back Button */}
+                {/* Back Button + Destination label */}
                 <SafeAreaView style={styles.safeAreaProps}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Ionicons name="arrow-back" size={24} color="white" />
-                    </TouchableOpacity>
+                    <View style={styles.mapHeaderRow}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')}
+                        >
+                            <Ionicons name="chevron-back" size={22} color="white" />
+                        </TouchableOpacity>
+                        {(smartRoute?.destination.name || activeRoute?.destination) ? (
+                            <View style={styles.destinationPill}>
+                                <Ionicons name="location" size={13} color="#22C55E" />
+                                <Text style={styles.destinationPillText} numberOfLines={1}>
+                                    {smartRoute?.destination.name ?? activeRoute?.destination}
+                                </Text>
+                            </View>
+                        ) : null}
+                    </View>
                 </SafeAreaView>
             </View>
 
@@ -348,7 +359,7 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                     }
                 ]}
             >
-                {/* Drag Handle - Tap to expand/collapse */}
+                {/* Drag Handle */}
                 <PanGestureHandler onGestureEvent={onSheetGestureEvent} onHandlerStateChange={onSheetHandlerStateChange}>
                     <Animated.View style={styles.dragHandleArea}>
                         <TouchableOpacity
@@ -359,26 +370,31 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                                     expandSheet();
                                 }
                             }}
-                            activeOpacity={0.8}
-                            style={{ alignItems: 'center' }}
+                            activeOpacity={1}
+                            style={styles.dragHandleTouchArea}
                         >
-                            <View style={[styles.dragHandle, { backgroundColor: theme.BORDER }]} />
-                            <Text style={[styles.dragHint, { color: theme.TEXT_SECONDARY }]}>
-                                {canScroll ? 'Tap to minimize' : 'Tap or swipe up for more'}
-                            </Text>
+                            <View style={[styles.dragHandle, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
                         </TouchableOpacity>
                     </Animated.View>
                 </PanGestureHandler>
 
-                {/* Scrollable Content - Use flex:1 to fill remaining space */}
-                <View style={{ flex: 1 }}>
+                {/* Content area — pan gesture active only when not fullscreen */}
+                <PanGestureHandler
+                    enabled={!canScroll}
+                    onHandlerStateChange={({ nativeEvent }) => {
+                        if (nativeEvent.oldState === GestureState.ACTIVE) {
+                            snapTo(SNAP_POINTS.EXPANDED);
+                        }
+                    }}
+                >
+                <Animated.View style={{ flex: 1 }}>
                     <ScrollView
                         ref={scrollRef}
                         style={{ flex: 1 }}
                         contentContainerStyle={styles.sheetContentContainer}
-                        showsVerticalScrollIndicator={true}
-                        scrollEnabled={true}
-                        bounces={true}
+                        showsVerticalScrollIndicator={canScroll}
+                        scrollEnabled={canScroll}
+                        bounces={canScroll}
                         nestedScrollEnabled={true}
                     >
                     {/* ── Incident alert banner ───────────────────────── */}
@@ -443,8 +459,8 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                                         <Ionicons name="arrow-forward" size={16} color={theme.TEXT} style={{ marginHorizontal: 8 }} />
                                         <Text style={[styles.routeTitle, { color: theme.TEXT }]}>{activeRoute.destination || 'Destination'}</Text>
                                     </View>
-                                    <View style={styles.ratingContainer}>
-                                        <Ionicons name="star" size={14} color={theme.ACCENT} />
+                                    <View style={[styles.ratingContainer, { backgroundColor: 'rgba(245,158,11,0.15)' }]}>
+                                        <Ionicons name="star" size={14} color="#F59E0B" />
                                         <Text style={[styles.ratingText, { color: theme.TEXT }]}>{activeRoute.rating}</Text>
                                     </View>
                                 </View>
@@ -473,13 +489,13 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                                 {/* Tags */}
                                 <View style={styles.tagsRow}>
                                     {activeRoute.is_fastest && (
-                                        <View style={[styles.tag, { backgroundColor: '#E8F5E9' }]}>
+                                        <View style={[styles.tag, { backgroundColor: 'rgba(34,197,94,0.15)' }]}>
                                             <Text style={[styles.tagText, { color: theme.SUCCESS }]}>Fastest</Text>
                                         </View>
                                     )}
                                     {activeRoute.is_cheapest && (
-                                        <View style={[styles.tag, { backgroundColor: '#E3F2FD' }]}>
-                                            <Text style={[styles.tagText, { color: theme.INFO }]}>Cheapest</Text>
+                                        <View style={[styles.tag, { backgroundColor: 'rgba(59,130,246,0.15)' }]}>
+                                            <Text style={[styles.tagText, { color: '#60A5FA' }]}>Cheapest</Text>
                                         </View>
                                     )}
                                 </View>
@@ -504,19 +520,29 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                     {/* Spacer for safe area */}
                     <View style={{ height: 100 }} />
                     </ScrollView>
-                </View>
+                </Animated.View>
+                </PanGestureHandler>
             </Animated.View>
 
-            {/* FABs */}
-            <View style={styles.fabContainer}>
-                <TouchableOpacity style={[styles.saveFab, { backgroundColor: theme.CARD_BACKGROUND }]} onPress={saveJourney}>
-                    <Ionicons name={isSaved ? "heart" : "heart-outline"} size={24} color={isSaved ? theme.ERROR : theme.TEXT} />
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.fab, { backgroundColor: theme.PRIMARY }]} onPress={() => startJourney()}>
-                    <Text style={[styles.fabText, { color: theme.CARD_BACKGROUND }]}>Start Journey</Text>
-                    <Ionicons name="navigate" size={20} color={theme.CARD_BACKGROUND} />
-                </TouchableOpacity>
-            </View>
+            {/* Bottom action bar — hide Start Journey when SmartRouteOptions shows its own */}
+            {!(smartRoute && showSmartOptions) && (
+                <View style={[styles.fabContainer, { backgroundColor: theme.CARD_BACKGROUND, borderTopColor: theme.BORDER }]}>
+                    <TouchableOpacity
+                        style={[styles.saveFab, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: theme.BORDER }]}
+                        onPress={saveJourney}
+                        accessibilityLabel={isSaved ? 'Unsave route' : 'Save route'}
+                    >
+                        <Ionicons name={isSaved ? 'heart' : 'heart-outline'} size={22} color={isSaved ? '#EF4444' : theme.TEXT_SECONDARY} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.fab, { backgroundColor: theme.PRIMARY }]}
+                        onPress={() => startJourney()}
+                    >
+                        <Ionicons name="navigate" size={18} color="#fff" />
+                        <Text style={styles.fabText}>Start Journey</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
         </View>
     );
 }
@@ -544,17 +570,43 @@ const styles = StyleSheet.create({
     },
     safeAreaProps: {
         position: 'absolute',
-        top: Platform.OS === 'android' ? 40 : 10,
-        left: 10,
+        top: Platform.OS === 'android' ? 36 : 6,
+        left: 0,
+        right: 0,
+    },
+    mapHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        gap: 12,
     },
     backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(0,0,0,0.3)',
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: 'rgba(0,0,0,0.45)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginLeft: SPACING.MD,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.12)',
+    },
+    destinationPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.12)',
+        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        maxWidth: 240,
+    },
+    destinationPillText: {
+        color: '#F1F5F9',
+        fontSize: 13,
+        fontWeight: '600',
+        letterSpacing: -0.2,
     },
     detailsSheet: {
         flex: 1,
@@ -644,7 +696,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
-        backgroundColor: '#FFF8E1',
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 12,
@@ -703,76 +754,85 @@ const styles = StyleSheet.create({
     },
     fabContainer: {
         position: 'absolute',
-        bottom: 30,
-        right: 20,
-        alignItems: 'flex-end',
-        gap: SPACING.MD,
-    },
-    saveFab: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        justifyContent: 'center',
-        alignItems: 'center',
-        ...Platform.select({
-            ios: {
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-            },
-            android: { elevation: 6 },
-        }),
-    },
-    fab: {
+        bottom: 0,
+        left: 0,
+        right: 0,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: SPACING.SM,
-        paddingHorizontal: SPACING.XL,
-        paddingVertical: SPACING.MD,
-        borderRadius: 30,
+        gap: 10,
+        paddingHorizontal: 16,
+        paddingTop: 14,
+        paddingBottom: Platform.OS === 'ios' ? 32 : 18,
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    saveFab: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        flexShrink: 0,
+    },
+    fab: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        height: 50,
+        borderRadius: 25,
         ...Platform.select({
             ios: {
+                shadowColor: '#22C55E',
                 shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
+                shadowOpacity: 0.35,
+                shadowRadius: 10,
             },
             android: { elevation: 6 },
         }),
     },
     fabText: {
         fontWeight: '700',
-        fontSize: FONT_SIZES.BODY_LARGE,
+        fontSize: 16,
+        color: '#fff',
+        letterSpacing: -0.2,
     },
     bottomSheet: {
         position: 'absolute',
         left: 0,
         right: 0,
         bottom: 0,
-        borderTopLeftRadius: BORDER_RADIUS.XL,
-        borderTopRightRadius: BORDER_RADIUS.XL,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderLeftWidth: StyleSheet.hairlineWidth,
+        borderRightWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(255,255,255,0.07)',
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: -4 },
-                shadowOpacity: 0.15,
-                shadowRadius: 12,
+                shadowOffset: { width: 0, height: -6 },
+                shadowOpacity: 0.25,
+                shadowRadius: 20,
             },
-            android: { elevation: 16 },
+            android: { elevation: 20 },
         }),
     },
     dragHandleArea: {
         alignItems: 'center',
-        paddingVertical: SPACING.MD,
-        paddingHorizontal: SPACING.LG,
+        paddingTop: 10,
+        paddingBottom: 4,
+    },
+    dragHandleTouchArea: {
+        alignItems: 'center',
+        paddingHorizontal: 48,
+        paddingVertical: 8,
     },
     dragHandle: {
-        width: 40,
-        height: 5,
-        borderRadius: 3,
-    },
-    dragHint: {
-        fontSize: FONT_SIZES.SMALL,
-        marginTop: SPACING.XS,
+        width: 36,
+        height: 4,
+        borderRadius: 2,
     },
     sheetContent: {
         flex: 1,

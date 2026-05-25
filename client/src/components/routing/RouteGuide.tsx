@@ -1,4 +1,4 @@
-/**
+﻿/**
  * WakaWay Route Guide Component
  * 
  * Displays multimodal route with:
@@ -68,7 +68,7 @@ const NudgeBanner: React.FC<{ nudge: ArrivalNudge }> = ({ nudge }) => {
   }, [nudge]);
   
   const backgroundColor = nudge.type === 'arrived' 
-    ? '#4CAF50' 
+    ? '#22C55E' 
     : nudge.type === 'approaching' && nudge.distance_meters <= 150
       ? '#F44336'
       : '#FF9800';
@@ -191,7 +191,7 @@ const StepCard: React.FC<StepCardProps> = ({
       
       {/* Nudge/Tip */}
       {step.nudge && !isCompleted && (
-        <View style={[styles.nudgeBox, { backgroundColor: '#FFF8E1' }]}>
+        <View style={[styles.nudgeBox, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
           <Ionicons name="bulb-outline" size={16} color="#F57C00" />
           <Text style={styles.nudgeBoxText}>{step.nudge}</Text>
         </View>
@@ -245,7 +245,7 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
             {formattedGuide.header.destination}
           </Text>
           <Text style={[styles.headerSubtitle, { color: theme.TEXT_SECONDARY }]}>
-            {formattedGuide.header.duration} • {formattedGuide.header.price}
+            {formattedGuide.header.duration} â€¢ {formattedGuide.header.price}
           </Text>
         </View>
         
@@ -279,10 +279,10 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
       
       {/* Warnings */}
       {formattedGuide.warnings.length > 0 && (
-        <View style={[styles.warningsContainer, { backgroundColor: '#FFEBEE' }]}>
+        <View style={[styles.warningsContainer, { backgroundColor: 'rgba(248,113,113,0.1)' }]}>
           {formattedGuide.warnings.map((warning, index) => (
             <View key={index} style={styles.warningItem}>
-              <Ionicons name="warning" size={16} color="#C62828" />
+              <Ionicons name="warning" size={16} color="#F87171" />
               <Text style={styles.warningText}>{warning}</Text>
             </View>
           ))}
@@ -291,8 +291,8 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
       
       {/* Pivot Message */}
       {formattedGuide.pivotMessage && (
-        <View style={[styles.pivotMessage, { backgroundColor: '#E3F2FD' }]}>
-          <Ionicons name="information-circle" size={18} color="#1565C0" />
+        <View style={[styles.pivotMessage, { backgroundColor: 'rgba(96,165,250,0.12)' }]}>
+          <Ionicons name="information-circle" size={18} color="#60A5FA" />
           <Text style={styles.pivotText}>{formattedGuide.pivotMessage}</Text>
         </View>
       )}
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   warningText: {
     flex: 1,
     fontSize: FONT_SIZES.SMALL,
-    color: '#C62828',
+    color: '#F87171',
   },
   pivotMessage: {
     flexDirection: 'row',
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
   pivotText: {
     flex: 1,
     fontSize: FONT_SIZES.SMALL,
-    color: '#1565C0',
+    color: '#60A5FA',
   },
   stepsContainer: {
     flex: 1,

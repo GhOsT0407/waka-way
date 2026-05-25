@@ -405,47 +405,82 @@ export default function YouScreen({ navigation }: any) {
     </>
   );
 
+  const userInitial = user?.email?.[0]?.toUpperCase() ?? '?';
+  const memberSince = (() => {
+    const d = new Date();
+    return d.toLocaleDateString('en-NG', { month: 'long', year: 'numeric' });
+  })();
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.goBack()} accessibilityLabel="Close" accessibilityRole="button">
+      {/* Top nav row */}
+      <View style={styles.topNav}>
+        <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')} accessibilityLabel="Close">
           <Ionicons name="chevron-down" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <View style={{ flex: 1, marginLeft: 8 }}>
-          <Text style={styles.headerTitle}>You</Text>
-          {user && <Text style={styles.headerSub}>{user.email}</Text>}
-        </View>
-        <View style={styles.headerActions}>
+        <Text style={styles.topNavTitle}>Profile</Text>
+        <View style={styles.topNavRight}>
           <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Preferences')}>
-            <Ionicons name="settings-outline" size={20} color={Colors.textPrimary} />
+            <Ionicons name="settings-outline" size={19} color={Colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={20} color={Colors.textPrimary} />
+            <Ionicons name="log-out-outline" size={19} color={Colors.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        {(['history', 'saved', 'places'] as Tab[]).map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Ionicons
-              name={tab === 'history' ? 'time-outline' : tab === 'saved' ? 'heart-outline' : 'location-outline'}
-              size={16}
-              color={activeTab === tab ? Colors.blue : Colors.textSecondary}
-            />
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'history' ? 'History' : tab === 'saved' ? 'Saved' : 'Places'}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Profile hero */}
+      <View style={styles.profileHero}>
+        <View style={styles.avatarWrap}>
+          <View style={styles.avatarRing}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{userInitial}</Text>
+            </View>
+          </View>
+        </View>
+        <Text style={styles.profileName}>
+          {user?.email?.split('@')[0]?.replace(/\./g, ' ')?.replace(/\b\w/g, (c) => c.toUpperCase()) ?? 'Traveller'}
+        </Text>
+        <Text style={styles.profileEmail}>{user?.email ?? ''}</Text>
+        <Text style={styles.profileSince}>Member since {memberSince}</Text>
+
+        {/* Stats strip */}
+        <View style={styles.statsStrip}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>{history.length}</Text>
+            <Text style={styles.statLabel}>Trips</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>{savedRoutes.length}</Text>
+            <Text style={styles.statLabel}>Saved</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>{favPlaces.length}</Text>
+            <Text style={styles.statLabel}>Places</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Segmented Tabs */}
+      <View style={styles.tabsWrap}>
+        <View style={styles.tabs}>
+          {(['history', 'saved', 'places'] as Tab[]).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tab, activeTab === tab && styles.tabActive]}
+              onPress={() => setActiveTab(tab)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab === 'history' ? 'History' : tab === 'saved' ? 'Saved' : 'Places'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* Content */}
@@ -538,54 +573,97 @@ export default function YouScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.mapBackground },
-  header: {
+
+  // Top nav
+  topNav: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 10,
+  },
+  topNavTitle: { flex: 1, textAlign: 'center', fontSize: Typography.lg, fontWeight: Typography.semibold, color: Colors.textPrimary, letterSpacing: -0.3 },
+  topNavRight: { flexDirection: 'row', gap: 6 },
+
+  // Profile hero
+  profileHero: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
-    backgroundColor: Colors.sheetBg,
   },
-  headerTitle:  { fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.textPrimary },
-  headerSub:    { fontSize: Typography.sm, marginTop: 2, color: Colors.textSecondary },
-  headerActions: { flexDirection: 'row', gap: 8 },
+  avatarWrap: { marginBottom: 14 },
+  avatarRing: {
+    width: 88, height: 88, borderRadius: 44,
+    borderWidth: 2.5, borderColor: Colors.blue,
+    alignItems: 'center', justifyContent: 'center',
+    padding: 3,
+  },
+  avatar: {
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: Colors.blue,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarText: { fontSize: 32, fontWeight: Typography.bold, color: '#fff' },
+  profileName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: Colors.textPrimary, letterSpacing: -0.5, marginBottom: 4 },
+  profileEmail: { fontSize: Typography.sm, color: Colors.textSecondary, marginBottom: 3 },
+  profileSince: { fontSize: Typography.xs, color: Colors.textTertiary, marginBottom: 20 },
+
+  // Stats strip
+  statsStrip: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignSelf: 'stretch',
+  },
+  statItem:   { flex: 1, alignItems: 'center' },
+  statNum:    { fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.textPrimary, letterSpacing: -0.5 },
+  statLabel:  { fontSize: Typography.xs, color: Colors.textSecondary, marginTop: 2 },
+  statDivider:{ width: 1, backgroundColor: Colors.border, marginVertical: 4 },
+
+  // Tabs
+  tabsWrap: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.sheetBg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 3,
+    gap: 2,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  tabActive: { backgroundColor: Colors.blue },
+  tabText:       { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.textSecondary },
+  tabTextActive: { color: '#fff' },
+  content: { paddingBottom: 40 },
   iconBtn: {
     width: 36, height: 36, borderRadius: 18,
     justifyContent: 'center', alignItems: 'center',
     backgroundColor: Colors.surfaceElevated,
     borderWidth: 1, borderColor: Colors.border,
   },
-  tabs: {
-    flexDirection: 'row',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-    backgroundColor: Colors.sheetBg,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-  },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: Colors.blue },
-  tabText:       { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.textSecondary },
-  tabTextActive: { color: Colors.blue },
-  content: { paddingBottom: 40 },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  clearBtn: { alignSelf: 'flex-end', padding: 14, paddingBottom: 0 },
+  clearBtn: { alignSelf: 'flex-end', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 0 },
   clearBtnText: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: '#EF4444' },
   card: {
     marginHorizontal: 14,
-    marginTop: 14,
+    marginTop: 10,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: Colors.sheetBg,
+    backgroundColor: Colors.surfaceElevated,
   },
   cardRow: { flexDirection: 'row', alignItems: 'flex-start' },
   cardTitle:     { fontSize: Typography.md, fontWeight: Typography.bold, color: Colors.textPrimary },
@@ -613,7 +691,7 @@ const styles = StyleSheet.create({
   placeLabel:   { fontSize: Typography.xs, fontWeight: Typography.bold, textTransform: 'uppercase', letterSpacing: 0.5, color: Colors.textSecondary },
   placeName:    { fontSize: Typography.md, fontWeight: Typography.semibold, marginTop: 1, color: Colors.textPrimary },
   placeAddress: { fontSize: Typography.sm, marginTop: 1, color: Colors.textSecondary },
-  placeEditBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.blueLight },
+  placeEditBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: 'rgba(34,197,94,0.1)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)' },
   placeEditText: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.blue },
   favHeader: {
     flexDirection: 'row',

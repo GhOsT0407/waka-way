@@ -1,185 +1,230 @@
-# WakaWay - Code Structure & Architecture
+# WakaWay — Code Structure & Architecture
 
 ## Table of Contents
-1. [Frontend Structure (React Native/Expo)](#frontend-structure)
-2. [Backend Structure (Django)](#backend-structure)
+1. [Frontend Structure](#frontend-structure)
+2. [Backend Structure](#backend-structure)
 3. [API Design](#api-design)
-4. [Component Library](#component-library)
+4. [Key Patterns](#key-patterns)
 
 ---
 
-## Frontend Structure (React Native/Expo)
-
-### Project Directory Structure
+## Frontend Structure
 
 ```
 waka-way/client/
-├── App.tsx                    # Main app entry point
-├── app.json                   # Expo configuration
-├── package.json               # Dependencies
-├── tsconfig.json              # TypeScript config
+├── App.tsx                        # Expo entry — re-exports src/App.tsx
+├── app.json                       # Expo config
+├── package.json
+├── tsconfig.json
 │
-├── assets/                    # Static assets
-│   ├── images/
-│   │   ├── logo.png
-│   │   ├── transport-icons/
-│   │   │   ├── bus.png
-│   │   │   ├── keke.png
-│   │   │   ├── okada.png
-│   │   │   └── walk.png
-│   ├── fonts/
-│   │   ├── Poppins-Regular.ttf
-│   │   ├── Poppins-Bold.ttf
-│   │   ├── Nunito-Regular.ttf
-│   │   └── Raleway-Bold.ttf
-│
-├── src/
-│   ├── App.tsx                # Root component with navigation
-│   │
-│   ├── navigation/            # Navigation setup
-│   │   ├── AppNavigator.tsx
-│   │   └── navigationTypes.ts
-│   │
-│   ├── screens/               # Screen components
-│   │   ├── HomeScreen.tsx     # Main map/search screen
-│   │   ├── SearchScreen.tsx   # Destination search
-│   │   ├── RouteDetailsScreen.tsx  # Route step-by-step
-│   │   ├── RouteResultsScreen.tsx  # Multiple route options
-│   │   ├── ReportScreen.tsx   # Report route/fare
-│   │   ├── ProfileScreen.tsx  # User profile/settings
-│   │   └── SavedPlacesScreen.tsx
-│   │
-│   ├── components/            # Reusable components
-│   │   ├── common/
-│   │   │   ├── Button.tsx
-│   │   │   ├── Input.tsx
-│   │   │   ├── Card.tsx
-│   │   │   ├── LoadingSpinner.tsx
-│   │   │   └── ErrorMessage.tsx
-│   │   │
-│   │   ├── transport/
-│   │   │   ├── TransportIcon.tsx
-│   │   │   ├── TransportModeBadge.tsx
-│   │   │   └── TransportFilter.tsx
-│   │   │
-│   │   ├── route/
-│   │   │   ├── RouteCard.tsx
-│   │   │   ├── RouteStepCard.tsx
-│   │   │   ├── FareBreakdown.tsx
-│   │   │   ├── RouteMapView.tsx
-│   │   │   └── RouteSummary.tsx
-│   │   │
-│   │   ├── map/
-│   │   │   ├── MapView.tsx
-│   │   │   ├── MapMarker.tsx
-│   │   │   └── RoutePolyline.tsx
-│   │   │
-│   │   └── search/
-│   │       ├── SearchBar.tsx
-│   │       ├── SearchResults.tsx
-│   │       └── LocationCard.tsx
-│   │
-│   ├── services/              # Business logic & API calls
-│   │   ├── api.ts             # API client setup
-│   │   ├── locationService.ts # GPS & location services
-│   │   ├── routeService.ts    # Route calculation logic
-│   │   ├── mapService.ts      # Map utilities
-│   │   └── storageService.ts  # AsyncStorage for favorites
-│   │
-│   ├── hooks/                 # Custom React hooks
-│   │   ├── useLocation.ts
-│   │   ├── useRoutes.ts
-│   │   ├── useSearch.ts
-│   │   └── useDebounce.ts
-│   │
-│   ├── contexts/              # React Context providers
-│   │   ├── LocationContext.tsx
-│   │   ├── RouteContext.tsx
-│   │   └── ThemeContext.tsx
-│   │
-│   ├── utils/                 # Utility functions
-│   │   ├── constants.ts       # App constants
-│   │   ├── colors.ts          # Color palette
-│   │   ├── typography.ts      # Typography styles
-│   │   ├── formatters.ts      # Format time, fare, distance
-│   │   ├── validators.ts      # Input validation
-│   │   └── helpers.ts         # General helpers
-│   │
-│   └── types/                 # TypeScript type definitions
-│       ├── route.types.ts
-│       ├── location.types.ts
-│       ├── transport.types.ts
-│       └── api.types.ts
-│
-└── __tests__/                 # Tests
-    ├── components/
+└── src/
+    ├── App.tsx                    # NavigationContainer + AuthStack + AppNavigator
+    │
     ├── screens/
-    └── services/
+    │   ├── OnboardingScreen.tsx   # 3-slide intro; AsyncStorage flag; fade out
+    │   ├── LoginScreen.tsx        # Animated focus fields; spring press button
+    │   ├── SignupScreen.tsx       # Full validation; same field animation pattern
+    │   ├── HomeScreen.tsx         # Search-first; popular routes FlatList; search overlay
+    │   ├── SearchScreen.tsx       # Autocomplete; recent searches; places API
+    │   ├── RouteDetailScreen.tsx  # SmartRouteOptions; fare cards; leg timeline
+    │   ├── NavigationScreen.tsx   # Real-time tracking; turn-by-turn RouteGuide
+    │   ├── ContributionScreen.tsx # Submit route/fare corrections
+    │   ├── NotificationsScreen.tsx
+    │   ├── PreferencesScreen.tsx
+    │   └── YouScreen.tsx          # Profile; settings; dark mode toggle
+    │
+    ├── components/
+    │   ├── SmartRouteOptions.tsx  # Route cards: fare dominant, difficulty chip, leg timeline
+    │   ├── FareEstimateCard.tsx   # Standalone fare display component
+    │   ├── TransportModeSelector.tsx  # Bottom-sheet modal; spring open, cubic-ease close
+    │   ├── RouteStepCard.tsx
+    │   │
+    │   ├── map/
+    │   │   ├── CommunityMapView.tsx  # Alert markers + incident report form
+    │   │   ├── AlertMarkers.tsx
+    │   │   ├── AlertBottomSheet.tsx
+    │   │   ├── MapView.tsx
+    │   │   └── index.ts
+    │   │
+    │   ├── routing/
+    │   │   ├── RouteGuide.tsx     # Turn-by-turn guidance component
+    │   │   └── index.ts
+    │   │
+    │   ├── route/
+    │   │   ├── RouteCard.tsx
+    │   │   └── RouteStepCard.tsx
+    │   │
+    │   ├── search/
+    │   │   └── SearchBar.tsx
+    │   │
+    │   └── ui/
+    │       ├── Toast.tsx
+    │       ├── OfflineBanner.tsx
+    │       ├── ErrorBoundary.tsx
+    │       ├── PlacesRow.tsx
+    │       ├── WeatherWidget.tsx
+    │       ├── MapControls.tsx
+    │       ├── LocationDot.tsx
+    │       ├── RecentsList.tsx
+    │       ├── ShareLocationButton.tsx
+    │       └── GuidesSection.tsx
+    │
+    ├── context/
+    │   ├── ThemeContext.tsx        # useAppTheme() — theme, isDark, toggleTheme, tokens
+    │   ├── AuthContext.tsx         # useAuth() — isAuthenticated, login, signup, logout
+    │   └── ToastContext.tsx        # useToast() — showSuccess/Error/Warning/Info
+    │
+    ├── services/
+    │   ├── smartRoutingService.ts  # Core routing engine (29 stops, no transit API)
+    │   ├── routingEngine.ts        # Lower-level routing primitives
+    │   ├── locationService.ts      # GPS, permissions, reverse geocoding
+    │   ├── api.ts                  # Axios client + corridor API methods
+    │   ├── placesService.ts        # Google Places / geocoding integration
+    │   ├── reportService.ts        # User report submission
+    │   ├── incidentService.ts      # Incident avoidance routing
+    │   ├── pricingService.ts       # Fare calculation helpers
+    │   ├── pricingEngine.ts        # Dynamic pricing (peak hours, night rates)
+    │   ├── lagosRouteRules.ts      # Lagos-specific routing constraints
+    │   ├── routeValidator.ts       # Route validation logic
+    │   ├── routeAutoFixer.ts       # Auto-correct malformed routes
+    │   ├── guideGenerator.ts       # Step instruction generation
+    │   ├── googleDirectionsService.ts
+    │   ├── geofencingService.ts
+    │   ├── proximityAlertService.ts
+    │   ├── supabaseDataService.ts
+    │   ├── imageUploadService.ts
+    │   └── mockData.ts             # Static mock routes for USE_MOCK_DATA=true
+    │
+    ├── hooks/
+    │   ├── useNetworkStatus.ts
+    │   ├── useRouting.ts
+    │   ├── useContributions.ts
+    │   ├── useRealtimeContributions.ts
+    │   └── index.ts
+    │
+    ├── theme/
+    │   ├── colors.ts              # LightColors, DarkColors, legacy Colors alias
+    │   └── typography.ts          # Typography scale (xs=10 → hero=32) + weights
+    │
+    ├── types/
+    │   ├── route.types.ts
+    │   ├── routing.ts
+    │   ├── corridor.ts            # Corridor, CorridorStop, StopConnection types
+    │   └── index.ts
+    │
+    ├── utils/
+    │   ├── constants.ts           # USE_MOCK_AUTH, USE_MOCK_DATA, SPACING, BORDER_RADIUS
+    │   ├── formatters.ts          # formatTime, formatFare, formatDistance
+    │   ├── locationDetector.ts
+    │   ├── offlineMap.ts          # Offline map tile caching
+    │   └── smartRouter.ts
+    │
+    ├── data/
+    │   └── lagosStops.ts          # Static stop coordinates for the routing engine
+    │
+    └── lib/
+        └── supabase.ts
+```
+
+### Navigation Architecture
+
+Navigation is defined entirely in `src/App.tsx` — there is no separate `navigation/` folder.
+
+```
+App
+└── AppNavigator
+    ├── [not authenticated]
+    │   └── Auth (Stack.Screen → AuthStack)
+    │       ├── Login
+    │       └── Signup
+    │
+    └── [authenticated, onboarding done]
+        ├── Home                   (root)
+        ├── You                    (modal, slide_from_bottom)
+        ├── Contribution           (modal, slide_from_bottom)
+        ├── Search                 (formSheet, slide_from_bottom)
+        ├── RouteDetail            (formSheet, slide_from_bottom)
+        ├── Notifications          (slide_from_right)
+        ├── Preferences            (slide_from_right)
+        └── Navigation             (slide_from_bottom, gesture disabled)
+```
+
+Onboarding (`OnboardingScreen`) is rendered outside `NavigationContainer` while `onboardingDone === false`, then replaced by the navigator on completion.
+
+### Theme System
+
+```typescript
+// client/src/theme/colors.ts
+export const LightColors = { bg, surface, accent: '#E8541A', ... } as const;
+export const DarkColors  = { bg, surface, accent: '#FF6B35', ... } as const;
+export const Colors      = { /* legacy alias — all values map to LightColors */ };
+
+// client/src/context/ThemeContext.tsx
+export const useAppTheme = () => {
+  // returns: { theme, isDark, toggleTheme, tokens, light, dark }
+};
+```
+
+Always use `tokens` (= `LightColors | DarkColors`) or `LightColors` directly. Never hardcode hex values in component `StyleSheet.create()` — use the token constants.
+
+### Mode Flags
+
+```typescript
+// client/src/utils/constants.ts
+export const USE_MOCK_AUTH = true;  // any credentials log in
+export const USE_MOCK_DATA = true;  // routing engine runs client-side
 ```
 
 ---
 
-## Backend Structure (Django)
-
-### Project Directory Structure
+## Backend Structure
 
 ```
 waka-way/server/backend/
 ├── manage.py
 ├── requirements.txt
+├── db.sqlite3
+├── .env.example
+├── Dockerfile
+├── docker-compose.yml
 │
-├── backend/                   # Main project settings
-│   ├── __init__.py
+├── backend/                      # Project settings
 │   ├── settings.py
-│   ├── urls.py                # Root URL configuration
+│   ├── urls.py                   # Root URL conf: /api/v1/ → core + routing + stops + reports
 │   ├── wsgi.py
-│   ├── asgi.py
-│   └── local_settings.py      # Local dev settings (gitignored)
+│   └── asgi.py
 │
-├── core/                      # Main app
-│   ├── __init__.py
-│   ├── models.py              # Database models
-│   ├── admin.py               # Django admin configuration
-│   ├── serializers.py         # DRF serializers
-│   ├── views.py               # API views
-│   ├── viewsets.py            # ViewSets for complex endpoints
-│   ├── permissions.py         # Custom permissions
-│   ├── filters.py             # Filter backends
-│   ├── pagination.py          # Pagination classes
-│   │
-│   ├── management/
-│   │   └── commands/
-│   │       ├── import_lagos_routes.py
-│   │       └── import_abuja_routes.py
-│   │
-│   ├── migrations/            # Database migrations
-│   │
-│   ├── services/              # Business logic
-│   │   ├── route_calculator.py
-│   │   ├── geocoding_service.py
-│   │   ├── fare_calculator.py
-│   │   └── report_processor.py
-│   │
-│   └── utils/
-│       ├── exceptions.py      # Custom exceptions
-│       ├── validators.py      # Input validators
-│       └── helpers.py         # Helper functions
+├── core/                         # Base models + corridor data
+│   ├── models.py                 # 13 models (see Database Schema)
+│   ├── serializers.py
+│   ├── views.py
+│   ├── urls.py                   # /api/v1/corridors/, /corridor-stops/, /stop-connections/
+│   ├── admin.py
+│   ├── migrations/
+│   │   ├── 0001_initial.py
+│   │   ├── 0002_corridor_models.py
+│   │   └── 0003_soft_deletes_and_idempotency.py
+│   └── management/commands/
+│       └── seed_lagos_corridors.py
 │
-├── api/                       # API app (optional separation)
-│   ├── __init__.py
-│   ├── urls.py                # API URL routing
-│   ├── v1/
-│   │   ├── __init__.py
-│   │   ├── urls.py            # Version 1 API routes
-│   │   ├── views.py
-│   │   └── serializers.py
+├── routing/                      # Route calculation endpoints
+│   ├── views.py
+│   ├── urls.py
+│   ├── services.py
+│   ├── serializers.py
+│   └── lagos_stops.py            # Server-side stop coordinates
 │
-└── tests/                     # Test suite
-    ├── __init__.py
-    ├── test_models.py
-    ├── test_views.py
-    ├── test_services.py
-    └── fixtures/
+├── stops/                        # Transport stop endpoints
+│   ├── views.py
+│   ├── urls.py
+│   ├── services.py
+│   └── serializers.py
+│
+└── reports/                      # User report endpoints
+    ├── views.py
+    ├── urls.py
+    ├── services.py
+    └── serializers.py
 ```
 
 ---
@@ -189,315 +234,86 @@ waka-way/server/backend/
 ### Base URL
 ```
 Development: http://localhost:8000/api/v1/
-Production: https://api.wakaway.com/api/v1/
 ```
 
 ### Authentication
-- **Anonymous Users**: Device ID-based (no authentication required for MVP)
-- **Authenticated Users** (Future): JWT tokens or API keys
+DRF token auth. `USE_MOCK_AUTH=true` bypasses real auth during frontend development.
 
-### Endpoints
-
-#### 1. Location Endpoints
+### Implemented Endpoints
 
 ```
-GET    /api/v1/cities/                    # List all cities
-GET    /api/v1/cities/{id}/               # Get city details
-GET    /api/v1/stops/                     # List transport stops
-GET    /api/v1/stops/nearby/              # Find nearby stops (lat, lng, radius)
-GET    /api/v1/stops/{id}/                # Get stop details
+GET  /api/v1/health/                   # Health check
+GET  /api/v1/corridors/                # List corridors (paginated, filterable)
+GET  /api/v1/corridors/{id}/           # Corridor detail with stops & connections
+GET  /api/v1/corridor-stops/           # List corridor stops
+GET  /api/v1/stop-connections/         # List inter-stop connections
 ```
 
-#### 2. Route Endpoints
+### Planned Endpoints (models exist, views partially implemented)
 
 ```
-GET    /api/v1/routes/                    # List routes
-GET    /api/v1/routes/{id}/               # Get route details
-POST   /api/v1/routes/search/             # Search routes (origin, destination)
-GET    /api/v1/routes/{id}/segments/      # Get route segments
+POST /api/v1/routes/search/            # Server-side route search
+GET  /api/v1/stops/nearby/             # Nearby stops by lat/lng
+POST /api/v1/reports/                  # Submit user report
+GET  /api/v1/reports/                  # List reports
+POST /api/v1/reports/{id}/vote/        # Upvote/downvote report
+GET  /api/v1/favorites/                # User favourite places
+GET  /api/v1/history/                  # Route search history
 ```
 
-#### 3. Route Suggestions
+### Corridor API Query Parameters
 
 ```
-POST   /api/v1/suggestions/               # Get route suggestions
-GET    /api/v1/suggestions/{id}/          # Get suggestion details
-GET    /api/v1/suggestions/{id}/steps/    # Get route steps
+GET /api/v1/corridors/?city=1&primary_mode=brt&search=Ikorodu&page=1&page_size=20
 ```
 
-#### 4. Fares
-
-```
-GET    /api/v1/fares/                     # List fares
-GET    /api/v1/fares/route/{route_id}/    # Get fares for route
-GET    /api/v1/fares/estimate/            # Estimate fare (origin, destination)
-```
-
-#### 5. User Reports
-
-```
-GET    /api/v1/reports/                   # List reports
-POST   /api/v1/reports/                   # Create new report
-GET    /api/v1/reports/{id}/              # Get report details
-POST   /api/v1/reports/{id}/vote/         # Upvote/downvote report
-```
-
-#### 6. User Data
-
-```
-GET    /api/v1/favorites/                 # Get user's favorite places
-POST   /api/v1/favorites/                 # Add favorite place
-DELETE /api/v1/favorites/{id}/            # Remove favorite
-GET    /api/v1/history/                   # Get route search history
-```
-
-### API Request/Response Examples
-
-#### Search Routes
-
-**Request:**
-```http
-POST /api/v1/routes/search/
-Content-Type: application/json
-
-{
-  "origin": {
-    "latitude": 6.5244,
-    "longitude": 3.3792
-  },
-  "destination": {
-    "latitude": 6.4531,
-    "longitude": 3.3947
-  },
-  "city": 1,
-  "transport_modes": ["bus", "keke", "okada"],
-  "max_walk_distance_km": 1.0
-}
-```
-
-**Response:**
-```json
-{
-  "suggestions": [
-    {
-      "id": 123,
-      "total_time_minutes": 45,
-      "total_distance_km": 12.5,
-      "total_fare_ngn": "250.00",
-      "transport_modes": ["bus", "keke", "walk"],
-      "steps": [
-        {
-          "sequence": 1,
-          "transport_mode": "walk",
-          "instruction": "Walk to Ikeja Bus Stop",
-          "distance_km": 0.5,
-          "duration_minutes": 5,
-          "fare_ngn": "0.00"
-        },
-        {
-          "sequence": 2,
-          "transport_mode": "bus",
-          "route_id": 47,
-          "route_number": "47",
-          "instruction": "Take Bus #47 to Oshodi",
-          "distance_km": 8.0,
-          "duration_minutes": 25,
-          "fare_ngn": "100.00"
-        },
-        {
-          "sequence": 3,
-          "transport_mode": "keke",
-          "instruction": "Take Keke to destination",
-          "distance_km": 3.0,
-          "duration_minutes": 10,
-          "fare_ngn": "100.00"
-        },
-        {
-          "sequence": 4,
-          "transport_mode": "walk",
-          "instruction": "Walk to destination",
-          "distance_km": 1.0,
-          "duration_minutes": 5,
-          "fare_ngn": "0.00"
-        }
-      ],
-      "path": {
-        "type": "LineString",
-        "coordinates": [[3.3792, 6.5244], [3.3947, 6.4531]]
-      }
-    }
-  ]
-}
-```
-
-#### Create Report
-
-**Request:**
-```http
-POST /api/v1/reports/
-Content-Type: application/json
-
-{
-  "report_type": "fare_update",
-  "route_id": 47,
-  "title": "Bus fare increased",
-  "description": "Fare for Bus #47 is now ₦150 instead of ₦100",
-  "new_fare_ngn": "150.00",
-  "location": {
-    "latitude": 6.5244,
-    "longitude": 3.3792
-  },
-  "device_id": "abc123xyz"
-}
-```
-
-**Response:**
-```json
-{
-  "id": 456,
-  "report_type": "fare_update",
-  "status": "pending",
-  "message": "Report submitted successfully. Thank you!"
-}
-```
+| Param | Values |
+|---|---|
+| `city` | City ID |
+| `primary_mode` | `danfo` `brt` `keke` `okada` `ferry` `walk` `mixed` |
+| `is_active` | `true` / `false` |
+| `search` | Name or corridor_id substring |
+| `ordering` | `name` `-name` `created_at` |
 
 ---
 
-## Component Library
+## Key Patterns
 
-### Common Components
+### Routing (client-side)
 
-#### Button.tsx
+`smartRoutingService.ts` is the authoritative routing engine. It runs entirely on-device with no network call when `USE_MOCK_DATA=true`.
+
+Difficulty is derived from transit leg count — not stored:
 ```typescript
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { colors, typography } from '../utils';
+// ≤2 transit legs → EASY · 3 → MODERATE · 4+ → COMPLEX
+const transitLegs = legs.filter(l => l.mode !== 'walk').length;
+```
 
-interface ButtonProps {
-  title: string;
-  onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline';
-  size?: 'small' | 'medium' | 'large';
-  disabled?: boolean;
-}
+Each `RouteLeg` has both `instruction` (English) and `localInstruction` (pidgin).
 
-export const Button: React.FC<ButtonProps> = ({
-  title,
-  onPress,
-  variant = 'primary',
-  size = 'medium',
-  disabled = false,
-}) => {
-  // Implementation
+### Back navigation guard
+
+All screens guard `navigation.goBack()` with `canGoBack()`:
+```typescript
+onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')}
+// SignupScreen fallback: navigate('Login')
+```
+
+### Overlay & scroll conventions
+
+- Overlay open: `Animated.timing` with `Easing.out(Easing.cubic)`, 220ms
+- Overlay close: `Animated.timing` with `Easing.in(Easing.cubic)`, 160ms
+- Bottom sheet open: `Animated.spring` (friction 8, tension 50) — already feels natural
+- All `FlatList` components use `decelerationRate="normal"` + `overScrollMode="never"`
+
+### Transport mode colors
+
+```typescript
+// Hardcoded in SmartRouteOptions and HomeScreen — not in theme tokens
+const MODE = {
+  danfo: { bg: '#F5C518', text: '#111111' },
+  brt:   { bg: '#1A5BDB', text: '#FFFFFF' },
+  keke:  { bg: '#2D7A4F', text: '#FFFFFF' },
+  okada: { bg: '#D93025', text: '#FFFFFF' },
 };
 ```
-
-#### Input.tsx
-```typescript
-import React from 'react';
-import { TextInput, View, Text, StyleSheet } from 'react-native';
-
-interface InputProps {
-  label?: string;
-  placeholder: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  error?: string;
-  icon?: React.ReactNode;
-}
-
-export const Input: React.FC<InputProps> = ({
-  label,
-  placeholder,
-  value,
-  onChangeText,
-  error,
-  icon,
-}) => {
-  // Implementation
-};
-```
-
-### Route Components
-
-#### RouteCard.tsx
-```typescript
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
-import { TransportIcon } from '../transport';
-import { formatTime, formatFare } from '../utils';
-
-interface RouteCardProps {
-  suggestion: RouteSuggestion;
-  onPress: () => void;
-}
-
-export const RouteCard: React.FC<RouteCardProps> = ({ suggestion, onPress }) => {
-  // Implementation
-};
-```
-
----
-
-## Key Implementation Files
-
-### Frontend: src/utils/constants.ts
-```typescript
-export const TRANSPORT_MODES = {
-  BUS: 'bus',
-  KEKE: 'keke',
-  OKADA: 'okada',
-  WALK: 'walk',
-} as const;
-
-export const COLORS = {
-  PRIMARY: '#2ECC71',      // Lagos Green
-  SECONDARY: '#6C63FF',    // Vibrant Purple
-  ACCENT: '#FFA726',       // Okada Orange
-  BACKGROUND: '#F7F7F7',   // Soft White
-  TEXT: '#222222',         // Deep Charcoal
-} as const;
-
-export const API_BASE_URL = __DEV__
-  ? 'http://localhost:8000/api/v1'
-  : 'https://api.wakaway.com/api/v1';
-```
-
-### Backend: core/serializers.py
-```python
-from rest_framework import serializers
-from .models import RouteSuggestion, RouteStep, TransportRoute
-
-class RouteStepSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RouteStep
-        fields = [
-            'sequence', 'transport_mode', 'instruction',
-            'distance_km', 'duration_minutes', 'fare_ngn',
-            'start_location', 'end_location'
-        ]
-
-class RouteSuggestionSerializer(serializers.ModelSerializer):
-    steps = RouteStepSerializer(many=True, read_only=True)
-    
-    class Meta:
-        model = RouteSuggestion
-        fields = [
-            'id', 'total_time_minutes', 'total_distance_km',
-            'total_fare_ngn', 'transport_modes', 'steps', 'path'
-        ]
-```
-
----
-
-## Next Steps
-
-1. Set up project structure following this architecture
-2. Implement core models and serializers
-3. Create basic React Native components
-4. Implement API endpoints
-5. Build route calculation service
-6. Integrate maps and location services
-7. Add user reporting functionality
-8. Test end-to-end flow
-

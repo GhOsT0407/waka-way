@@ -1,4 +1,4 @@
-# WakaWay - User Experience Flows
+# WakaWay — User Experience Flows
 
 ## Table of Contents
 1. [Primary User Flows](#primary-user-flows)
@@ -10,359 +10,320 @@
 
 ## Primary User Flows
 
-### Flow 1: Basic Route Search & Navigation
+### Flow 1: Route Search & Navigation
 
 **Goal**: User wants to find the best route from their current location to a destination.
 
-**User Journey**:
+**Actual Implementation**:
+
 ```
-1. [Home Screen - Map View]
-   - App loads with user's current location detected
-   - Map centered on user location
-   - Search bar visible at top
+1. [Home Screen — Search-First]
+   - Warm white background (#F8F7F5), no map
+   - Search bar at top: "Where are you going?" with orange location pin
+   - GPS origin chip below search bar: "Current location"
+   - FlatList of popular routes (Ojuelegba→CMS, Ikeja→VI, etc.)
 
 2. [User taps search bar]
-   - Search screen opens
-   - Shows recent searches (if any)
-   - Shows popular destinations
-   - User types destination name (e.g., "Ikeja Mall")
+   - SearchScreen slides up from bottom (slide_from_bottom, 250ms)
+   - Shows recent searches FlatList
+   - Empty state: bus icon + "Where to?" + "Type a place — e.g. 'Lekki'"
+   - User types destination
 
-3. [Search Results]
-   - Location suggestions appear as user types
-   - Each result shows name, address, distance
+3. [Autocomplete Results]
+   - Location suggestions appear as user types (Google Places)
+   - Each result: name + address
    - User selects destination
 
-4. [Route Calculation]
-   - Loading indicator shows "Finding best routes..."
-   - Backend calculates multiple route options
-   - Results screen displays 2-5 route suggestions
+4. [TransportModeSelector bottom sheet]
+   - Slides up with spring (friction 8, tension 50)
+   - "What transport dey near you?"
+   - Grid: Keke · Danfo · Okada · BRT · Walk
+   - Shows "Last used" badge on previously selected mode
+   - User selects mode
 
-5. [Route Results Screen]
-   - Route cards show:
-     * Transport modes (bus → keke → walk)
-     * Total time (45 mins)
-     * Total fare (₦250)
-     * Total distance (12.5 km)
-   - User can compare routes side-by-side
-   - User taps preferred route
+5. [RouteDetailScreen]
+   - Slides up from bottom
+   - SmartRouteOptions: fare-dominant cards (₦ amount in accent orange, 22px/700)
+   - Difficulty chip: EASY (≤2 legs, green) / MODERATE (3, amber) / COMPLEX (4+, red)
+   - Transport chain: [DANFO]──●──[BRT]──●──[WALK]
+   - Leg timeline with English + pidgin instructions
+   - "Enter danfo wey dey go CMS" style instructions
 
-6. [Route Details Screen]
-   - Step-by-step instructions
-   - Map view with route overlay
-   - Fare breakdown
-   - Estimated arrival time
-   - Actions: "Start Navigation", "Report Issue", "Share"
-
-7. [Navigation Mode] (Future)
-   - Turn-by-turn directions
-   - Real-time location tracking
-   - Notifications for next step
+6. [User taps "Start Journey"]
+   - NavigationScreen slides up (slide_from_bottom, gesture disabled)
+   - Real-time GPS tracking
+   - RouteGuide component: turn-by-turn instructions
+   - Route progress overlay
 ```
 
 **Key UX Elements**:
-- ✅ Clear, simple interface
-- ✅ Fast search with autocomplete
-- ✅ Multiple route options for comparison
-- ✅ Visual step-by-step guide
-- ✅ Clear fare and time information
+- Fare is the dominant element — always largest, most prominent (22px/700, accent color)
+- Search reachable in ≤ 2 taps from home
+- Pidgin instructions on every route leg alongside English
+- No map on Home screen — map lives in RouteDetail and NavigationScreen
 
 ---
 
-### Flow 2: Report Route/Fare Update
+### Flow 2: Report Route / Fare Update
 
 **Goal**: User wants to report incorrect route information or updated fare.
 
 **User Journey**:
 ```
-1. [Route Details Screen]
+1. [RouteDetailScreen]
    - User notices incorrect information
-   - Taps "Report Issue" button
+   - Taps contribution/report button
 
-2. [Report Type Selection]
-   - Options appear:
-     * "Route no dey work" (Route not working)
-     * "Fare don change" (Fare changed)
-     * "New route available"
-     * "Stop location wrong"
+2. [ContributionScreen — modal, slides from bottom]
+   - Report type selection:
+     * "Fare Update" (Fare don change)
+     * "Route Disrupted" (Route no dey work)
+     * "New Route Available"
+     * "Stop Location Changed"
+     * "Route Information Incorrect"
      * "Other"
-   - User selects appropriate option
 
 3. [Report Details Form]
-   - If "Fare don change":
-     * Input field for new fare (₦)
-     * Description text area
-   - If "Stop location wrong":
-     * Map picker for new location
-     * Description text area
-   - If "Route no dey work":
-     * Description text area (required)
-     - User fills form
+   - Context-aware fields based on report type
+   - If fare update: new fare amount (₦)
+   - Description text area
+   - User fills form
 
 4. [Submit Report]
-   - Confirmation message: "Report submitted! Thank you"
-   - Report status: "Pending Review"
-   - Option to add more details
-   - Return to route details
+   - Idempotency key prevents duplicate submissions on retry
+   - Confirmation toast: "Report submitted! Thank you"
+   - Modal dismisses, returns to RouteDetailScreen
 
-5. [Report Status] (Future)
-   - User can view their reports in Profile
-   - See status: Pending / Verified / Resolved
-   - Get notified when report is verified
+5. [Report Status] (future)
+   - Reports tracked via status: Pending / Verified / Resolved / Rejected
+   - Soft delete: records preserved, never hard-deleted
 ```
 
 **Key UX Elements**:
-- ✅ Simple, quick reporting process
-- ✅ Context-aware form fields
-- ✅ Clear confirmation feedback
-- ✅ Option to view report status
+- Context-aware fields (only show what's relevant to the report type)
+- Idempotency key: submitting the same report twice on network retry won't create duplicates
+- Friendly pidgin framing in copy
 
 ---
 
-### Flow 3: Filter by Transport Mode
+### Flow 3: Transport Mode Selection
 
-**Goal**: User prefers specific transport modes (e.g., only okada, no buses).
+**Goal**: User selects what transport is available at their starting point.
+
+**Actual Implementation**:
+```
+1. [SearchScreen — after selecting destination]
+   - SearchScreen transitions to TransportModeSelector sheet
+
+2. [TransportModeSelector — bottom sheet]
+   - Slides up with spring animation (friction 8, tension 50)
+   - Title: "What transport dey near you?"
+   - Subtitle: "Select what's available at your starting point"
+   - 3-column icon grid:
+     * Keke (orange) · Danfo (blue) · Okada (purple)
+     * BRT (green) · Walk (grey)
+   - Each card: icon circle + label + pidgin text ("Enter Keke", "Waka", etc.)
+   - Saved preference shows "Last used" badge
+
+3. [Selection]
+   - User taps a mode
+   - Sheet closes with cubic-ease-in (220ms)
+   - Route calculation begins with selected mode filter
+   - RouteDetailScreen opens
+```
+
+**Key UX Elements**:
+- Spring open animation feels natural and physical
+- "Last used" badge reduces friction for repeat users
+- Pidgin text reinforces local identity
+
+---
+
+### Flow 4: Onboarding → Auth
+
+**Goal**: First-time user gets oriented then logs in.
 
 **User Journey**:
 ```
-1. [Home Screen]
-   - Transport filter buttons visible:
-     [🚌 Bus] [🛺 Keke] [🏍️ Okada] [🚶 Walk]
-   - All modes selected by default
+1. [OnboardingScreen — rendered before NavigationContainer]
+   - 3 slides on dark navy (#0F172A) background
+   - Slide 1 (green accent): "Lagos in Your Pocket" — multi-modal routes
+   - Slide 2 (blue accent): "See Real Fares" — before you board
+   - Slide 3 (amber accent): "Works Offline" — no data needed
+   - Progress bar + "Continue →" CTA in slide accent color
+   - "Skip" in top right
+   - AsyncStorage flag: ONBOARDING_DONE_KEY persists after completion
 
-2. [User taps filter]
-   - User deselects "Bus"
-   - Filter updates: Only Keke, Okada, Walk routes shown
+2. [LoginScreen]
+   - Warm white background (#F8F7F5)
+   - Orange logo ring + "WakaWay" wordmark
+   - White card with email + password fields
+   - Focus state: orange border on active field
+   - "Sign In" button (orange, full width)
+   - "Forgot password?" text link (orange)
+   - "Don't have an account? Sign Up" link below card
 
-3. [Route Recalculation]
-   - Loading: "Finding routes without bus..."
-   - New routes displayed (filtered)
-   - Routes may have longer time/distance
-   - User selects route
+3. [SignupScreen]
+   - Same card pattern
+   - Additional name field
+   - "Create Account" button
+   - Back button: navigate('Login') fallback
 
-4. [Route Details]
-   - Shows filtered route with selected modes
-   - Clear indication of chosen filters
-   - Option to clear filters
+4. [Home Screen — search-first layout]
+   - After auth success (mock or real)
+   - Ready for route search
 ```
-
-**Key UX Elements**:
-- ✅ Visual filter toggles
-- ✅ Clear indication of active filters
-- ✅ Fast recalculation
-- ✅ Shows impact of filters (time/distance change)
 
 ---
 
-### Flow 4: Save Favorite Places
+### Flow 5: Save Favorite Places (Planned)
 
 **Goal**: User frequently visits certain places and wants quick access.
 
 **User Journey**:
 ```
-1. [Route Details Screen]
-   - User finds a route they use often
-   - Taps "Save Place" button
-   - OR taps destination name to save
+1. [RouteDetailScreen]
+   - User taps "Save Place"
+   - OR taps destination name
 
 2. [Save Place Dialog]
    - Prompt: "Save [Destination Name] as favorite?"
    - User can rename (e.g., "Home", "Office", "Market")
-   - User confirms
 
 3. [Saved in Favorites]
-   - Place appears in Profile > Saved Places
-   - Can be accessed quickly from Home screen
-   - Appears in search suggestions
+   - Appears in YouScreen > Saved Places
+   - Shows in search suggestions
+   - Quick access from Home search bar
 
-4. [Quick Access]
-   - User opens Home screen
-   - Recent/Saved places shown at top
-   - User taps saved place
-   - Route search starts immediately
+Note: UserFavoritePlace model supports soft delete (deleted_at).
+      Favorites marked deleted are excluded from results.
 ```
-
-**Key UX Elements**:
-- ✅ One-tap save option
-- ✅ Custom naming for favorites
-- ✅ Quick access from home screen
-- ✅ Integration with search
 
 ---
 
 ## Secondary User Flows
 
-### Flow 5: View Route History
+### Flow 6: View Route History
 
 **Goal**: User wants to see previously searched routes.
 
 **User Journey**:
 ```
-1. [Profile Screen]
+1. [YouScreen]
    - User taps "Route History"
 
-2. [Route History List]
-   - Shows recent searches:
-     * Origin → Destination
-     * Date/time
-     * Route summary (time, fare)
-   - Most recent at top
-   - User taps a history item
+2. [UserRouteHistory list]
+   - Origin → Destination
+   - Searched date/time
+   - Route summary (time, fare)
+   - Ordered by -searched_at
 
 3. [Route Details]
-   - Shows full route details
-   - Option to use again
-   - Option to save as favorite
+   - Shows full route details for that search
+   - Option to search again with same endpoints
 ```
 
 ---
 
-### Flow 6: Share Route
+### Flow 7: Share Route
 
-**Goal**: User wants to share route with friend/family member.
+**Goal**: User wants to share a route with a friend.
 
 **User Journey**:
 ```
-1. [Route Details Screen]
+1. [RouteDetailScreen]
    - User taps "Share" button
 
 2. [Share Options]
-   - Options:
-     * Share via WhatsApp
-     * Share via SMS
-     * Copy link
-     * Share via other apps
+   - WhatsApp, SMS, copy link, other apps
+   - Pre-composed message with route summary + link
 
-3. [Shared Content]
-   - Message includes:
-     * Route summary
-     * Link to route in app
-     * Map screenshot (future)
-   - User selects app/platform
-
-4. [Route Shared]
-   - Confirmation: "Route shared successfully!"
+3. [Route Shared]
+   - Confirmation toast
 ```
 
 ---
 
-### Flow 7: Find Nearby Stops
+### Flow 8: Dark Mode Toggle
 
-**Goal**: User wants to see transport stops near their location.
+**Goal**: User wants to use dark mode.
 
 **User Journey**:
 ```
-1. [Home Screen - Map View]
-   - User taps "Nearby Stops" button
-   - OR map shows stop markers automatically
+1. [YouScreen]
+   - Toggle "Dark Mode" switch
 
-2. [Nearby Stops List]
-   - Shows stops within 1km radius:
-     * Stop name
-     * Stop type (Bus/Keke/Okada)
-     * Distance
-     * Address
-   - Sorted by distance (nearest first)
-
-3. [Stop Details]
-   - User taps a stop
-   - Shows:
-     * Stop location on map
-     * Routes passing through stop
-     * Fares from this stop
-     * User reports about stop
+2. [Instant switch]
+   - ThemeContext updates isDark state
+   - All screens rerender with DarkColors tokens:
+     * bg: #111318, surface: #1C1C1E
+     * accent: #FF6B35 (brighter orange on dark bg)
+   - StatusBar switches to light content
 ```
 
 ---
 
 ## Error Handling Flows
 
-### Flow 8: No Route Found
+### Flow 9: No Route Found
 
-**Scenario**: Backend cannot find a route between origin and destination.
+**Scenario**: Routing engine cannot find a route between origin and destination.
 
 **User Journey**:
 ```
-1. [Route Search]
-   - User searches for route
-   - Backend returns no results
+1. [Route Calculation]
+   - SmartRoutingService returns empty results
 
-2. [Error Screen]
+2. [RouteDetailScreen — empty state]
    - Message: "No routes found"
    - Suggestions:
-     * "Try adjusting your destination"
-     * "Try enabling more transport modes"
-     * "Report if you know a route"
-   - Actions:
-     * "Adjust Search"
-     * "Report Route"
-     * "Go Back"
-
-3. [User Action]
-   - User adjusts search or reports route
+     * "Try a different transport mode"
+     * "Try enabling more modes"
+     * "Report if you know a route exists"
+   - Actions: "Adjust Search" · "Report Route" · "Go Back"
 ```
-
-**Key UX Elements**:
-- ✅ Friendly, helpful error message
-- ✅ Actionable suggestions
-- ✅ Alternative paths forward
-- ✅ No dead ends
 
 ---
 
-### Flow 9: Location Permission Denied
+### Flow 10: Location Permission Denied
 
 **Scenario**: User denies location access.
 
 **User Journey**:
 ```
-1. [App Launch]
-   - App requests location permission
+1. [App launch]
+   - expo-location requests permission
    - User denies
 
-2. [Permission Prompt]
-   - Message: "Location needed for route search"
-   - Explanation: "WakaWay needs your location to find nearby transport stops"
-   - Actions:
-     * "Enable Location"
-     * "Enter Location Manually"
-     * "Maybe Later"
+2. [Degraded mode]
+   - Origin chip shows "Enter location manually"
+   - Search still works from typed origin
+   - Banner or prompt explaining limitation
 
-3. [Manual Location Entry]
-   - Map picker or address search
-   - User selects location manually
-   - App continues normally
-
-4. [Settings Redirect] (if user taps "Enable Location")
+3. [Settings redirect] (if user taps to enable)
    - Opens device settings
-   - User enables location
-   - Returns to app
-   - Location detected automatically
+   - Returns to app — location detected automatically
 ```
 
 ---
 
-### Flow 10: Network Error / Offline
+### Flow 11: Network Error / Offline
 
 **Scenario**: User has no internet connection.
 
 **User Journey**:
 ```
-1. [Network Request]
-   - App tries to search routes
-   - Network error occurs
+1. [App detects network loss]
+   - OfflineBanner appears at top of screen (useNetworkStatus hook)
+   - Banner: "You're offline" in warning color
 
-2. [Error Message]
-   - Message: "No internet connection"
-   - Icon/illustration
-   - Suggestions:
-     * "Check your connection"
-     * "Try again"
-   - Option: "Use offline mode" (Future)
+2. [Route search]
+   - USE_MOCK_DATA=true: routing engine still works client-side (no network needed)
+   - Places/geocoding API: falls back to recent searches only
 
-3. [Retry]
-   - User taps "Try Again"
-   - App retries request
-   - Success or error shown again
+3. [Back online]
+   - OfflineBanner animates out
+   - Full API functionality restored
 ```
 
 ---
@@ -371,126 +332,88 @@
 
 ### Language & Terminology
 
-**Local Terms**:
-- ✅ Use "Danfo" for local buses
-- ✅ Use "Keke" for tricycles
-- ✅ Use "Okada" for motorbikes
-- ✅ Use Nigerian Pidgin when appropriate
-- ✅ Understand local landmarks and area names
+**Local Terms Used**:
+- "Danfo" for yellow minibuses
+- "Keke" for tricycles (Keke NAPEP)
+- "Okada" for motorbikes
+- "Waka" — pidgin for "walk/move" (the app name)
+- "BRT" for Bus Rapid Transit / LAGBUS
 
-**Example Messages**:
-- "Where you dey go?" (Where are you going?)
-- "Route no dey work" (Route not working)
-- "Fare don change" (Fare has changed)
-- "Waka easy, anywhere you dey" (Tagline)
+**Pidgin Instructions on Every Route Leg**:
+- "Enter danfo wey dey go CMS"
+- "Board keke from Oshodi"
+- "Waka 400m to Ojuelegba park"
+
+**UI Copy**:
+- "What transport dey near you?" (TransportModeSelector)
+- "Where are you going?" (search bar)
+- "Move Smart. Move Local." (tagline)
 
 ### Cultural Considerations
 
-**Transport Behavior**:
-- ✅ Okada drivers may negotiate fares
-- ✅ Bus routes may not have fixed schedules
-- ✅ Some areas have restricted okada/bus access
-- ✅ Rush hour significantly affects travel time
-
-**Safety Considerations**:
-- ✅ Show verified routes vs. user-reported routes
-- ✅ Indicate safe areas (future)
-- ✅ Emergency contacts (future)
-- ✅ Share location feature (future)
+- Okada drivers negotiate fares — show range (₦200–₦300), not fixed
+- Bus routes lack fixed schedules — show frequency estimate
+- Some LGA areas have okada bans — Lagos routing constraints in `lagosRouteRules.ts`
+- Rush hour (7–9am, 5–7pm) increases fares — `pricingEngine.ts` applies peak rates
 
 ### User Behavior Patterns
 
-**Common Scenarios**:
-1. **Morning Commute**: User needs fastest route to work
-2. **Market Trip**: User needs cheapest route with okada/keke
-3. **Evening Return**: User needs safe, well-lit routes
-4. **Weekend Outing**: User doesn't mind longer routes with buses
-5. **Emergency**: User needs fastest route regardless of cost
-
-**Design Implications**:
-- ✅ Show multiple route options (fastest vs. cheapest vs. most convenient)
-- ✅ Indicate rush hour impact on travel time
-- ✅ Allow fare negotiation indication
-- ✅ Show route reliability/verification status
+| Scenario | User Need | App Response |
+|----------|-----------|--------------|
+| Morning commute | Fastest route to work | EASY routes prioritized, departure time estimate |
+| Market trip | Cheapest route | Fare-first display, keke/okada options |
+| Evening return | Safe, well-lit | Route reliability status |
+| Weekend outing | Flexible timing | All mode options shown |
 
 ---
 
 ## Accessibility Considerations
 
 ### Visual Accessibility
-- ✅ High contrast colors for outdoor visibility
-- ✅ Large tap targets (minimum 44x44px)
-- ✅ Clear typography hierarchy
-- ✅ Icon + text labels (not icons alone)
+- WCAG AA contrast (4.5:1) in both light and dark mode
+- Minimum touch target: 44pt (enforced via `hitSlop` on icon buttons)
+- Icon + text labels — never icons alone
+- Transport mode colors paired with text labels (color-not-only rule)
+
+### Typography
+- DM Sans — high legibility at small sizes
+- Minimum body size: 14px (md scale)
+- 11px only for secondary labels (pidgin, timestamps)
 
 ### Motor Accessibility
-- ✅ Swipe gestures for navigation
-- ✅ Large touch targets
-- ✅ Minimal fine motor skills required
-
-### Cognitive Accessibility
-- ✅ Simple, clear language
-- ✅ Step-by-step instructions
-- ✅ Visual aids (maps, icons)
-- ✅ Error prevention (validation before submission)
+- Swipe gestures for navigation (gestureEnabled on stack screens)
+- Large touch targets on all interactive elements
+- Bottom sheet close: swipe down or tap cancel button
 
 ---
 
-## Performance Considerations
+## Animation & Transition Summary
 
-### Speed Requirements
-- ✅ Route search: < 3 seconds
-- ✅ Map rendering: < 1 second
-- ✅ Search autocomplete: < 500ms
-- ✅ Offline caching (future)
-
-### Data Usage
-- ✅ Minimize API calls
-- ✅ Cache route data
-- ✅ Compress map tiles
-- ✅ Offline mode (future)
-
----
-
-## Success Metrics
-
-### User Engagement
-- Routes searched per user per week
-- Routes saved as favorites
-- Reports submitted
-- Routes shared
-
-### Route Accuracy
-- User-reported route issues
-- Fare accuracy (reported vs. actual)
-- Route verification rate
-
-### User Satisfaction
-- App store ratings
-- User feedback
-- Retention rate
-- Daily active users
+| Transition | Animation | Duration |
+|-----------|-----------|----------|
+| Screen enter (slide right) | `slide_from_right` | 250ms |
+| Bottom sheet open (Search, RouteDetail, You, Contribution) | `slide_from_bottom` | 250ms |
+| Search overlay enter | `Easing.out(Easing.cubic)` | 220ms |
+| Search overlay exit | `Easing.in(Easing.cubic)` | 160ms |
+| TransportModeSelector open | `Animated.spring` (friction 8, tension 50) | — |
+| TransportModeSelector close | `Easing.in(Easing.cubic)` | 220ms |
+| Auth screen | `fade` | 250ms |
 
 ---
 
 ## Future Enhancements
 
 ### Phase 2 Features
-- Real-time navigation with turn-by-turn directions
-- Live traffic updates
-- Payment integration (bus ticket booking)
-- Driver/hawker ratings
-- Emergency contacts and SOS feature
-- Offline mode with cached routes
+- Real-time navigation improvements (live rerouting)
+- Server-side route search API (PostgreSQL + PostGIS)
+- User authentication backend
+- Favorite places backend API
+- Route sharing (deep links)
 - Voice navigation in Nigerian languages
-- AR-based navigation (future)
 
 ### Advanced Features
-- ML-based route optimization
-- Predictive arrival times
-- Route recommendations based on user history
+- ML-based route optimization from community data
+- Predictive arrival times based on time of day
 - Integration with ride-hailing apps
-- Public transport schedules (where available)
-- Bike-sharing integration
-- Carpooling options (future)
-
+- Public transport schedule display
+- Emergency SOS and location sharing

@@ -14,8 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Colors } from '../theme/colors';
+import { LightColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
+
+const C = LightColors;
 
 // Pill button with subtle spring press-in scale
 function PressableButton({ onPress, disabled, style, children }: {
@@ -37,7 +39,7 @@ function PressableButton({ onPress, disabled, style, children }: {
   );
 }
 
-// Input row that highlights blue when focused
+// Input row that highlights orange when focused
 function FocusField({ icon, children }: {
   icon: string; children: React.ReactNode;
 }) {
@@ -55,7 +57,7 @@ function FocusField({ icon, children }: {
 
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [Colors.border as string, Colors.blue as string],
+    outputRange: [C.divider, C.accent],
   });
 
   return (
@@ -63,7 +65,7 @@ function FocusField({ icon, children }: {
       <Ionicons
         name={icon as any}
         size={18}
-        color={focused ? Colors.blue : Colors.textTertiary}
+        color={focused ? C.accent : C.textMuted}
       />
       {/* Clone children injecting focus/blur handlers */}
       {React.Children.map(children, child =>
@@ -106,10 +108,13 @@ export default function LoginScreen({ navigation }: any) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-          {/* Blue accent header */}
+          {/* Header with orange-accented brand mark */}
           <View style={styles.header}>
-            <View style={styles.logoCircle}>
-              <Ionicons name="navigate" size={40} color="#fff" />
+            <View style={styles.logoGlow} />
+            <View style={styles.logoRing}>
+              <View style={styles.logoInner}>
+                <Ionicons name="navigate" size={34} color={C.accent} />
+              </View>
             </View>
             <Text style={styles.appName}>WakaWay</Text>
             <Text style={styles.tagline}>Move Smart. Move Local.</Text>
@@ -122,7 +127,7 @@ export default function LoginScreen({ navigation }: any) {
             <FocusField icon="mail-outline">
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Email" placeholderTextColor={Colors.textTertiary}
+                placeholder="Email" placeholderTextColor={C.textMuted}
                 value={email} onChangeText={setEmail}
                 keyboardType="email-address" autoCapitalize="none" autoCorrect={false} returnKeyType="next"
               />
@@ -131,13 +136,13 @@ export default function LoginScreen({ navigation }: any) {
             <FocusField icon="lock-closed-outline">
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Password" placeholderTextColor={Colors.textTertiary}
+                placeholder="Password" placeholderTextColor={C.textMuted}
                 value={password} onChangeText={setPassword}
                 secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false}
                 returnKeyType="done" onSubmitEditing={handleLogin}
               />
               <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={Colors.textTertiary} />
+                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={C.textMuted} />
               </TouchableOpacity>
             </FocusField>
 
@@ -168,45 +173,61 @@ export default function LoginScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.mapBackground },
+  container: { flex: 1, backgroundColor: C.bg },
   scroll: { flexGrow: 1, paddingBottom: 32 },
 
   header: {
     alignItems: 'center',
-    paddingTop: 48,
-    paddingBottom: 52,
-    gap: 8,
-    backgroundColor: Colors.blueDeep,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingTop: 52,
+    paddingBottom: 44,
+    gap: 6,
+    backgroundColor: C.bg,
   },
-  logoCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
+  logoGlow: {
+    position: 'absolute',
+    top: 36,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: C.accentSubtle,
+  },
+  logoRing: {
+    width: 80,
+    height: 80,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: 'rgba(232,84,26,0.35)',
+    backgroundColor: 'rgba(232,84,26,0.08)',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
+    marginBottom: 14,
   },
-  appName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: '#fff', letterSpacing: -0.5 },
-  tagline: { fontSize: Typography.md, color: 'rgba(255,255,255,0.75)' },
+  logoInner: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    backgroundColor: 'rgba(232,84,26,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: C.textPrimary, letterSpacing: -0.5 },
+  tagline: { fontSize: Typography.md, color: C.textSecondary },
 
   card: {
     marginHorizontal: 20,
-    marginTop: -20,
+    marginTop: 0,
     borderRadius: 20,
     padding: 20,
     gap: 14,
-    backgroundColor: Colors.sheetBg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    backgroundColor: C.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: C.divider,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 20 },
-      android: { elevation: 8 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12 },
+      android: { elevation: 3 },
     }),
   },
-  formHeading: { fontSize: Typography.xl, fontWeight: Typography.bold, marginBottom: 4, color: Colors.textPrimary },
+  formHeading: { fontSize: Typography.xl, fontWeight: Typography.bold, marginBottom: 4, color: C.textPrimary },
 
   field: {
     flexDirection: 'row',
@@ -215,13 +236,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 13,
     gap: 10,
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: C.surfaceSecondary,
   },
   fieldInput: {
     flex: 1,
     fontSize: Typography.lg,
     paddingVertical: 0,
-    color: Colors.textPrimary,
+    color: C.textPrimary,
   },
 
   primaryBtn: {
@@ -229,24 +250,24 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
     marginTop: 4,
-    backgroundColor: Colors.blue,
+    backgroundColor: C.accent,
     ...Platform.select({
-      ios: { shadowColor: Colors.blue, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.45, shadowRadius: 10 },
+      ios: { shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 },
       android: { elevation: 5 },
     }),
   },
-  primaryBtnText: { color: '#fff', fontSize: Typography.lg, fontWeight: Typography.semibold },
+  primaryBtnText: { color: C.textOnAccent, fontSize: Typography.lg, fontWeight: Typography.semibold },
 
   textLink: { alignSelf: 'center', paddingVertical: 8 },
-  textLinkText: { fontSize: Typography.md, fontWeight: Typography.medium, color: Colors.blue },
+  textLinkText: { fontSize: Typography.md, fontWeight: Typography.medium, color: C.accent },
 
   signupRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 28,
     paddingHorizontal: 20,
   },
-  signupPrompt: { fontSize: Typography.md, color: Colors.textSecondary },
-  signupLink: { fontSize: Typography.md, fontWeight: Typography.semibold, color: Colors.blue },
+  signupPrompt: { fontSize: Typography.md, color: C.textSecondary },
+  signupLink: { fontSize: Typography.md, fontWeight: Typography.semibold, color: C.accent },
 });

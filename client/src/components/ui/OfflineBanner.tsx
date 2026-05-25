@@ -48,7 +48,7 @@ export function OfflineBanner({ isOnline }: Props) {
 
   if (isOnline && !showOnline && !wasOffline.current) return null;
 
-  const bgColor = showOnline ? '#2E7D32' : '#B71C1C';
+  const bgColor = showOnline ? '#16A34A' : '#DC2626';
   const icon = showOnline ? 'wifi' : 'wifi-outline';
   const message = showOnline ? 'Back online' : 'No internet connection — using offline routes';
 

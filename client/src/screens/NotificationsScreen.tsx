@@ -19,14 +19,14 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
 const TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; label: string }> = {
-  traffic:      { icon: '🚗', color: '#F44336', bg: '#FFEBEE', label: 'Traffic'      },
-  danger_zone:  { icon: '⚠️', color: '#FF9800', bg: '#FFF3E0', label: 'Danger Zone'  },
-  construction: { icon: '🚧', color: '#FF9800', bg: '#FFF3E0', label: 'Construction'  },
-  security:     { icon: '🔴', color: '#D32F2F', bg: '#FFEBEE', label: 'Security'      },
-  hazard:       { icon: '⚡', color: '#FFC107', bg: '#FFFDE7', label: 'Hazard'        },
-  bus_stop:     { icon: '🚏', color: '#2196F3', bg: '#E3F2FD', label: 'Bus Stop'      },
-  taxi_stand:   { icon: '🚕', color: '#4CAF50', bg: '#E8F5E9', label: 'Taxi Stand'    },
-  other:        { icon: '📌', color: '#9E9E9E', bg: '#F5F5F5', label: 'Other'         },
+  traffic:      { icon: '🚗', color: '#F87171', bg: 'rgba(248,113,113,0.15)', label: 'Traffic'      },
+  danger_zone:  { icon: '⚠️', color: '#FB923C', bg: 'rgba(251,146,60,0.15)',  label: 'Danger Zone'  },
+  construction: { icon: '🚧', color: '#FB923C', bg: 'rgba(251,146,60,0.15)',  label: 'Construction'  },
+  security:     { icon: '🔴', color: '#F87171', bg: 'rgba(248,113,113,0.15)', label: 'Security'      },
+  hazard:       { icon: '⚡', color: '#FCD34D', bg: 'rgba(252,211,77,0.15)',  label: 'Hazard'        },
+  bus_stop:     { icon: '🚏', color: '#60A5FA', bg: 'rgba(96,165,250,0.15)',  label: 'Bus Stop'      },
+  taxi_stand:   { icon: '🚕', color: '#22C55E', bg: 'rgba(34,197,94,0.15)',   label: 'Taxi Stand'    },
+  other:        { icon: '📌', color: '#94A3B8', bg: 'rgba(148,163,184,0.12)', label: 'Other'         },
 };
 
 function getTypeConfig(type: string) {
@@ -150,8 +150,8 @@ export default function NotificationsScreen({ navigation }: any) {
             onPress={() => handleVote(item.id, 'confirm')}
             disabled={voted || !user}
           >
-            <Ionicons name="checkmark-circle-outline" size={16} color="#4CAF50" />
-            <Text style={[styles.voteBtnText, { color: '#4CAF50' }]}>
+            <Ionicons name="checkmark-circle-outline" size={16} color="#22C55E" />
+            <Text style={[styles.voteBtnText, { color: '#22C55E' }]}>
               Still there {(item.confirms ?? 0) > 0 ? `(${item.confirms})` : ''}
             </Text>
           </TouchableOpacity>
@@ -176,7 +176,7 @@ export default function NotificationsScreen({ navigation }: any) {
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
       <View style={[styles.header, { borderBottomColor: theme.BORDER }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="arrow-back" size={24} color={theme.TEXT} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.TEXT }]}>Community Alerts</Text>
@@ -266,8 +266,8 @@ const styles = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
-  priorityBanner: { backgroundColor: '#FFEBEE', paddingHorizontal: SPACING.MD, paddingVertical: 6 },
-  priorityText:   { fontSize: FONT_SIZES.SMALL, fontWeight: '700', color: '#C62828' },
+  priorityBanner: { backgroundColor: 'rgba(248,113,113,0.1)', paddingHorizontal: SPACING.MD, paddingVertical: 6 },
+  priorityText:   { fontSize: FONT_SIZES.SMALL, fontWeight: '700', color: '#F87171' },
   cardTop:        { flexDirection: 'row', gap: SPACING.MD, padding: SPACING.MD },
   typeIcon:       { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   typeEmoji:      { fontSize: 22 },

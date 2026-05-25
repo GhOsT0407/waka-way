@@ -1,10 +1,10 @@
-# WakaWay - Design Documentation
+# WakaWay — Design Documentation
 
 ## Table of Contents
 1. [Brand Identity](#brand-identity)
-2. [UI/UX Design System](#uiux-design-system)
-3. [Wireframes](#wireframes)
-4. [Screen Mockups](#screen-mockups)
+2. [Design System](#design-system)
+3. [Screen Wireframes](#screen-wireframes)
+4. [Component Patterns](#component-patterns)
 5. [User Flows](#user-flows)
 
 ---
@@ -12,453 +12,304 @@
 ## Brand Identity
 
 ### App Name
-**WakaWay** - "Find your WakaWay"
-- Derived from "Waka" (Nigerian pidgin for "walk/move") + "Way"
-- Taglines: "Move Smart. Move Local", "Your Way. The Naija Way", "Waka easy, anywhere you dey."
+**WakaWay** — "Move Smart. Move Local."
+- "Waka" = Nigerian pidgin for "walk / move"
+- Taglines: "Move Smart. Move Local." · "Your Way. The Naija Way." · "Waka easy, anywhere you dey."
 
 ### Brand Personality
-- **Friendly**: Approachable, warm, welcoming
-- **Helpful**: Always there when users need navigation assistance
-- **Street-smart**: Understanding of local transport nuances
-- **Nigerian**: Authentic, culturally aware, community-focused
+- **Street-smart**: Understands how Lagos actually moves
+- **Honest**: Shows real fares before you board
+- **Local**: Pidgin instructions, landmark navigation, Nigerian context
+- **Flat & confident**: No decoration for its own sake — clear hierarchy, bold accent
 
-### Logo Concepts
-1. **Map pin with road forming "W"**: Combines navigation and identity
-2. **Stylized "W" made of curved paths/arrows**: Represents movement and routes
-3. **Minimalist keke/okada silhouette forming "W"**: Local transport integration
-
-### App Icon
-- **Design**: White "W" on Lagos Green (#2ECC71) background
-- **Style**: Flat design, simple, scalable
-- **Rounded corners**: Modern iOS/Android standards
+### Logo
+"W" wordmark in `#E8541A` danfo orange. App icon: white W on orange square with rounded corners.
 
 ---
 
-## UI/UX Design System
+## Design System
 
-### Color Palette
+### Color Tokens
 
-#### Primary Colors
-- **Lagos Green**: `#2ECC71` - Primary actions, app icon, highlights
-- **Vibrant Purple**: `#6C63FF` - Secondary actions, accents
-- **Soft White**: `#F7F7F7` - Backgrounds, cards
+```typescript
+// client/src/theme/colors.ts
+LightColors = {
+  bg:              '#F8F7F5',   // warm white — main backgrounds
+  surface:         '#FFFFFF',   // cards, inputs
+  surfaceSecondary:'#F2F1EF',   // chips, field backgrounds
+  accent:          '#E8541A',   // danfo orange — primary CTAs, focus states
+  accentSubtle:    '#FDF0EA',   // fare highlight box, logo glow
+  textPrimary:     '#111111',
+  textSecondary:   '#6B6B6B',
+  textMuted:       '#9E9E9E',   // placeholders, icons
+  textOnAccent:    '#FFFFFF',
+  divider:         '#E5E5E5',
+  success:         '#2D7A4F',
+  successSubtle:   '#EBF8F1',
+  warning:         '#C8790A',
+  warningSubtle:   '#FEF5E7',
+  error:           '#C0392B',
+  errorSubtle:     '#FDEDEC',
+  transportDanfo:  '#F5C518',   // yellow
+  transportBRT:    '#1A5BDB',   // blue
+  transportKeke:   '#2D7A4F',   // green
+  transportOkada:  '#D93025',   // red
+  scrim:           'rgba(0,0,0,0.4)',
+}
 
-#### Accent Colors
-- **Okada Orange**: `#FFA726` - Warnings, special routes, alerts
-- **Deep Charcoal**: `#222222` - Primary text, headers
+DarkColors = {
+  bg:              '#111318',
+  surface:         '#1C1C1E',
+  accent:          '#FF6B35',   // brighter orange for dark bg
+  // ... matching semantic tokens
+}
+```
 
-#### Status Colors
-- **Success**: `#2ECC71` (Lagos Green)
-- **Warning**: `#FFA726` (Okada Orange)
-- **Error**: `#E74C3C`
-- **Info**: `#3498DB`
+Always reference `LightColors` / `DarkColors` directly or via `useAppTheme().tokens`. Never hardcode hex strings in `StyleSheet.create()`.
 
 ### Typography
 
-#### Primary Fonts
-- **Poppins** (Primary): Body text, buttons, labels
-  - Regular: 400
-  - Medium: 500
-  - Semi-Bold: 600
-  - Bold: 700
+Font: **DM Sans** (loaded via Expo)
 
-- **Nunito Sans** (Alternative Primary): Secondary text
-  - Regular: 400
-  - Semi-Bold: 600
-  - Bold: 700
+```typescript
+// client/src/theme/typography.ts
+Typography = {
+  xs: 10,  sm: 12,  md: 14,  lg: 16,  xl: 20,  xxl: 24,  hero: 32,
+  regular: '400',  medium: '500',  semibold: '600',  bold: '700',
+}
+```
 
-#### Display Fonts
-- **Raleway Bold**: Headings, hero text, display elements
+### Spacing & Shape
 
-#### Font Sizes
-- **Display Large**: 32px (Raleway Bold)
-- **Display Medium**: 24px (Raleway Bold)
-- **Heading 1**: 20px (Poppins Bold)
-- **Heading 2**: 18px (Poppins Semi-Bold)
-- **Body Large**: 16px (Poppins Regular)
-- **Body**: 14px (Poppins Regular)
-- **Caption**: 12px (Poppins Regular)
-- **Small**: 10px (Poppins Regular)
+- **Grid**: 4pt base (4, 8, 12, 16, 20, 24, 32, 40, 48)
+- **Card radius**: 12–20px
+- **Pill radius**: 999
+- **Touch target minimum**: 44pt (enforced via `hitSlop` on icon buttons)
+- **Style**: Flat — zero elevation on content cards, color alone creates hierarchy
 
-### Spacing & Layout
+### Transport Mode Colors
 
-#### Spacing Scale
-- **xs**: 4px
-- **sm**: 8px
-- **md**: 16px
-- **lg**: 24px
-- **xl**: 32px
-- **xxl**: 48px
-
-#### Border Radius
-- **Small**: 8px (buttons, small cards)
-- **Medium**: 12px (cards, inputs)
-- **Large**: 16px (modal, containers)
-- **Round**: 50% (avatars, icons)
-
-#### Shadows
-- **Card Shadow**: `0 2px 8px rgba(0, 0, 0, 0.1)`
-- **Elevated Shadow**: `0 4px 16px rgba(0, 0, 0, 0.15)`
-- **Button Shadow**: `0 2px 4px rgba(46, 204, 113, 0.3)`
+| Mode | Background | Text |
+|---|---|---|
+| Danfo | `#F5C518` | `#111111` |
+| BRT | `#1A5BDB` | `#FFFFFF` |
+| Keke | `#2D7A4F` | `#FFFFFF` |
+| Okada | `#D93025` | `#FFFFFF` |
 
 ---
 
-## Wireframes
+## Screen Wireframes
 
-### 1. Home Screen (Map View)
+### 1. Home Screen (Search-First)
 
 ```
 ┌─────────────────────────────────────┐
-│  [☰]  WakaWay          [🔔] [👤]   │  ← Header
+│  WAKAWAY          Lagos transit  [U] │  ← wordmark + avatar btn
 ├─────────────────────────────────────┤
 │                                     │
-│                                     │
-│          [📍 Current Location]      │  ← Map View
-│                                     │
-│                                     │
-│              🗺️                     │
-│                                     │
-│                                     │
-│         [📍 Destination]            │
+│  ┌─────────────────────────────┐    │  ← search bar (56px, orange pin)
+│  │ 📍 Where are you going?  ⇅ │    │
+│  └─────────────────────────────┘    │
+│  ○ From: Current location           │  ← GPS origin chip
 │                                     │
 ├─────────────────────────────────────┤
-│  Where you dey go?                  │  ← Search Bar
-│  ┌─────────────────────────────┐   │
-│  │ 🔍 Search destination...    │   │
-│  └─────────────────────────────┘   │
+│  POPULAR ROUTES                     │  ← 11px/600, letter-spacing 0.9
 │                                     │
-│  [🚌] Buses  [🏍️] Okada  [🛺] Keke │  ← Transport Filters
-│  [🚶] Walk                          │
-├─────────────────────────────────────┤
-│  Suggested Routes                   │
-│  ┌─────────────────────────────────┐│
-│  │ 🚌 Bus → 🛺 Keke → 🚶 Walk     ││  ← Route Card 1
-│  │ 45 mins  •  ₦250                ││
-│  └─────────────────────────────────┘│
-│  ┌─────────────────────────────────┐│
-│  │ 🏍️ Okada → 🚶 Walk             ││  ← Route Card 2
-│  │ 30 mins  •  ₦150                ││
-│  └─────────────────────────────────┘│
+│  ┌─────────────────────────────┐    │
+│  │ Ojuelegba → CMS      45min  │    │  ← route row card
+│  │ ₦400–₦600          [DANFO][BRT]│  │
+│  └─────────────────────────────┘    │
+│  ┌─────────────────────────────┐    │
+│  │ Ikeja → Victoria Island 70m │    │
+│  │ ₦600–₦900          [BRT][KEKE]│ │
+│  └─────────────────────────────┘    │
+│  … (6 routes total, FlatList)       │
 └─────────────────────────────────────┘
 ```
 
-### 2. Route Details Screen
+### 2. Search Overlay (slides over Home)
 
 ```
 ┌─────────────────────────────────────┐
-│  [←] Route Details                  │  ← Header
+│  ← [← search input          ✕]     │  ← back + input row
 ├─────────────────────────────────────┤
 │                                     │
-│  Current Location → Destination     │  ← Route Summary
-│  30 mins  •  ₦150                   │
+│  RECENT                             │
+│  🕐  Lekki Phase 1                  │
+│      Lekki, Lagos                   │
+│  🕐  Oshodi                         │
+│      Oshodi, Lagos                  │
 │                                     │
+│  [empty state when no recents]      │
+│       🚌                            │
+│    Where to?                        │
+│  Type a place — e.g. "Lekki"        │
+└─────────────────────────────────────┘
+  Animates in: translateY 16→0 + opacity 0→1 (220ms, Easing.out cubic)
+  Animates out: opacity 1→0 (160ms, Easing.in cubic)
+```
+
+### 3. Route Detail Screen
+
+```
+┌─────────────────────────────────────┐
+│  [route map]                    [←] │
 ├─────────────────────────────────────┤
-│  Step-by-step Directions            │
+│  Route Options              (cards) │
 │                                     │
-│  ┌─────────────────────────────┐   │
-│  │ 1. Walk to Bus Stop         │   │  ← Step 1
-│  │    5 mins • 0.2 km          │   │
-│  │    → Turn right on Main St  │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ 2. Take Bus #47             │   │  ← Step 2
-│  │    15 mins • ₦100           │   │
-│  │    → Get off at Oshodi      │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ 3. Walk to Destination      │   │  ← Step 3
-│  │    10 mins • 0.5 km         │   │
-│  │    → Continue straight      │   │
-│  └─────────────────────────────┘   │
-│                                     │
-├─────────────────────────────────────┤
-│  [📍] View on Map  [⚠️] Report Issue│  ← Actions
+│  ┌────────────────────────────────┐ │
+│  │  ₦400–600           [EASY]     │ │  ← fare dominant (22px/700 orange)
+│  │  ─────────────────────────     │ │
+│  │  [DANFO]──●──[BRT]──●──[WALK] │ │  ← transport chain
+│  │                                 │ │
+│  │  45 min · 12 km                 │ │
+│  │                                 │ │
+│  │  ▸ Walk 400m to Ojuelegba park  │ │  ← leg timeline
+│  │  ▸ "Enter danfo wey dey go CMS" │ │  ← pidgin instruction
+│  │  ▸ Board BRT at Oshodi          │ │
+│  │                                 │ │
+│  │  [START JOURNEY]                │ │  ← only on selected card
+│  └────────────────────────────────┘ │
 └─────────────────────────────────────┘
 ```
 
-### 3. Search Screen
+### 4. Onboarding (3 slides, dark background)
 
 ```
 ┌─────────────────────────────────────┐
-│  [←] Search Destination             │  ← Header
+│  Skip                    1 / 3      │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │     [ring illustration]     │    │  ← per-slide accent color
+│  │          🚌                  │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  [NAVIGATION]                       │  ← accent-color tag
+│  Lagos in                           │
+│  Your Pocket                        │
+│                                     │
+│  Smart multi-modal routes…          │
+│                                     │
+│  🚌 Danfo · Keke · Okada · BRT      │
+│  💰 See estimated fares             │
+│  📴 Works offline                   │
+│                                     │
 ├─────────────────────────────────────┤
-│  ┌─────────────────────────────┐   │
-│  │ 🔍 Lagos Island...          │   │  ← Search Input
-│  └─────────────────────────────┘   │
+│  [███████──────────]                │  ← progress bar
+│  [Continue →]                       │  ← accent-colored CTA
+└─────────────────────────────────────┘
+  Background: #0F172A (dark navy — intentional for dramatic intro)
+  Slide accents: slide 1 green · slide 2 blue · slide 3 amber
+```
+
+### 5. Login / Signup
+
+```
+┌─────────────────────────────────────┐
+│  #F8F7F5 warm white background      │
 │                                     │
-│  Recent Searches                    │  ← Section
-│  ┌─────────────────────────────┐   │
-│  │ 📍 Ikeja City Mall          │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ 📍 Victoria Island          │   │
-│  └─────────────────────────────┘   │
+│           [orange logo ring]        │
+│              WakaWay                │
+│         Move Smart. Move Local.     │
 │                                     │
-│  Popular Destinations               │  ← Section
-│  ┌─────────────────────────────┐   │
-│  │ 🏛️ National Museum Lagos    │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ 🛒 Shoprite Ikeja           │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ 🏥 Lagos University Hospital│   │
-│  └─────────────────────────────┘   │
+│  ┌────────────────────────────────┐ │  ← white card, subtle shadow
+│  │  Sign In                        │ │
+│  │  ┌──────────────────────────┐  │ │
+│  │  │ ✉️  Email               │  │ │  ← focus → orange border
+│  │  └──────────────────────────┘  │ │
+│  │  ┌──────────────────────────┐  │ │
+│  │  │ 🔒  Password         👁  │  │ │
+│  │  └──────────────────────────┘  │ │
+│  │  [        Sign In         ]    │ │  ← orange button
+│  │  Forgot password?              │ │
+│  └────────────────────────────────┘ │
+│  Don't have an account? Sign Up     │
 └─────────────────────────────────────┘
 ```
 
-### 4. Route Report Screen
+### 6. Transport Mode Selector (bottom sheet)
 
 ```
-┌─────────────────────────────────────┐
-│  [←] Report Route/Update            │  ← Header
-├─────────────────────────────────────┤
+┌─────────────────────────────────────┐  ← spring in from bottom
+│  ▬                                  │  ← drag handle
+│  What transport dey near you?       │
+│  Select what's available…           │
 │                                     │
-│  What you want report?              │  ← Question
+│  ┌──────┐ ┌──────┐ ┌──────┐        │
+│  │ 🛺   │ │ 🚌   │ │ 🏍   │        │  ← 3-column grid
+│  │ Keke │ │Danfo │ │Okada │        │
+│  └──────┘ └──────┘ └──────┘        │
+│  ┌──────┐ ┌──────┐                 │
+│  │ 🚍   │ │ 🚶   │                 │
+│  │  BRT │ │ Walk │                 │
+│  └──────┘ └──────┘                 │
 │                                     │
-│  ┌─────────────────────────────┐   │
-│  │ [ ] Route no dey work       │   │  ← Options
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ [ ] Fare don change         │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ [ ] New route available     │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ [ ] Stop location wrong     │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  Additional Details                 │
-│  ┌─────────────────────────────┐   │
-│  │ Tell us more...             │   │  ← Text Input
-│  │                             │   │
-│  │                             │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  Updated Fare (if applicable)       │
-│  ┌─────────────────────────────┐   │
-│  │ ₦  [Enter new fare]         │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│         [Submit Report]             │  ← Button
-└─────────────────────────────────────┘
-```
-
-### 5. Profile/Settings Screen
-
-```
-┌─────────────────────────────────────┐
-│  [←] Profile                        │  ← Header
-├─────────────────────────────────────┤
-│                                     │
-│           👤                        │  ← Avatar
-│        Your Name                    │
-│     user@example.com                │
-│                                     │
-├─────────────────────────────────────┤
-│  My Activity                        │  ← Section
-│  ┌─────────────────────────────┐   │
-│  │ 📍 Saved Places             │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ 🗺️ Route History            │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ 📝 My Reports               │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  Settings                           │  ← Section
-│  ┌─────────────────────────────┐   │
-│  │ 🔔 Notifications            │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ 📍 Location Services        │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ 🌍 Language (Pidgin/English)│   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  About                              │  ← Section
-│  ┌─────────────────────────────┐   │
-│  │ 📖 Help & Support           │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ ℹ️ About WakaWay            │   │
-│  └─────────────────────────────┘   │
+│            Cancel                   │
 └─────────────────────────────────────┘
 ```
 
 ---
 
-## Screen Mockups
+## Component Patterns
 
-### Key UI Components
+### Fare Display Rule
+Fare is always the dominant visual element on a route card:
+- Font size: 22px / weight 700 / color: `accent`
+- Placed in `accentSubtle` box at top-left of card
 
-#### 1. Transport Mode Icons
-- **Bus (Danfo)**: 🚌 Green/Yellow bus icon
-- **Okada**: 🏍️ Orange motorcycle icon
-- **Keke**: 🛺 Yellow tricycle icon
-- **Walk**: 🚶 Blue walking icon
+### Difficulty Chip
+Derived from transit leg count — not stored:
+- `EASY` (≤2 legs) — `success` green
+- `MODERATE` (3 legs) — `warning` amber
+- `COMPLEX` (4+ legs) — `error` red
 
-#### 2. Route Card Component
-```
-┌─────────────────────────────────────────┐
-│ 🚌 Bus → 🛺 Keke → 🚶 Walk              │  Transport modes
-│                                         │
-│ ⏱️ 45 mins  •  💰 ₦250                 │  Time & Fare
-│ 📍 2.3 km total distance                │  Distance
-│                                         │
-│ [View Details] [🔗 Share]               │  Actions
-└─────────────────────────────────────────┘
-```
-
-#### 3. Step-by-Step Instruction Card
-```
-┌─────────────────────────────────────────┐
-│ 1️⃣  Walk to Bus Stop                   │  Step number & title
-│                                         │
-│ ⏱️ 5 mins  •  📍 0.2 km                │  Duration & distance
-│                                         │
-│ → Turn right on Main Street             │  Instructions
-│ → Continue for 200m                     │
-│ → Bus stop on your left                 │
-│                                         │
-│ [📍 Show on Map]                        │  Action
-└─────────────────────────────────────────┘
+### FlatList Scroll Config
+Every `FlatList` uses:
+```tsx
+decelerationRate="normal"
+overScrollMode="never"
+showsVerticalScrollIndicator={false}
+keyboardShouldPersistTaps="handled"
 ```
 
-#### 4. Fare Breakdown Card
+### Animated Overlay Convention
 ```
-┌─────────────────────────────────────────┐
-│ 💰 Fare Breakdown                       │
-│                                         │
-│ Bus #47:            ₦100                │
-│ Keke:               ₦100                │
-│ Walk:               ₦0                  │
-│ ───────────────────────────             │
-│ Total:              ₦200                │
-│                                         │
-│ *Fares are estimates and may vary       │
-└─────────────────────────────────────────┘
+Enter: Easing.out(Easing.cubic), 220ms
+Exit:  Easing.in(Easing.cubic),  160ms
+Bottom sheet open: Animated.spring (friction 8, tension 50)
+Bottom sheet close: Easing.in(Easing.cubic), 220ms
 ```
 
 ---
 
 ## User Flows
 
-### Flow 1: Basic Route Search
-
+### Flow 1: Route Search
 ```
-[Home Screen]
-    ↓
-[User taps search bar]
-    ↓
-[Search Screen]
-    ↓
-[User enters destination]
-    ↓
-[Search Results / Location Selection]
-    ↓
-[Route Calculation Loading]
-    ↓
-[Route Results Screen]
-    ↓
-[User selects route]
-    ↓
-[Route Details Screen]
-    ↓
-[Navigation/Map View]
+Home → tap search bar → search overlay slides in
+→ type destination → select suggestion → TransportModeSelector sheet
+→ select mode → route loading overlay → RouteDetail screen
 ```
 
-### Flow 2: Report Route/Fare Update
-
+### Flow 2: Popular Route
 ```
-[Route Details Screen]
-    ↓
-[User taps "Report Issue"]
-    ↓
-[Report Screen - Select Issue Type]
-    ↓
-[User selects issue (e.g., "Fare don change")]
-    ↓
-[User enters details & new fare]
-    ↓
-[User submits report]
-    ↓
-[Success confirmation]
-    ↓
-[Return to Route Details]
+Home → tap popular route row → search overlay opens with destination pre-filled
+→ same flow as above
 ```
 
-### Flow 3: Filter by Transport Mode
-
+### Flow 3: Report Issue
 ```
-[Home Screen]
-    ↓
-[User taps transport filter (e.g., "Okada only")]
-    ↓
-[Filter applied - routes recalculated]
-    ↓
-[Route results filtered]
-    ↓
-[User selects filtered route]
-    ↓
-[Route Details Screen]
-```
-
-### Flow 4: View Saved Places
-
-```
-[Profile Screen]
-    ↓
-[User taps "Saved Places"]
-    ↓
-[Saved Places List]
-    ↓
-[User selects place]
-    ↓
-[Route search with saved place as destination]
-    ↓
-[Route Results Screen]
+RouteDetail → contribution button → ContributionScreen (modal)
+→ select issue type → fill details → submit → dismiss modal
 ```
 
 ---
 
 ## Design Principles
 
-### 1. Cultural Sensitivity
-- Use Nigerian Pidgin English appropriately (optional toggle)
-- Understand local transport terminology (danfo, okada, keke)
-- Respect cultural context and urban navigation challenges
-
-### 2. Accessibility
-- High contrast for outdoor visibility
-- Large tap targets (minimum 44x44px)
-- Clear typography hierarchy
-- Voice navigation support (future)
-
-### 3. Performance
-- Fast initial load (< 3 seconds)
-- Smooth map interactions (60fps)
-- Offline route caching (future)
-- Efficient data usage
-
-### 4. Trust & Safety
-- Clear fare estimates with disclaimers
-- User reports and verification system
-- Safe route indicators (future)
-- Emergency contacts integration (future)
-
----
-
-## Next Steps for Visual Design
-
-1. **High-Fidelity Mockups**: Create detailed Figma/Sketch designs
-2. **Component Library**: Build reusable React Native components
-3. **Prototype**: Interactive prototype for user testing
-4. **Icon Set**: Custom icons for transport modes
-5. **Animation Guidelines**: Micro-interactions and transitions
-
+1. **Fare first** — fare is always the largest, most prominent element on any route card
+2. **Search ≤2 taps** — destination reachable in 2 taps from home
+3. **No map on home** — Home is search-first; map lives in RouteDetail and NavigationScreen
+4. **Pidgin welcome** — every route leg has a local pidgin instruction alongside the English one
+5. **Flat hierarchy** — color alone separates levels, no shadows on content cards
+6. **WCAG AA** — all text/background pairs meet 4.5:1 contrast in both light and dark mode

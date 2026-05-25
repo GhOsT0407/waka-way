@@ -14,8 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Colors } from '../theme/colors';
+import { LightColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
+
+const C = LightColors;
 
 function PressableButton({ onPress, disabled, style, children }: {
   onPress: () => void; disabled?: boolean; style?: any; children: React.ReactNode;
@@ -53,12 +55,12 @@ function FocusField({ icon, children, right }: {
 
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [Colors.border as string, Colors.blue as string],
+    outputRange: [C.divider, C.accent],
   });
 
   return (
     <Animated.View style={[styles.field, { borderColor, borderWidth: 1.5 }]}>
-      <Ionicons name={icon as any} size={18} color={focused ? Colors.blue : Colors.textTertiary} />
+      <Ionicons name={icon as any} size={18} color={focused ? C.accent : C.textMuted} />
       {React.Children.map(children, child =>
         React.isValidElement(child)
           ? React.cloneElement(child as React.ReactElement<any>, { onFocus: handleFocus, onBlur: handleBlur })
@@ -106,7 +108,7 @@ export default function SignupScreen({ navigation }: any) {
 
   const eyeBtn = (
     <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={Colors.textTertiary} />
+      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={C.textMuted} />
     </TouchableOpacity>
   );
 
@@ -115,13 +117,18 @@ export default function SignupScreen({ navigation }: any) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-          {/* Blue accent header */}
+          {/* Header with orange-accented brand mark */}
           <View style={styles.header}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-              <Ionicons name="chevron-back" size={24} color="#fff" />
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Login')} activeOpacity={0.7}>
+              <View style={styles.backCircle}>
+                <Ionicons name="chevron-back" size={20} color={C.textPrimary} />
+              </View>
             </TouchableOpacity>
-            <View style={styles.logoCircle}>
-              <Ionicons name="person-add-outline" size={36} color="#fff" />
+            <View style={styles.logoGlow} />
+            <View style={styles.logoRing}>
+              <View style={styles.logoInner}>
+                <Ionicons name="person-add-outline" size={30} color={C.accent} />
+              </View>
             </View>
             <Text style={styles.appName}>Join WakaWay</Text>
             <Text style={styles.tagline}>Create your account</Text>
@@ -134,7 +141,7 @@ export default function SignupScreen({ navigation }: any) {
             <FocusField icon="person-outline">
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Full Name" placeholderTextColor={Colors.textTertiary}
+                placeholder="Full Name" placeholderTextColor={C.textMuted}
                 value={name} onChangeText={setName}
                 autoCapitalize="words" autoCorrect={false} returnKeyType="next"
               />
@@ -143,7 +150,7 @@ export default function SignupScreen({ navigation }: any) {
             <FocusField icon="mail-outline">
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Email" placeholderTextColor={Colors.textTertiary}
+                placeholder="Email" placeholderTextColor={C.textMuted}
                 value={email} onChangeText={setEmail}
                 keyboardType="email-address" autoCapitalize="none" autoCorrect={false} returnKeyType="next"
               />
@@ -152,7 +159,7 @@ export default function SignupScreen({ navigation }: any) {
             <FocusField icon="lock-closed-outline" right={eyeBtn}>
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Password" placeholderTextColor={Colors.textTertiary}
+                placeholder="Password" placeholderTextColor={C.textMuted}
                 value={password} onChangeText={setPassword}
                 secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} returnKeyType="next"
               />
@@ -161,7 +168,7 @@ export default function SignupScreen({ navigation }: any) {
             <FocusField icon="lock-closed-outline">
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Confirm Password" placeholderTextColor={Colors.textTertiary}
+                placeholder="Confirm Password" placeholderTextColor={C.textMuted}
                 value={confirmPassword} onChangeText={setConfirmPassword}
                 secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false}
                 returnKeyType="done" onSubmitEditing={handleSignup}
@@ -188,50 +195,76 @@ export default function SignupScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.mapBackground },
+  container: { flex: 1, backgroundColor: C.bg },
   scroll: { flexGrow: 1, paddingBottom: 32 },
 
   header: {
     alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 52,
-    gap: 8,
-    backgroundColor: Colors.blueDeep,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingTop: 12,
+    paddingBottom: 36,
+    gap: 6,
+    backgroundColor: C.bg,
   },
   backBtn: {
     alignSelf: 'flex-start',
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  logoCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
+  backCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.surfaceSecondary,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: C.divider,
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
   },
-  appName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: '#fff', letterSpacing: -0.5 },
-  tagline: { fontSize: Typography.md, color: 'rgba(255,255,255,0.75)' },
+  logoGlow: {
+    position: 'absolute',
+    top: 44,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: C.accentSubtle,
+  },
+  logoRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(232,84,26,0.35)',
+    backgroundColor: 'rgba(232,84,26,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  logoInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: 'rgba(232,84,26,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: C.textPrimary, letterSpacing: -0.5 },
+  tagline: { fontSize: Typography.md, color: C.textSecondary },
 
   card: {
     marginHorizontal: 20,
-    marginTop: -20,
+    marginTop: 0,
     borderRadius: 20,
     padding: 20,
     gap: 14,
-    backgroundColor: Colors.sheetBg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    backgroundColor: C.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: C.divider,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 20 },
-      android: { elevation: 8 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12 },
+      android: { elevation: 3 },
     }),
   },
-  formHeading: { fontSize: Typography.xl, fontWeight: Typography.bold, marginBottom: 4, color: Colors.textPrimary },
+  formHeading: { fontSize: Typography.xl, fontWeight: Typography.bold, marginBottom: 4, color: C.textPrimary },
 
   field: {
     flexDirection: 'row',
@@ -240,13 +273,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 13,
     gap: 10,
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: C.surfaceSecondary,
   },
   fieldInput: {
     flex: 1,
     fontSize: Typography.lg,
     paddingVertical: 0,
-    color: Colors.textPrimary,
+    color: C.textPrimary,
   },
 
   primaryBtn: {
@@ -254,21 +287,21 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
     marginTop: 4,
-    backgroundColor: Colors.blue,
+    backgroundColor: C.accent,
     ...Platform.select({
-      ios: { shadowColor: Colors.blue, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.45, shadowRadius: 10 },
+      ios: { shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 },
       android: { elevation: 5 },
     }),
   },
-  primaryBtnText: { color: '#fff', fontSize: Typography.lg, fontWeight: Typography.semibold },
+  primaryBtnText: { color: C.textOnAccent, fontSize: Typography.lg, fontWeight: Typography.semibold },
 
   loginRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 28,
     paddingHorizontal: 20,
   },
-  loginPrompt: { fontSize: Typography.md, color: Colors.textSecondary },
-  loginLink: { fontSize: Typography.md, fontWeight: Typography.semibold, color: Colors.blue },
+  loginPrompt: { fontSize: Typography.md, color: C.textSecondary },
+  loginLink: { fontSize: Typography.md, fontWeight: Typography.semibold, color: C.accent },
 });

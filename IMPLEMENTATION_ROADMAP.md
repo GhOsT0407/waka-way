@@ -1,4 +1,4 @@
-# WakaWay - Implementation Roadmap
+# WakaWay — Implementation Roadmap
 
 ## Table of Contents
 1. [MVP Development Phases](#mvp-development-phases)
@@ -11,319 +11,200 @@
 
 ## MVP Development Phases
 
-### Phase 0: Project Setup (Week 1)
+### Phase 0: Project Setup ✅ COMPLETE
 
 #### Frontend Setup
-- [ ] Initialize Expo project
-- [ ] Install dependencies (React Navigation, Maps, Location)
-- [ ] Set up TypeScript configuration
-- [ ] Configure app.json with app details
-- [ ] Set up folder structure
-- [ ] Configure colors and typography constants
-- [ ] Create base components (Button, Input, Card)
+- [x] Initialize Expo project
+- [x] Install dependencies (React Navigation, Maps, Location)
+- [x] Set up TypeScript configuration
+- [x] Configure app.json with app details
+- [x] Set up folder structure
+- [x] Configure colors and typography constants (danfo orange design system, DM Sans)
+- [x] Create base components (Button, Input, Card)
 
 #### Backend Setup
-- [ ] Set up Django project
-- [ ] Install Django REST Framework
-- [ ] Install PostGIS and configure database
-- [ ] Set up CORS for mobile app
-- [ ] Create core app structure
-- [ ] Configure settings.py
-- [ ] Set up virtual environment
+- [x] Set up Django project
+- [x] Install Django REST Framework
+- [x] Set up SQLite (dev) / PostGIS fallback
+- [x] Set up CORS for mobile app
+- [x] Create core app structure
+- [x] Configure settings.py
+- [x] Set up virtual environment
 
 #### Infrastructure
-- [ ] Set up version control (Git)
-- [ ] Create development/staging environments
-- [ ] Set up API documentation (Swagger/OpenAPI)
-- [ ] Configure environment variables
-
-**Deliverables**:
-- ✅ Working Expo app (blank screen)
-- ✅ Running Django server
-- ✅ Database connection established
+- [x] Set up version control (Git)
+- [x] Configure environment variables (.env.example)
+- [x] Dockerfile + docker-compose.yml
 
 ---
 
-### Phase 1: Core Models & Database (Week 2)
+### Phase 1: Core Models & Database ✅ COMPLETE
 
 #### Backend
-- [ ] Create City model
-- [ ] Create TransportStop model
-- [ ] Create TransportRoute model
-- [ ] Create RouteSegment model
-- [ ] Create Fare model
-- [ ] Create RouteSuggestion model
-- [ ] Create RouteStep model
-- [ ] Create UserReport model
-- [ ] Create UserFavoritePlace model
-- [ ] Create UserRouteHistory model
-- [ ] Run migrations
-- [ ] Create Django admin interface
-- [ ] Set up database indexes
+- [x] City model
+- [x] TransportStop model
+- [x] TransportRoute model
+- [x] RouteSegment model
+- [x] Fare model
+- [x] RouteSuggestion model
+- [x] RouteStep model
+- [x] UserReport model (+ idempotency_key + soft delete via migration 0003)
+- [x] UserFavoritePlace model (+ soft delete via migration 0003)
+- [x] UserRouteHistory model
+- [x] Corridor model (migration 0002)
+- [x] CorridorStop model (migration 0002)
+- [x] StopConnection model (migration 0002)
+- [x] Run migrations (0001_initial, 0002_corridor_models, 0003_soft_deletes_and_idempotency)
+- [x] Django admin interface
+- [x] Database indexes
 
 #### Data Collection
-- [ ] Research Lagos transport routes
-- [ ] Collect stop locations (Ikeja, Victoria Island, Oshodi, etc.)
-- [ ] Collect route data (bus numbers, keke routes, okada areas)
-- [ ] Collect fare information
-- [ ] Create management command to import initial data
-- [ ] Import Lagos routes manually
+- [x] 29 Lagos stops encoded in smartRoutingService.ts (client-side)
+- [x] 8 corridors (C001–C008), 79 stops, 40+ connections in seed data
+- [x] Fare information and route data
+- [x] Management command for data seeding (`seed_lagos_corridors`)
 
-**Deliverables**:
-- ✅ Complete database schema
-- ✅ Admin interface for data management
-- ✅ Initial data for Lagos (50+ stops, 20+ routes)
+**Status**: 13 models, 3 migrations, full admin interface.
 
 ---
 
-### Phase 2: API Development (Week 3-4)
+### Phase 2: API Development ✅ PARTIAL
 
-#### API Endpoints
-- [ ] City endpoints (list, detail)
-- [ ] TransportStop endpoints (list, nearby search)
-- [ ] TransportRoute endpoints (list, detail)
-- [ ] Route search endpoint (POST /routes/search)
-- [ ] Route suggestion endpoints (detail, steps)
-- [ ] Fare endpoints (list, estimate)
-- [ ] UserReport endpoints (create, list, vote)
-- [ ] UserFavoritePlace endpoints (CRUD)
-- [ ] UserRouteHistory endpoints (list, create)
+#### API Endpoints — Implemented
+- [x] Corridor endpoints (`GET /api/v1/corridors/`, `/corridors/{id}/`)
+- [x] CorridorStop endpoints (`GET /api/v1/corridor-stops/`)
+- [x] StopConnection endpoints (`GET /api/v1/stop-connections/`)
+- [x] Health check (`GET /api/v1/health/`)
+
+#### API Endpoints — Planned (models exist, views partially implemented)
+- [ ] Route search (`POST /api/v1/routes/search/`)
+- [ ] Nearby stops (`GET /api/v1/stops/nearby/`)
+- [ ] User reports (`POST /api/v1/reports/`, upvote/downvote)
+- [ ] Favorites (`GET/POST /api/v1/favorites/`)
+- [ ] Route history (`GET /api/v1/history/`)
 
 #### Route Calculation Service
-- [ ] Basic route calculation algorithm
-- [ ] Multi-modal route combination
-- [ ] Distance calculation (walking, transit)
-- [ ] Time estimation
-- [ ] Fare calculation
-- [ ] Route optimization logic
+- [x] Client-side routing engine (`smartRoutingService.ts`) — 29 stops, no external API
+- [x] Multi-modal route combination (danfo, keke, okada, BRT, walk)
+- [x] Time estimation, fare calculation, route optimization
+- [x] Incident avoidance (`incidentService.ts`)
+- [x] Dynamic pricing (`pricingEngine.ts`) — peak hours, night rates
+- [ ] Server-side route calculation (routing/ app scaffolded, not complete)
 
-#### API Testing
-- [ ] Unit tests for serializers
-- [ ] Unit tests for views
-- [ ] Integration tests for route search
-- [ ] API endpoint documentation
-
-**Deliverables**:
-- ✅ Working REST API
-- ✅ Route search functionality
-- ✅ API documentation
-- ✅ Basic test suite
+**Status**: Corridor APIs live. Client-side routing engine fully functional. Server-side route search pending.
 
 ---
 
-### Phase 3: Frontend - Core Screens (Week 5-6)
+### Phase 3: Frontend — Core Screens ✅ COMPLETE
 
 #### Navigation Setup
-- [ ] Set up React Navigation
-- [ ] Create navigation stack
-- [ ] Create screen components structure
-- [ ] Set up navigation types
+- [x] React Navigation (native stack)
+- [x] Auth stack (Login, Signup)
+- [x] App stack (Home, Search, RouteDetail, Navigation, You, Contribution, Notifications, Preferences)
+- [x] Onboarding screen (outside NavigationContainer, AsyncStorage flag)
 
 #### Home Screen
-- [ ] Map view with user location
-- [ ] Search bar component
-- [ ] Transport filter buttons
-- [ ] Current location marker
-- [ ] Nearby stops display
-- [ ] Route results cards
+- [x] Search-first design (warm white `#F8F7F5` background, no map)
+- [x] Search bar component (56px, orange location pin)
+- [x] GPS origin chip
+- [x] Popular routes FlatList
+- [x] Search overlay (slides up with cubic easing)
 
 #### Search Screen
-- [ ] Search input with autocomplete
-- [ ] Recent searches display
-- [ ] Popular destinations list
-- [ ] Location selection
-- [ ] Search results display
+- [x] Search input with autocomplete
+- [x] Recent searches FlatList
+- [x] Places API integration (`placesService.ts`)
 
-#### Route Results Screen
-- [ ] Route card component
-- [ ] Multiple route options display
-- [ ] Route comparison
-- [ ] Route selection
+#### Route Detail Screen
+- [x] SmartRouteOptions component (fare-dominant cards)
+- [x] Difficulty chip (EASY / MODERATE / COMPLEX)
+- [x] Leg timeline with pidgin instructions
+- [x] Start Journey button → NavigationScreen
 
-#### Route Details Screen
-- [ ] Step-by-step instructions
-- [ ] Route map view
-- [ ] Fare breakdown
-- [ ] Route summary
-- [ ] Action buttons (Report, Share, Save)
+#### Navigation Screen
+- [x] Real-time GPS tracking
+- [x] Turn-by-turn RouteGuide component
+- [x] Route progress tracking
 
-**Deliverables**:
-- ✅ Core screens implemented
-- ✅ Navigation working
-- ✅ Basic UI components
-
----
-
-### Phase 4: Maps & Location (Week 7)
-
-#### Location Services
-- [ ] GPS location detection
-- [ ] Location permissions handling
-- [ ] Current location updates
-- [ ] Manual location entry
-
-#### Map Integration
-- [ ] Map view component (Google Maps / OSM)
-- [ ] Route polyline display
-- [ ] Stop markers
-- [ ] Current location marker
-- [ ] Destination marker
-- [ ] Map zoom/pan controls
-
-#### Geocoding
-- [ ] Address to coordinates (forward geocoding)
-- [ ] Coordinates to address (reverse geocoding)
-- [ ] Place search integration
-- [ ] Location autocomplete
-
-**Deliverables**:
-- ✅ Working map with route display
-- ✅ Location services integrated
-- ✅ Geocoding working
+#### Other Screens
+- [x] OnboardingScreen (3 slides, dark navy `#0F172A`, per-slide accent colors)
+- [x] LoginScreen (danfo orange, DM Sans, card form)
+- [x] SignupScreen (same pattern)
+- [x] ContributionScreen (report submission)
+- [x] NotificationsScreen
+- [x] YouScreen (profile, dark mode toggle)
 
 ---
 
-### Phase 5: Route Search Integration (Week 8)
+### Phase 4: Maps & Location ✅ IMPLEMENTED
 
-#### API Integration
-- [ ] API client setup (axios)
-- [ ] Route search API call
-- [ ] Error handling
-- [ ] Loading states
-- [ ] Response parsing
-
-#### Route Display
-- [ ] Route visualization on map
-- [ ] Step-by-step instructions
-- [ ] Transport mode icons
-- [ ] Time and fare display
-- [ ] Route selection logic
-
-#### Route Optimization
-- [ ] Sort routes by time/fare/distance
-- [ ] Filter routes by transport mode
-- [ ] Route caching (AsyncStorage)
-
-**Deliverables**:
-- ✅ End-to-end route search working
-- ✅ Routes displayed on map
-- ✅ Step-by-step navigation ready
+- [x] GPS location detection (`locationService.ts`, expo-location)
+- [x] Location permissions handling
+- [x] Reverse geocoding
+- [x] Google Places / geocoding integration (`placesService.ts`, `googleDirectionsService.ts`)
+- [x] Map view component (`CommunityMapView`, `AlertMarkers`, `AlertBottomSheet`)
+- [x] Geofencing and proximity alerts (`geofencingService.ts`, `proximityAlertService.ts`)
+- [x] Offline map tile caching (`offlineMap.ts`)
 
 ---
 
-### Phase 6: User Reports (Week 9)
+### Phase 5: Route Search Integration ✅ COMPLETE (client-side)
 
-#### Report Flow
-- [ ] Report screen UI
-- [ ] Report type selection
-- [ ] Report form fields
-- [ ] Location picker for reports
-- [ ] Fare input for fare updates
-
-#### API Integration
-- [ ] Submit report API call
-- [ ] Report validation
-- [ ] Success/error handling
-- [ ] Report status display
-
-#### User Feedback
-- [ ] Confirmation messages
-- [ ] Report history (future)
-- [ ] Report upvote/downvote (future)
-
-**Deliverables**:
-- ✅ User reporting functionality
-- ✅ Report submission working
-- ✅ User feedback implemented
+- [x] Axios API client (`api.ts`)
+- [x] Client-side routing engine with 29 Lagos stops (no network call when `USE_MOCK_DATA=true`)
+- [x] Route visualization on map
+- [x] Step-by-step instructions (English + pidgin)
+- [x] Transport mode icons and fare display
+- [x] Route sort/filter
+- [x] Route auto-correction (`routeAutoFixer.ts`)
+- [x] Route validation (`routeValidator.ts`)
 
 ---
 
-### Phase 7: Polish & UX (Week 10)
+### Phase 6: User Reports ✅ IMPLEMENTED
 
-#### UI/UX Improvements
-- [ ] Loading states and skeletons
-- [ ] Error messages and handling
-- [ ] Empty states
-- [ ] Animations and transitions
-- [ ] Onboarding screens
-- [ ] Help & tutorial
-
-#### Performance Optimization
-- [ ] Image optimization
-- [ ] API response caching
-- [ ] Route calculation optimization
-- [ ] Map rendering optimization
-- [ ] Bundle size optimization
-
-#### Accessibility
-- [ ] Screen reader support
-- [ ] High contrast mode
-- [ ] Large text support
-- [ ] Keyboard navigation
-
-**Deliverables**:
-- ✅ Polished UI/UX
-- ✅ Optimized performance
-- ✅ Accessibility improvements
+- [x] ContributionScreen UI (report type selection, form fields)
+- [x] `reportService.ts` — submit report with idempotency key
+- [x] Confirmation and error handling
+- [x] Soft delete support on UserReport (migration 0003)
 
 ---
 
-### Phase 8: Testing & QA (Week 11)
+### Phase 7: Polish & UX ✅ COMPLETE
 
-#### Testing
+- [x] Danfo orange design system (LightColors / DarkColors token system)
+- [x] DM Sans typography (xs=10 → hero=32)
+- [x] Flat design — zero card elevation, color creates hierarchy
+- [x] Overlay animations: `Easing.out(Easing.cubic)` 220ms enter / `Easing.in(Easing.cubic)` 160ms exit
+- [x] Bottom sheet: `Animated.spring` (friction 8, tension 50)
+- [x] FlatList scroll: `decelerationRate="normal"` + `overScrollMode="never"`
+- [x] Onboarding screen (3 slides)
+- [x] Dark mode toggle (ThemeContext)
+- [x] Error boundary
+- [x] Offline banner
+- [x] Toast notifications
+
+---
+
+### Phase 8: Testing & QA ⏳ PENDING
+
 - [ ] Unit tests for components
-- [ ] Integration tests for flows
+- [ ] Integration tests for route search flow
 - [ ] End-to-end tests
-- [ ] API tests
-- [ ] Performance tests
+- [ ] API tests (corridor endpoints)
 - [ ] Device testing (iOS, Android)
-
-#### Bug Fixes
-- [ ] Fix critical bugs
-- [ ] Fix UI/UX issues
-- [ ] Fix performance issues
-- [ ] Fix accessibility issues
-
-#### User Testing
-- [ ] Beta testing with small group
-- [ ] Collect feedback
-- [ ] Iterate on feedback
-- [ ] Refine routes and fares
-
-**Deliverables**:
-- ✅ Tested app
-- ✅ Bug fixes
-- ✅ User feedback incorporated
+- [ ] Bug fixes from testing
 
 ---
 
-### Phase 9: Launch Preparation (Week 12)
+### Phase 9: Launch Preparation ⏳ PENDING
 
-#### Final Polish
-- [ ] App icon and splash screen
+- [ ] App icon and splash screen finalization
 - [ ] App store screenshots
-- [ ] App description
-- [ ] Privacy policy
-- [ ] Terms of service
-- [ ] App store listing
-
-#### Backend Deployment
-- [ ] Production database setup
-- [ ] API deployment
-- [ ] Environment configuration
-- [ ] Monitoring setup
-- [ ] Backup strategy
-
-#### App Distribution
-- [ ] Build production app (Expo)
-- [ ] Submit to Play Store
-- [ ] Submit to App Store
-- [ ] Prepare for launch
-
-**Deliverables**:
-- ✅ Production-ready app
-- ✅ Deployed backend
-- ✅ App store listings
+- [ ] Privacy policy / Terms of service
+- [ ] Production database setup (PostgreSQL + PostGIS)
+- [ ] Backend deployment (Gunicorn + Docker)
+- [ ] Play Store / App Store submission
 
 ---
 
@@ -342,7 +223,8 @@
     "expo-location": "~19.0.7",
     "react-native-maps": "^1.26.18",
     "axios": "^1.13.2",
-    "@react-native-async-storage/async-storage": "^2.1.0"
+    "@react-native-async-storage/async-storage": "^2.1.0",
+    "@expo/vector-icons": "^14.0.4"
   }
 }
 ```
@@ -350,20 +232,27 @@
 ### Backend Dependencies
 
 ```txt
-Django==5.2.8
+Django==5.2
 djangorestframework==3.15.2
 django-cors-headers==4.6.0
 psycopg2-binary==2.9.10
 django-environ==0.11.2
 ```
 
-### Database Setup
+### Backend Run (Development)
 
 ```bash
-# Install PostGIS
-sudo apt-get install postgresql-postgis
+cd server/backend
+python manage.py migrate
+python manage.py seed_lagos_corridors --file waka_way_corridors.json --city Lagos
+python manage.py runserver
+```
 
-# Create database
+### Database Setup (Production)
+
+```bash
+# PostgreSQL + PostGIS
+sudo apt-get install postgresql-postgis
 createdb wakaway_db
 psql -d wakaway_db -c "CREATE EXTENSION postgis;"
 ```
@@ -372,29 +261,31 @@ psql -d wakaway_db -c "CREATE EXTENSION postgis;"
 
 ## Development Checklist
 
-### MVP Features
-- [x] Design documentation
-- [x] Database schema
-- [x] Code structure
-- [ ] GPS location detection
-- [ ] Destination search
-- [ ] Route suggestions
-- [ ] Step-by-step instructions
-- [ ] Fare estimates
-- [ ] Travel time estimates
-- [ ] Map visualization
-- [ ] User reports
-- [ ] Route sharing (basic)
+### MVP Features — Current Status
 
-### Future Features (Phase 2)
-- [ ] Real-time navigation
-- [ ] Offline mode
-- [ ] User authentication
-- [ ] Favorite places
-- [ ] Route history
+- [x] Design documentation (danfo orange system)
+- [x] Database schema (13 models, 3 migrations)
+- [x] Code structure (10 screens, 30+ components/services)
+- [x] GPS location detection
+- [x] Destination search (autocomplete)
+- [x] Route suggestions (client-side, 29 stops)
+- [x] Step-by-step instructions (English + pidgin)
+- [x] Fare estimates
+- [x] Travel time estimates
+- [x] Map visualization (NavigationScreen + CommunityMapView)
+- [x] User reports (ContributionScreen)
+- [x] Dark mode
+- [x] Offline banner
+
+### Future Features
+
+- [ ] Server-side route search API
+- [ ] Real-time navigation improvements
+- [ ] User authentication (backend — mock auth works in dev)
+- [ ] Favorite places (backend API)
+- [ ] Route history (backend API)
 - [ ] Payment integration
-- [ ] Driver ratings
-- [ ] Emergency contacts
+- [ ] Multi-city support (Abuja, Port Harcourt)
 
 ---
 
@@ -402,72 +293,46 @@ psql -d wakaway_db -c "CREATE EXTENSION postgis;"
 
 ### Unit Tests
 - Component rendering
-- Utility functions
+- Utility functions (formatters, routing engine)
 - API serializers
 - Route calculation logic
 
 ### Integration Tests
-- API endpoints
+- Corridor API endpoints
 - Route search flow
 - Report submission flow
-- Location services
 
 ### End-to-End Tests
-- Complete user flows
-- Route search → navigation
-- Report submission → verification
+- Route search → route detail → navigation
+- Onboarding → login → home
 
 ### Manual Testing
 - Device testing (iOS, Android)
-- Network conditions (3G, 4G, WiFi)
-- Location accuracy
-- Map performance
+- Network conditions (3G, 4G, WiFi, offline)
+- Dark mode on both platforms
 
 ---
 
 ## Deployment Plan
 
 ### Backend Deployment
-1. **Hosting**: AWS EC2 / DigitalOcean / Heroku
-2. **Database**: AWS RDS (PostgreSQL + PostGIS) / Managed Postgres
-3. **API**: Django REST Framework on Gunicorn
-4. **Static Files**: AWS S3 / CloudFront
-5. **Monitoring**: Sentry / New Relic
+1. **Hosting**: AWS EC2 / DigitalOcean / Render
+2. **Database**: PostgreSQL + PostGIS (managed)
+3. **API**: Django + Gunicorn (Dockerfile included)
+4. **Static Files**: AWS S3 / WhiteNoise
+5. **Monitoring**: Sentry
 
 ### Frontend Deployment
-1. **Build**: Expo Build Service
-2. **Distribution**: 
+1. **Build**: Expo EAS Build
+2. **Distribution**:
    - Google Play Store (Android)
    - Apple App Store (iOS)
    - Expo Go (development/testing)
 
 ### CI/CD
-1. **GitHub Actions** for automated testing
-2. **Automated deployment** on merge to main
-3. **Environment management** (dev, staging, prod)
-
----
-
-## Post-Launch
-
-### Monitoring
-- App crash reports
-- API error tracking
-- User analytics
-- Route accuracy metrics
-- User feedback
-
-### Iteration
-- Weekly sprints for improvements
-- Monthly feature releases
-- Quarterly major updates
-- User-driven feature development
-
-### Expansion
-- Add more cities (Abuja, Port Harcourt)
-- Expand route coverage
-- Add new transport modes
-- Integrate with other services
+1. GitHub Actions for automated testing
+2. Automated deployment on merge to main
+3. Environment management (dev → staging → prod)
 
 ---
 
@@ -489,31 +354,3 @@ psql -d wakaway_db -c "CREATE EXTENSION postgis;"
 - App downloads
 - User retention (30-day)
 - User satisfaction (ratings)
-- Revenue (future)
-
----
-
-## Timeline Summary
-
-- **Weeks 1-2**: Setup & Database
-- **Weeks 3-4**: API Development
-- **Weeks 5-6**: Core Screens
-- **Week 7**: Maps & Location
-- **Week 8**: Route Search Integration
-- **Week 9**: User Reports
-- **Week 10**: Polish & UX
-- **Week 11**: Testing & QA
-- **Week 12**: Launch Preparation
-
-**Total MVP Development Time: ~12 weeks**
-
----
-
-## Next Steps
-
-1. Review and approve design documentation
-2. Set up development environments
-3. Begin Phase 0: Project Setup
-4. Start data collection for Lagos routes
-5. Begin MVP development
-

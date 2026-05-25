@@ -1,609 +1,418 @@
-/**
- * Smart Route Options Component
- * 
- * Displays route options with:
- * - Visual journey breakdown (leg by leg)
- * - Price comparison
- * - Recommendations
- * - User choice when prices are similar
- */
-
 import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
-  Platform,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { RouteOption, RouteLeg, SmartRouteResult } from '../services/smartRoutingService';
 import { useAppTheme } from '../context/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
 
+// ─── Props ────────────────────────────────────────────────────────────────────
 interface SmartRouteOptionsProps {
   routeResult: SmartRouteResult;
   onSelectOption: (option: RouteOption) => void;
   onStartJourney: (option: RouteOption) => void;
 }
 
-// Individual leg display
-const LegItem: React.FC<{ leg: RouteLeg; isLast: boolean; theme: any }> = ({ leg, isLast, theme }) => {
-  const getModeColor = (mode: string) => {
-    switch (mode) {
-      case 'walk': return '#4CAF50';
-      case 'keke': return '#FF9800';
-      case 'okada': return '#F44336';
-      case 'danfo': return '#2196F3';
-      case 'brt': return '#9C27B0';
-      case 'ferry': return '#00BCD4';
-      case 'rail': return '#E91E63';
-      default: return '#757575';
-    }
-  };
+// ─── Mode config ──────────────────────────────────────────────────────────────
+const MODE_CONFIG: Record<string, { bg: string; text: string; label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  danfo: { bg: '#F5C518', text: '#111111', label: 'Danfo',  icon: 'bus-outline'      },
+  brt:   { bg: '#1A5BDB', text: '#FFFFFF', label: 'BRT',    icon: 'train-outline'    },
+  keke:  { bg: '#2D7A4F', text: '#FFFFFF', label: 'Keke',   icon: 'bicycle-outline'  },
+  okada: { bg: '#D93025', text: '#FFFFFF', label: 'Okada',  icon: 'bicycle-outline'  },
+  ferry: { bg: '#0A7EA4', text: '#FFFFFF', label: 'Ferry',  icon: 'boat-outline'     },
+  rail:  { bg: '#7C3AED', text: '#FFFFFF', label: 'Train',  icon: 'train-outline'    },
+  walk:  { bg: '#E5E5E5', text: '#6B6B6B', label: 'Walk',   icon: 'walk-outline'     },
+};
 
-  const getModeLabel = (mode: string) => {
-    switch (mode) {
-      case 'walk': return 'Walk';
-      case 'keke': return 'Keke';
-      case 'okada': return 'Okada';
-      case 'danfo': return 'Danfo';
-      case 'brt': return 'BRT';
-      case 'ferry': return 'Ferry';
-      case 'rail': return 'Train';
-      default: return mode;
-    }
-  };
+function getModeConfig(mode: string) {
+  return MODE_CONFIG[mode] ?? { bg: '#E5E5E5', text: '#6B6B6B', label: mode, icon: 'navigate-outline' as const };
+}
 
-  const formatPrice = (min: number, max: number) => {
-    if (min === 0) return 'Free';
-    if (min === max) return `₦${min.toLocaleString()}`;
-    return `₦${min.toLocaleString()} - ₦${max.toLocaleString()}`;
-  };
+// ─── Difficulty derivation ────────────────────────────────────────────────────
+type Difficulty = 'EASY' | 'MODERATE' | 'COMPLEX';
+
+function getDifficulty(legs: RouteLeg[]): Difficulty {
+  const transfers = legs.filter((l) => l.mode !== 'walk').length;
+  if (transfers <= 2) return 'EASY';
+  if (transfers === 3) return 'MODERATE';
+  return 'COMPLEX';
+}
+
+const DIFFICULTY_STYLE: Record<Difficulty, { bg: string; text: string; dot: string }> = {
+  EASY:     { bg: '#EBF8F1', text: '#2D7A4F', dot: '#2D7A4F' },
+  MODERATE: { bg: '#FEF5E7', text: '#C8790A', dot: '#C8790A' },
+  COMPLEX:  { bg: '#FDEDEC', text: '#C0392B', dot: '#C0392B' },
+};
+
+// ─── TransportChain ──────────────────────────────────────────────────────────
+const TransportChain: React.FC<{ legs: RouteLeg[]; isDark: boolean }> = ({ legs, isDark }) => {
+  const transit = legs.filter((l) => l.mode !== 'walk');
+  const sep = isDark ? '#2A2A2A' : '#E5E5E5';
+  return (
+    <View style={tc.row}>
+      {transit.map((leg, i) => {
+        const cfg = getModeConfig(leg.mode);
+        return (
+          <React.Fragment key={i}>
+            <View style={[tc.badge, { backgroundColor: cfg.bg }]}>
+              <Ionicons name={cfg.icon} size={12} color={cfg.text} />
+              <Text style={[tc.label, { color: cfg.text }]}>{cfg.label}</Text>
+            </View>
+            {i < transit.length - 1 && (
+              <View style={[tc.connector, { backgroundColor: sep }]} />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+};
+const tc = StyleSheet.create({
+  row:       { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginBottom: 14 },
+  badge:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  label:     { fontSize: 11, fontWeight: '600' },
+  connector: { width: 16, height: 1.5 },
+});
+
+// ─── LegItem ─────────────────────────────────────────────────────────────────
+const LegItem: React.FC<{ leg: RouteLeg; isLast: boolean; tokens: any }> = ({ leg, isLast, tokens }) => {
+  const cfg = getModeConfig(leg.mode);
+  const price = leg.priceMin === 0
+    ? 'Free'
+    : leg.priceMin === leg.priceMax
+      ? `₦${leg.priceMin.toLocaleString()}`
+      : `₦${leg.priceMin.toLocaleString()}–₦${leg.priceMax.toLocaleString()}`;
 
   return (
-    <View style={styles.legContainer}>
-      {/* Timeline dot and line */}
-      <View style={styles.timeline}>
-        <View style={[styles.timelineDot, { backgroundColor: getModeColor(leg.mode) }]}>
-          <Ionicons 
-            name={leg.icon as any} 
-            size={12} 
-            color="white" 
-          />
+    <View style={li.row}>
+      {/* Timeline */}
+      <View style={li.timeline}>
+        <View style={[li.dot, { backgroundColor: cfg.bg }]}>
+          <Ionicons name={cfg.icon} size={11} color={cfg.text} />
         </View>
-        {!isLast && <View style={[styles.timelineLine, { backgroundColor: getModeColor(leg.mode) }]} />}
+        {!isLast && <View style={[li.line, { backgroundColor: tokens.divider }]} />}
       </View>
 
-      {/* Leg content */}
-      <View style={styles.legContent}>
-        <View style={styles.legHeader}>
-          <View style={[styles.modeBadge, { backgroundColor: getModeColor(leg.mode) + '20' }]}>
-            <Text style={[styles.modeBadgeText, { color: getModeColor(leg.mode) }]}>
-              {getModeLabel(leg.mode)}
-            </Text>
+      {/* Content */}
+      <View style={li.content}>
+        <View style={li.headerRow}>
+          <View style={[li.modePill, { backgroundColor: cfg.bg }]}>
+            <Text style={[li.modeText, { color: cfg.text }]}>{cfg.label}</Text>
           </View>
           {leg.priceMax > 0 && (
-            <Text style={[styles.legPrice, { color: theme.TEXT }]}>
-              {formatPrice(leg.priceMin, leg.priceMax)}
-            </Text>
+            <Text style={[li.price, { color: tokens.accent }]}>{price}</Text>
           )}
         </View>
 
-        <Text style={[styles.legInstruction, { color: theme.TEXT }]}>
+        <Text style={[li.instruction, { color: tokens.textPrimary }]}>
           {leg.instruction}
         </Text>
 
-        <View style={styles.legMeta}>
-          <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={12} color={theme.TEXT_SECONDARY} />
-            <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]}>
-              {leg.durationMins} min
-            </Text>
-          </View>
-          <View style={styles.metaItem}>
-            <Ionicons name="navigate-outline" size={12} color={theme.TEXT_SECONDARY} />
-            <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]}>
-              {leg.distanceKm.toFixed(1)} km
-            </Text>
-          </View>
-        </View>
+        {!!leg.localInstruction && (
+          <Text style={[li.local, { color: tokens.accent }]}>
+            {leg.localInstruction}
+          </Text>
+        )}
 
-        {/* Local instruction (Pidgin) */}
-        <Text style={[styles.localInstruction, { color: theme.TEXT_SECONDARY }]}>
-          💡 {leg.localInstruction}
-        </Text>
+        <View style={li.metaRow}>
+          <Ionicons name="time-outline" size={11} color={tokens.textSecondary} />
+          <Text style={[li.meta, { color: tokens.textSecondary }]}>{leg.durationMins} min</Text>
+          <Ionicons name="navigate-outline" size={11} color={tokens.textSecondary} style={{ marginLeft: 8 }} />
+          <Text style={[li.meta, { color: tokens.textSecondary }]}>{leg.distanceKm.toFixed(1)} km</Text>
+        </View>
       </View>
     </View>
   );
 };
+const li = StyleSheet.create({
+  row:         { flexDirection: 'row', marginBottom: 16 },
+  timeline:    { width: 28, alignItems: 'center', marginRight: 10 },
+  dot:         { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  line:        { width: 1.5, flex: 1, marginTop: 3, marginBottom: -16 },
+  content:     { flex: 1, paddingBottom: 4 },
+  headerRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
+  modePill:    { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
+  modeText:    { fontSize: 11, fontWeight: '600' },
+  price:       { fontSize: 13, fontWeight: '700' },
+  instruction: { fontSize: 14, fontWeight: '400', lineHeight: 20, marginBottom: 4 },
+  local:       { fontSize: 13, fontStyle: 'italic', marginBottom: 4 },
+  metaRow:     { flexDirection: 'row', alignItems: 'center' },
+  meta:        { fontSize: 11, marginLeft: 3 },
+});
 
-// Route option card
+// ─── RouteOptionCard ─────────────────────────────────────────────────────────
 const RouteOptionCard: React.FC<{
   option: RouteOption;
   isSelected: boolean;
+  tokens: any;
+  isDark: boolean;
   onSelect: () => void;
   onStartJourney: () => void;
-  theme: any;
-}> = ({ option, isSelected, onSelect, onStartJourney, theme }) => {
+}> = ({ option, isSelected, tokens, isDark, onSelect, onStartJourney }) => {
   const [expanded, setExpanded] = useState(false);
 
+  const difficulty     = getDifficulty(option.legs);
+  const diffStyle      = DIFFICULTY_STYLE[difficulty];
+  const transfers      = option.legs.filter((l) => l.mode !== 'walk').length - 1;
+  const transitLegs    = option.legs.filter((l) => l.mode !== 'walk');
+  const boardingLeg    = transitLegs[0];
+  const boardingNote   = boardingLeg ? boardingLeg.instruction : '';
+
   return (
-    <TouchableOpacity
-      style={[
-        styles.optionCard,
-        { 
-          backgroundColor: theme.CARD_BACKGROUND,
-          borderColor: isSelected ? theme.PRIMARY : theme.BORDER,
-          borderWidth: isSelected ? 2 : 1,
-        }
+    <Pressable
+      style={({ pressed }) => [
+        card.wrap,
+        { backgroundColor: tokens.surface, borderColor: isSelected ? tokens.accent : tokens.divider },
+        isSelected && card.wrapSelected,
+        pressed && card.wrapPressed,
       ]}
-      onPress={() => {
-        onSelect();
-        setExpanded(!expanded);
-      }}
-      activeOpacity={0.8}
+      onPress={() => { onSelect(); setExpanded(!expanded); }}
+      accessibilityRole="button"
+      accessibilityLabel={`${option.name}, fare ${option.priceFormatted}`}
     >
-      {/* Option Header */}
-      <View style={styles.optionHeader}>
-        <View style={styles.optionTitleRow}>
-          <Text style={[styles.optionName, { color: theme.TEXT }]}>
-            {option.name}
+      {/* ── Top row: fare box + meta + difficulty ─────────────────────── */}
+      <View style={card.topRow}>
+        {/* Fare box */}
+        <View style={[card.fareBox, { backgroundColor: tokens.accentSubtle }]}>
+          <Text style={[card.fareMain, { color: tokens.accent }]}>
+            {option.priceFormatted.split('–')[0].trim()}
           </Text>
-          {option.isRecommended && (
-            <View style={[styles.recommendedBadge, { backgroundColor: theme.PRIMARY }]}>
-              <Ionicons name="star" size={10} color="white" />
-              <Text style={styles.recommendedText}>Recommended</Text>
-            </View>
+          {option.priceFormatted.includes('–') && (
+            <Text style={[card.fareRange, { color: tokens.accent }]}>
+              {'–' + option.priceFormatted.split('–')[1]}
+            </Text>
           )}
         </View>
 
-        {/* Tags */}
-        <View style={styles.tagsRow}>
-          {option.tags.map((tag, index) => (
-            <View 
-              key={index} 
-              style={[
-                styles.tag, 
-                { 
-                  backgroundColor: tag === 'Cheapest' ? '#E8F5E9' : 
-                                  tag === 'Fastest' ? '#E3F2FD' : '#F5F5F5'
-                }
-              ]}
-            >
-              <Text style={[
-                styles.tagText,
-                {
-                  color: tag === 'Cheapest' ? '#2E7D32' : 
-                         tag === 'Fastest' ? '#1976D2' : '#757575'
-                }
-              ]}>
-                {tag}
-              </Text>
-            </View>
-          ))}
+        {/* Name + meta */}
+        <View style={card.metaBlock}>
+          <View style={card.nameRow}>
+            <Text style={[card.optionName, { color: tokens.textPrimary }]} numberOfLines={1}>
+              {option.name}
+            </Text>
+            {option.isRecommended && (
+              <View style={[card.bestBadge, { backgroundColor: tokens.accent }]}>
+                <Text style={card.bestText}>Best</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[card.metaLine, { color: tokens.textSecondary }]}>
+            {transfers > 0 ? `${transfers} transfer${transfers > 1 ? 's' : ''}` : 'Direct'} · {option.totalDurationMins} min
+          </Text>
+        </View>
+
+        {/* Difficulty chip */}
+        <View style={[card.diffChip, { backgroundColor: diffStyle.bg }]}>
+          <View style={[card.diffDot, { backgroundColor: diffStyle.dot }]} />
+          <Text style={[card.diffText, { color: diffStyle.text }]}>{difficulty}</Text>
         </View>
       </View>
 
-      {/* Price and Duration Summary */}
-      <View style={styles.summaryRow}>
-        <View style={styles.summaryItem}>
-          <Ionicons name="cash-outline" size={18} color={theme.PRIMARY} />
-          <Text style={[styles.summaryValue, { color: theme.TEXT }]}>
-            {option.priceFormatted}
-          </Text>
-        </View>
-        <View style={styles.summaryItem}>
-          <Ionicons name="time-outline" size={18} color={theme.TEXT_SECONDARY} />
-          <Text style={[styles.summaryValue, { color: theme.TEXT }]}>
-            {option.totalDurationMins} min
-          </Text>
-        </View>
-        <View style={styles.summaryItem}>
-          <Ionicons name="navigate-outline" size={18} color={theme.TEXT_SECONDARY} />
-          <Text style={[styles.summaryValue, { color: theme.TEXT }]}>
-            {option.totalDistanceKm.toFixed(1)} km
-          </Text>
-        </View>
-      </View>
+      {/* ── Transport chain ───────────────────────────────────────────── */}
+      <TransportChain legs={option.legs} isDark={isDark} />
 
-      {/* Recommendation reason */}
-      {option.recommendationReason && (
-        <View style={[styles.reasonBanner, { backgroundColor: theme.PRIMARY + '10' }]}>
-          <Ionicons name="bulb-outline" size={14} color={theme.PRIMARY} />
-          <Text style={[styles.reasonText, { color: theme.PRIMARY }]}>
-            {option.recommendationReason}
-          </Text>
-        </View>
-      )}
-
-      {/* Expand/Collapse Button */}
-      <TouchableOpacity 
-        style={styles.expandButton}
-        onPress={() => setExpanded(!expanded)}
-      >
-        <Text style={[styles.expandText, { color: theme.PRIMARY }]}>
-          {expanded ? 'Hide details' : `View ${option.legs.length} steps`}
+      {/* ── Divider + footer ──────────────────────────────────────────── */}
+      <View style={[card.footerDivider, { backgroundColor: tokens.divider }]} />
+      <View style={card.footer}>
+        <Text style={[card.boardingNote, { color: tokens.textSecondary }]} numberOfLines={1}>
+          {boardingNote}
         </Text>
-        <Ionicons 
-          name={expanded ? 'chevron-up' : 'chevron-down'} 
-          size={16} 
-          color={theme.PRIMARY} 
-        />
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={card.seeRouteBtn}
+          onPress={(e) => { e.stopPropagation?.(); onSelect(); setExpanded(!expanded); }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={[card.seeRouteText, { color: tokens.accent }]}>
+            {expanded ? 'Hide' : 'See route'}
+          </Text>
+          <Ionicons
+            name={expanded ? 'chevron-up' : 'chevron-forward'}
+            size={13}
+            color={tokens.accent}
+          />
+        </TouchableOpacity>
+      </View>
 
-      {/* Expanded Legs */}
+      {/* ── Expanded legs ────────────────────────────────────────────────*/}
       {expanded && (
-        <View style={styles.legsContainer}>
-          {option.legs.map((leg, index) => (
-            <LegItem 
-              key={leg.id} 
-              leg={leg} 
-              isLast={index === option.legs.length - 1}
-              theme={theme}
+        <View style={[card.legsWrap, { borderTopColor: tokens.divider }]}>
+          {option.legs.map((leg, i) => (
+            <LegItem
+              key={leg.id}
+              leg={leg}
+              isLast={i === option.legs.length - 1}
+              tokens={tokens}
             />
           ))}
         </View>
       )}
 
-      {/* Start Journey Button (when selected) */}
+      {/* ── Start Journey CTA (only on selected card) ────────────────── */}
       {isSelected && (
         <TouchableOpacity
-          style={[styles.startButton, { backgroundColor: theme.PRIMARY }]}
+          style={[card.startBtn, { backgroundColor: tokens.accent }]}
           onPress={onStartJourney}
+          accessibilityLabel="Start journey"
+          activeOpacity={0.88}
         >
-          <Text style={styles.startButtonText}>Start Journey</Text>
-          <Ionicons name="navigate" size={18} color="white" />
+          <Ionicons name="navigate" size={16} color="#FFFFFF" />
+          <Text style={card.startText}>START JOURNEY</Text>
         </TouchableOpacity>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 };
 
-// Main component
+const card = StyleSheet.create({
+  wrap: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1.5,
+  },
+  wrapSelected: { borderWidth: 2 },
+  wrapPressed:  { opacity: 0.92 },
+
+  // Top row
+  topRow:    { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
+  fareBox:   { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'flex-start', flexShrink: 0 },
+  fareMain:  { fontSize: 22, fontWeight: '700', letterSpacing: -0.5 },
+  fareRange: { fontSize: 13, fontWeight: '500', marginTop: 1 },
+
+  metaBlock: { flex: 1 },
+  nameRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  optionName:{ fontSize: 15, fontWeight: '600', letterSpacing: -0.2, flex: 1 },
+  bestBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  bestText:  { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  metaLine:  { fontSize: 13, fontWeight: '400' },
+
+  diffChip:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, flexShrink: 0 },
+  diffDot:   { width: 6, height: 6, borderRadius: 3 },
+  diffText:  { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+
+  // Footer
+  footerDivider: { height: 1, marginBottom: 10 },
+  footer:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  boardingNote:  { fontSize: 12, fontWeight: '400', flex: 1, marginRight: 8 },
+  seeRouteBtn:   { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 0 },
+  seeRouteText:  { fontSize: 13, fontWeight: '600' },
+
+  // Legs expansion
+  legsWrap: { marginTop: 16, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth },
+
+  // Start CTA
+  startBtn:  {
+    marginTop: 14,
+    height: 50,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  startText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
+});
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export const SmartRouteOptions: React.FC<SmartRouteOptionsProps> = ({
   routeResult,
   onSelectOption,
   onStartJourney,
 }) => {
-  const { theme } = useAppTheme();
-  const [selectedOptionId, setSelectedOptionId] = useState<string>(
-    routeResult.recommendedOptionId
-  );
+  const { tokens, isDark } = useAppTheme();
+  const [selectedId, setSelectedId] = useState<string>(routeResult.recommendedOptionId);
 
   const handleSelect = (option: RouteOption) => {
-    setSelectedOptionId(option.id);
+    setSelectedId(option.id);
     onSelectOption(option);
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.routeInfo}>
-          <Text style={[styles.routeLabel, { color: theme.TEXT_SECONDARY }]}>
-            Route Options
+    <View>
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <View style={header.wrap}>
+        <Text style={[header.label, { color: tokens.textSecondary }]}>ROUTE OPTIONS</Text>
+        <View style={header.destinationRow}>
+          <Text style={[header.place, { color: tokens.textPrimary }]} numberOfLines={1}>
+            {routeResult.origin.name}
           </Text>
-          <View style={styles.routeDestination}>
-            <Text style={[styles.originText, { color: theme.TEXT }]}>
-              {routeResult.origin.name}
-            </Text>
-            <Ionicons name="arrow-forward" size={14} color={theme.TEXT_SECONDARY} />
-            <Text style={[styles.destText, { color: theme.TEXT }]}>
-              {routeResult.destination.name}
-            </Text>
-          </View>
+          <Ionicons name="arrow-forward" size={14} color={tokens.textSecondary} />
+          <Text style={[header.place, { color: tokens.textPrimary }]} numberOfLines={1}>
+            {routeResult.destination.name}
+          </Text>
         </View>
       </View>
 
-      {/* Nearest Stop Banner — Lara-style "go to this stop first" anchor */}
+      {/* ── Nearest stop banner ─────────────────────────────────────────── */}
       {routeResult.originNearestStop && (
-        <View style={[styles.nearestStopBanner, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}>
-          <Ionicons name="location" size={16} color="#4CAF50" />
+        <View style={[stop.wrap, { backgroundColor: tokens.surface, borderColor: tokens.divider }]}>
+          <Ionicons name="location" size={16} color={tokens.success} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.nearestStopLabel, { color: theme.TEXT_SECONDARY }]}>
+            <Text style={[stop.label, { color: tokens.textSecondary }]}>
               Nearest stop from you
             </Text>
-            <Text style={[styles.nearestStopName, { color: theme.TEXT }]}>
+            <Text style={[stop.name, { color: tokens.textPrimary }]}>
               {routeResult.originNearestStop.name}
-              <Text style={[styles.nearestStopMeta, { color: theme.TEXT_SECONDARY }]}>
-                {'  '}·{'  '}{routeResult.originNearestStop.walkMins} min walk ({routeResult.originNearestStop.distanceKm} km)
+              <Text style={[stop.meta, { color: tokens.textSecondary }]}>
+                {'  ·  '}{routeResult.originNearestStop.walkMins} min walk
               </Text>
             </Text>
           </View>
         </View>
       )}
 
-      {/* Comparison Banner */}
+      {/* ── Comparison banner ───────────────────────────────────────────── */}
       {routeResult.comparison.comparisonText && (
-        <View style={[styles.comparisonBanner, { backgroundColor: theme.PRIMARY + '15' }]}>
-          <Ionicons 
-            name={routeResult.comparison.shouldLetUserChoose ? 'swap-horizontal' : 'bulb'} 
-            size={18} 
-            color={theme.PRIMARY} 
-          />
-          <Text style={[styles.comparisonText, { color: theme.PRIMARY }]}>
+        <View style={[comp.wrap, { backgroundColor: tokens.accentSubtle }]}>
+          <Ionicons name="bulb-outline" size={16} color={tokens.accent} />
+          <Text style={[comp.text, { color: tokens.accent }]}>
             {routeResult.comparison.comparisonText}
           </Text>
         </View>
       )}
 
-      {/* Options List - Use View instead of ScrollView to avoid nested scroll issues */}
-      <View style={styles.optionsList}>
+      {/* ── Option cards ────────────────────────────────────────────────── */}
+      <View style={list.wrap}>
         {routeResult.options.map((option) => (
           <RouteOptionCard
             key={option.id}
             option={option}
-            isSelected={selectedOptionId === option.id}
+            isSelected={selectedId === option.id}
+            tokens={tokens}
+            isDark={isDark}
             onSelect={() => handleSelect(option)}
             onStartJourney={() => onStartJourney(option)}
-            theme={theme}
           />
         ))}
-
-        {/* Footer spacing */}
-        <View style={{ height: 100 }} />
+        <View style={{ height: 80 }} />
       </View>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    // Don't use flex: 1 here - let content determine height
-  },
-  header: {
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-  },
-  routeInfo: {
-    gap: 4,
-  },
-  routeLabel: {
-    fontSize: FONT_SIZES.SMALL,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  routeDestination: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.SM,
-    flexWrap: 'wrap',
-  },
-  originText: {
-    fontSize: FONT_SIZES.BODY_LARGE,
-    fontWeight: '600',
-  },
-  destText: {
-    fontSize: FONT_SIZES.BODY_LARGE,
-    fontWeight: '600',
-  },
-  nearestStopBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: SPACING.SM,
-    marginHorizontal: SPACING.MD,
-    marginBottom: SPACING.SM,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    borderWidth: 1,
-  },
-  nearestStopLabel: {
-    fontSize: FONT_SIZES.SMALL,
-    marginBottom: 1,
-  },
-  nearestStopName: {
-    fontSize: FONT_SIZES.BODY,
-    fontWeight: '600',
-  },
-  nearestStopMeta: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '400',
-  },
-  comparisonBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.SM,
-    marginHorizontal: SPACING.MD,
-    marginBottom: SPACING.MD,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-  },
-  comparisonText: {
-    fontSize: FONT_SIZES.BODY,
-    fontWeight: '500',
-    flex: 1,
-  },
-  optionsList: {
-    // Don't use flex: 1 - let content determine height
-    paddingHorizontal: SPACING.MD,
-  },
-  optionCard: {
-    borderRadius: BORDER_RADIUS.LARGE,
-    padding: SPACING.MD,
-    marginBottom: SPACING.MD,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
-  },
-  optionHeader: {
-    marginBottom: SPACING.SM,
-  },
-  optionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.XS,
-  },
-  optionName: {
-    fontSize: FONT_SIZES.HEADING_3,
-    fontWeight: '700',
-  },
-  recommendedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 4,
-    borderRadius: BORDER_RADIUS.ROUND,
-  },
-  recommendedText: {
-    color: 'white',
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '600',
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.XS,
-  },
-  tag: {
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.SMALL,
-  },
-  tagText: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '500',
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: SPACING.SM,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    marginTop: SPACING.SM,
-  },
-  summaryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  summaryValue: {
-    fontSize: FONT_SIZES.BODY,
-    fontWeight: '600',
-  },
-  reasonBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.SM,
-    padding: SPACING.SM,
-    borderRadius: BORDER_RADIUS.SMALL,
-    marginTop: SPACING.SM,
-  },
-  reasonText: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '500',
-    flex: 1,
-  },
-  expandButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: SPACING.SM,
-    marginTop: SPACING.SM,
-  },
-  expandText: {
-    fontSize: FONT_SIZES.BODY,
-    fontWeight: '500',
-  },
-  legsContainer: {
-    marginTop: SPACING.MD,
-    paddingTop: SPACING.MD,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-  },
-  legContainer: {
-    flexDirection: 'row',
-    marginBottom: SPACING.MD,
-  },
-  timeline: {
-    alignItems: 'center',
-    width: 32,
-    marginRight: SPACING.SM,
-  },
-  timelineDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  timelineLine: {
-    width: 2,
-    flex: 1,
-    marginTop: 4,
-    marginBottom: -SPACING.MD,
-  },
-  legContent: {
-    flex: 1,
-    paddingBottom: SPACING.SM,
-  },
-  legHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  modeBadge: {
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.SMALL,
-  },
-  modeBadgeText: {
-    fontSize: FONT_SIZES.SMALL,
-    fontWeight: '600',
-  },
-  legPrice: {
-    fontSize: FONT_SIZES.BODY,
-    fontWeight: '700',
-  },
-  legInstruction: {
-    fontSize: FONT_SIZES.BODY,
-    marginBottom: 4,
-  },
-  legMeta: {
-    flexDirection: 'row',
-    gap: SPACING.MD,
-    marginBottom: 4,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  metaText: {
-    fontSize: FONT_SIZES.SMALL,
-  },
-  localInstruction: {
-    fontSize: FONT_SIZES.SMALL,
-    fontStyle: 'italic',
-  },
-  startButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.SM,
-    paddingVertical: SPACING.MD,
-    borderRadius: BORDER_RADIUS.LARGE,
-    marginTop: SPACING.MD,
-  },
-  startButtonText: {
-    color: 'white',
-    fontSize: FONT_SIZES.BODY_LARGE,
-    fontWeight: '700',
-  },
+const header = StyleSheet.create({
+  wrap:           { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  label:          { fontSize: 11, fontWeight: '600', letterSpacing: 0.9, marginBottom: 6 },
+  destinationRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  place:          { fontSize: 16, fontWeight: '700', letterSpacing: -0.2, flexShrink: 1 },
+});
+
+const stop = StyleSheet.create({
+  wrap:  { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginHorizontal: 16, marginBottom: 10, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
+  label: { fontSize: 11, marginBottom: 2 },
+  name:  { fontSize: 14, fontWeight: '600' },
+  meta:  { fontSize: 12, fontWeight: '400' },
+});
+
+const comp = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
+  text: { fontSize: 13, fontWeight: '500', flex: 1 },
+});
+
+const list = StyleSheet.create({
+  wrap: { paddingHorizontal: 16 },
 });

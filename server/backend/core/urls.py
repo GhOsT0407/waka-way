@@ -1,16 +1,6 @@
-"""
-URL configuration for core app API endpoints
-"""
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from . import views
-
-# Create a router and register viewsets
-router = DefaultRouter()
-router.register(r'corridors', views.CorridorViewSet, basename='corridor')
-router.register(r'corridor-stops', views.CorridorStopViewSet, basename='corridor-stop')
-router.register(r'stop-connections', views.StopConnectionViewSet, basename='stop-connection')
+from django.urls import path
+from .views import CityListView
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('cities/', CityListView.as_view(), name='city-list'),
 ]

@@ -68,6 +68,11 @@ export default function SearchScreen({ navigation }: any) {
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef      = useRef<TextInput>(null);
+  const isMounted     = useRef(true);
+
+  useEffect(() => {
+    return () => { isMounted.current = false; };
+  }, []);
 
   useEffect(() => {
     getUserLocation();
@@ -208,7 +213,7 @@ export default function SearchScreen({ navigation }: any) {
         preferredFirstLegMode: mode,
       });
 
-      if (result?.legacyRoute) {
+      if (result?.legacyRoute && isMounted.current) {
         navigation.replace('RouteDetail', {
           routeData:      result.legacyRoute,
           smartRouteData: result.smartRoute,
@@ -267,21 +272,23 @@ export default function SearchScreen({ navigation }: any) {
 
       {/* Header */}
       <SafeAreaView style={styles.header}>
+        {/* Search row */}
         <View style={styles.searchRow}>
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')}
             style={styles.backBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Back"
           >
-            <Ionicons name="chevron-back" size={28} color={Colors.blue} />
+            <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
           </TouchableOpacity>
 
           <View style={styles.inputWrap}>
-            <Ionicons name="search" size={16} color={Colors.textSecondary} style={{ marginRight: 8 }} />
+            <Ionicons name="search" size={15} color={Colors.textSecondary} />
             <TextInput
               ref={inputRef}
               style={styles.input}
-              placeholder="Search places in Lagos..."
+              placeholder="Search places in Lagos…"
               placeholderTextColor={Colors.textSecondary}
               value={query}
               onChangeText={setQuery}
@@ -306,8 +313,7 @@ export default function SearchScreen({ navigation }: any) {
             onPress={() => {
               if (homePlace) {
                 handleDestinationSelect({
-                  id: 'home',
-                  name: homePlace.name,
+                  id: 'home', name: homePlace.name,
                   address: homePlace.address || 'Home',
                   coordinates: { latitude: homePlace.latitude, longitude: homePlace.longitude },
                 });
@@ -317,7 +323,7 @@ export default function SearchScreen({ navigation }: any) {
             }}
           >
             <View style={[styles.chipIcon, { backgroundColor: Colors.homeGreen }]}>
-              <Ionicons name="home" size={12} color="#FFFFFF" />
+              <Ionicons name="home" size={12} color="#fff" />
             </View>
             <Text style={styles.chipText}>Home</Text>
           </TouchableOpacity>
@@ -326,8 +332,7 @@ export default function SearchScreen({ navigation }: any) {
             onPress={() => {
               if (workPlace) {
                 handleDestinationSelect({
-                  id: 'work',
-                  name: workPlace.name,
+                  id: 'work', name: workPlace.name,
                   address: workPlace.address || 'Work',
                   coordinates: { latitude: workPlace.latitude, longitude: workPlace.longitude },
                 });
@@ -337,7 +342,7 @@ export default function SearchScreen({ navigation }: any) {
             }}
           >
             <View style={[styles.chipIcon, { backgroundColor: Colors.workBlue }]}>
-              <Ionicons name="briefcase" size={12} color="#FFFFFF" />
+              <Ionicons name="briefcase" size={12} color="#fff" />
             </View>
             <Text style={styles.chipText}>Work</Text>
           </TouchableOpacity>
@@ -372,6 +377,9 @@ export default function SearchScreen({ navigation }: any) {
               renderItem={renderSearchItem}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+              decelerationRate="normal"
+              overScrollMode="never"
               contentContainerStyle={{ paddingBottom: 40 }}
             />
           )}
@@ -394,30 +402,41 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 14,
     backgroundColor: Colors.sheetBg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
     zIndex: 1,
     ...Platform.select({
-      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 8 },
-      android: { elevation: 6 },
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 12 },
+      android: { elevation: 8 },
     }),
   },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     paddingTop: 8,
   },
-  backBtn: { padding: 2 },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    flexShrink: 0,
+  },
   inputWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === 'ios' ? 11 : 9,
-    borderRadius: 12,
+    gap: 8,
+    paddingHorizontal: 13,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    borderRadius: 14,
     backgroundColor: Colors.surfaceElevated,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -440,7 +459,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 20,
+    borderRadius: 22,
     backgroundColor: Colors.surfaceElevated,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -464,15 +483,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.divider,
+    paddingTop: 18,
+    paddingBottom: 10,
   },
   sectionTitle: {
     fontSize: Typography.sm,
-    fontWeight: Typography.semibold,
+    fontWeight: Typography.bold,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
     color: Colors.textSecondary,
   },
 
@@ -480,18 +498,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.divider,
+    paddingVertical: 13,
+    gap: 14,
   },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    flexShrink: 0,
   },
   itemText: { flex: 1 },
   itemName: {
@@ -504,6 +523,7 @@ const styles = StyleSheet.create({
     fontSize: Typography.sm,
     marginTop: 2,
     color: Colors.textSecondary,
+    lineHeight: 18,
   },
 
   center: {

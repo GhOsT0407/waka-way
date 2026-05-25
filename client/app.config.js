@@ -51,6 +51,9 @@ module.exports = {
     web: {
       favicon: './assets/favicon.png',
     },
-    plugins: ['expo-web-browser'],
+    plugins: [
+      'expo-web-browser',
+      '@rnmapbox/maps',
+    ],
   },
 };

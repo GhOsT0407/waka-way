@@ -25,6 +25,7 @@ import NavigationScreen from './screens/NavigationScreen';
 import { ThemeProvider, useAppTheme } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { wireAuthToken } from './services/api';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -44,8 +45,13 @@ function AuthStack() {
 }
 
 function AppNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, session } = useAuth();
   const { theme, isDark } = useAppTheme();
+
+  // Keep Django API client in sync with Supabase session token
+  useEffect(() => {
+    wireAuthToken(session?.access_token ?? null);
+  }, [session]);
   const { isOnline } = useNetworkStatus();
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
 
@@ -109,10 +115,10 @@ function AppNavigator() {
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
-          animationDuration: 350,
+          animationDuration: 250,
           gestureEnabled: true,
           gestureDirection: 'horizontal',
-          fullScreenGestureEnabled: true,
+          contentStyle: { backgroundColor: theme.BACKGROUND },
         }}
       >
         {isAuthenticated ? (
@@ -122,36 +128,40 @@ function AppNavigator() {
               name="You"
               component={YouScreen}
               options={{
-                presentation: 'modal',
                 animation: 'slide_from_bottom',
                 gestureEnabled: true,
+                gestureDirection: 'vertical',
+                contentStyle: { backgroundColor: theme.BACKGROUND },
               }}
             />
             <Stack.Screen
               name="Contribution"
               component={ContributionScreen}
               options={{
-                presentation: 'modal',
                 animation: 'slide_from_bottom',
                 gestureEnabled: true,
+                gestureDirection: 'vertical',
+                contentStyle: { backgroundColor: theme.BACKGROUND },
               }}
             />
             <Stack.Screen
               name="Search"
               component={SearchScreen}
               options={{
-                presentation: 'formSheet',
                 animation: 'slide_from_bottom',
                 gestureEnabled: true,
+                gestureDirection: 'vertical',
+                contentStyle: { backgroundColor: theme.BACKGROUND },
               }}
             />
             <Stack.Screen
               name="RouteDetail"
               component={RouteDetailScreen}
               options={{
-                presentation: 'formSheet',
                 animation: 'slide_from_bottom',
                 gestureEnabled: true,
+                gestureDirection: 'vertical',
+                contentStyle: { backgroundColor: theme.BACKGROUND },
               }}
             />
             <Stack.Screen
@@ -170,6 +180,7 @@ function AppNavigator() {
               options={{
                 animation: 'slide_from_bottom',
                 gestureEnabled: false,
+                contentStyle: { backgroundColor: theme.BACKGROUND },
               }}
             />
           </>

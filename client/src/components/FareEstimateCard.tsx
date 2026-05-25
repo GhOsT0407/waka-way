@@ -32,16 +32,12 @@ const TransportOption: React.FC<TransportOptionProps> = ({
   isSelected,
   onPress
 }) => {
-  const getModeDetails = (mode: TransportMode) => {
-    switch (mode) {
-      case 'danfo':
-        return { icon: 'bus',            name: 'Danfo (Bus)',      description: 'Reliable for longer trips',  color: '#2E7D32' };
-      case 'keke':
-        return { icon: 'bicycle',        name: 'Keke (Tricycle)',  description: 'Flexible for short trips',   color: '#2E7D32' };
-      case 'okada':
-        return { icon: 'bicycle-outline', name: 'Okada (Bike)',    description: 'Fastest for urgent trips',   color: '#2E7D32' };
-      default:
-        return { icon: 'car-outline',    name: mode,               description: '',                           color: '#2E7D32' };
+  const getModeDetails = (m: TransportMode) => {
+    switch (m) {
+      case 'danfo':  return { icon: 'bus',             name: 'Danfo (Bus)',     description: 'Reliable for longer trips',  color: '#22C55E' };
+      case 'keke':   return { icon: 'bicycle',         name: 'Keke (Tricycle)', description: 'Flexible for short trips',   color: '#22C55E' };
+      case 'okada':  return { icon: 'bicycle-outline', name: 'Okada (Bike)',    description: 'Fastest for urgent trips',   color: '#22C55E' };
+      default:       return { icon: 'car-outline',     name: m,                 description: '',                           color: '#22C55E' };
     }
   };
 
@@ -49,44 +45,29 @@ const TransportOption: React.FC<TransportOptionProps> = ({
 
   return (
     <TouchableOpacity
-      style={[
-        styles.transportOption,
-        isSelected && styles.selectedOption
-      ]}
+      style={[styles.transportOption, isSelected && styles.selectedOption]}
       onPress={onPress}
       activeOpacity={0.7}
     >
       <View style={styles.optionContent}>
         <View style={styles.iconContainer}>
-          <Ionicons
-            name={details.icon as any}
-            size={24}
-            color={details.color}
-          />
+          <Ionicons name={details.icon as any} size={24} color={details.color} />
         </View>
 
         <View style={styles.detailsContainer}>
-          <Text style={[styles.modeName, { color: '#1C1B1F' }]}>
-            {details.name}
-          </Text>
-          <Text style={styles.modeDescription}>
-            {details.description}
-          </Text>
+          <Text style={styles.modeName}>{details.name}</Text>
+          <Text style={styles.modeDescription}>{details.description}</Text>
         </View>
 
         <View style={styles.priceContainer}>
-          <Text style={[styles.priceRange, { color: '#1C1B1F' }]}>
-            {priceRange.formatted}
-          </Text>
-          <Text style={styles.priceNote}>
-            Estimated fare
-          </Text>
+          <Text style={styles.priceRange}>{priceRange.formatted}</Text>
+          <Text style={styles.priceNote}>Estimated fare</Text>
         </View>
       </View>
 
       {isSelected && (
         <LinearGradient
-          colors={['#2E7D32', '#4CAF50']}
+          colors={['#16A34A', '#22C55E']}
           style={styles.selectionIndicator}
         >
           <Ionicons name="checkmark" size={16} color="white" />
@@ -116,7 +97,7 @@ export const FareEstimateCard: React.FC<FareEstimateCardProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="cash" size={20} color="#2E7D32" />
+        <Ionicons name="cash" size={20} color="#22C55E" />
         <Text style={styles.headerTitle}>Fare Estimates</Text>
         <Text style={styles.headerSubtitle}>
           {distanceInKm.toFixed(1)}km trip • {isPeakHour ? 'Peak hours' : 'Normal hours'}
@@ -148,20 +129,15 @@ export const FareEstimateCard: React.FC<FareEstimateCardProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'white',
+    backgroundColor: '#1C2333',
     borderRadius: BORDER_RADIUS.LARGE,
     padding: SPACING.MD,
     margin: SPACING.MD,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
     ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      android: { elevation: 4 },
     }),
   },
   header: {
@@ -169,19 +145,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.MD,
     paddingBottom: SPACING.SM,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   headerTitle: {
     fontSize: FONT_SIZES.HEADING_3,
     fontWeight: 'bold',
-    color: '#1C1B1F',
+    color: '#F1F5F9',
     marginLeft: SPACING.SM,
     flex: 1,
   },
   headerSubtitle: {
     fontSize: FONT_SIZES.SMALL,
-    color: '#666',
+    color: '#94A3B8',
     position: 'absolute',
     top: 24,
     left: 30,
@@ -190,15 +166,15 @@ const styles = StyleSheet.create({
     gap: SPACING.SM,
   },
   transportOption: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#243044',
     borderRadius: BORDER_RADIUS.MEDIUM,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: 'transparent',
     overflow: 'hidden',
   },
   selectedOption: {
-    borderColor: '#2E7D32',
-    backgroundColor: '#F1F8E9',
+    borderColor: '#22C55E',
+    backgroundColor: 'rgba(34,197,94,0.08)',
   },
   optionContent: {
     flexDirection: 'row',
@@ -209,7 +185,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: 'rgba(34,197,94,0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.MD,
@@ -221,10 +197,11 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.BODY_LARGE,
     fontWeight: '600',
     marginBottom: 2,
+    color: '#F1F5F9',
   },
   modeDescription: {
     fontSize: FONT_SIZES.SMALL,
-    color: '#666',
+    color: '#94A3B8',
   },
   priceContainer: {
     alignItems: 'flex-end',
@@ -232,10 +209,11 @@ const styles = StyleSheet.create({
   priceRange: {
     fontSize: FONT_SIZES.BODY_LARGE,
     fontWeight: 'bold',
+    color: '#F1F5F9',
   },
   priceNote: {
     fontSize: FONT_SIZES.CAPTION,
-    color: '#666',
+    color: '#94A3B8',
     marginTop: 2,
   },
   selectionIndicator: {
@@ -251,12 +229,12 @@ const styles = StyleSheet.create({
   footer: {
     marginTop: SPACING.MD,
     paddingTop: SPACING.SM,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
   },
   footerText: {
     fontSize: FONT_SIZES.SMALL,
-    color: '#666',
+    color: '#64748B',
     textAlign: 'center',
     fontStyle: 'italic',
   },

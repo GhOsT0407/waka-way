@@ -32,19 +32,19 @@ interface ToastProps {
 const TOAST_CONFIG: Record<ToastType, { icon: keyof typeof Ionicons.glyphMap; colors: { bg: string; border: string; icon: string } }> = {
   success: {
     icon: 'checkmark-circle',
-    colors: { bg: '#ECFDF5', border: '#10B981', icon: '#059669' },
+    colors: { bg: 'rgba(34,197,94,0.12)',  border: '#22C55E', icon: '#4ADE80' },
   },
   error: {
     icon: 'alert-circle',
-    colors: { bg: '#FEF2F2', border: '#EF4444', icon: '#DC2626' },
+    colors: { bg: 'rgba(239,68,68,0.12)',   border: '#EF4444', icon: '#F87171' },
   },
   warning: {
     icon: 'warning',
-    colors: { bg: '#FFFBEB', border: '#F59E0B', icon: '#D97706' },
+    colors: { bg: 'rgba(245,158,11,0.12)',  border: '#F59E0B', icon: '#FCD34D' },
   },
   info: {
     icon: 'information-circle',
-    colors: { bg: '#EFF6FF', border: '#3B82F6', icon: '#2563EB' },
+    colors: { bg: 'rgba(34,197,94,0.12)',   border: '#22C55E', icon: '#4ADE80' },
   },
 };
 
@@ -119,14 +119,14 @@ export const Toast: React.FC<ToastProps> = ({ toast, onDismiss }) => {
           {toast.title}
         </Text>
         {toast.message && (
-          <Text style={[styles.message, { color: '#6B7280' }]} numberOfLines={2}>
+          <Text style={[styles.message, { color: '#94A3B8' }]} numberOfLines={2}>
             {toast.message}
           </Text>
         )}
       </View>
 
       <TouchableOpacity onPress={dismiss} style={styles.closeButton}>
-        <Ionicons name="close" size={20} color="#9CA3AF" />
+        <Ionicons name="close" size={20} color="#64748B" />
       </TouchableOpacity>
     </Animated.View>
   );

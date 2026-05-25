@@ -335,15 +335,20 @@ class UserReport(models.Model):
         blank=True
     )
 
+    # Idempotency — prevents duplicate submissions on network retry
+    idempotency_key = models.CharField(max_length=100, blank=True, db_index=True)
+
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     verified_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [
             models.Index(fields=['report_type', 'status']),
             models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['deleted_at']),
         ]
 
     def __str__(self):
@@ -366,11 +371,13 @@ class UserFavoritePlace(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [
             models.Index(fields=['user']),
             models.Index(fields=['user_device_id']),
+            models.Index(fields=['deleted_at']),
         ]
 
     def __str__(self):

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -56,7 +56,7 @@ interface AlertBottomSheetProps {
  * 
  * Displays contribution details with voting buttons when a map marker is tapped.
  * Features:
- * - "Still there? ✅ Yes" and "All clear? ❌ No" voting buttons
+ * - "Still there? âœ… Yes" and "All clear? âŒ No" voting buttons
  * - Verified badge for 5+ confirms
  * - Visual feedback for user's existing vote
  * - Image preview if available
@@ -173,7 +173,7 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
               </Text>
               {isVerified && (
                 <View style={styles.verifiedBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
+                  <Ionicons name="checkmark-circle" size={16} color="#22C55E" />
                   <Text style={styles.verifiedText}>Verified</Text>
                 </View>
               )}
@@ -232,7 +232,7 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
         {/* Vote Stats */}
         <View style={[styles.statsContainer, { backgroundColor: theme.CHIP_BACKGROUND }]}>
           <View style={styles.statItem}>
-            <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+            <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
             <Text style={[styles.statNumber, { color: theme.TEXT }]}>
               {contribution.confirm_count || contribution.confirms || 0}
             </Text>
@@ -284,19 +284,19 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
               disabled={isVoting}
             >
               {isVoting && currentVote !== 'DISMISS' ? (
-                <ActivityIndicator size="small" color="#4CAF50" />
+                <ActivityIndicator size="small" color="#22C55E" />
               ) : (
                 <>
                   <Ionicons
                     name={currentVote === 'CONFIRM' ? 'checkmark-circle' : 'checkmark-circle-outline'}
                     size={24}
-                    color={currentVote === 'DISMISS' ? '#999' : '#4CAF50'}
+                    color={currentVote === 'DISMISS' ? '#999' : '#22C55E'}
                   />
                   <Text style={[
                     styles.voteButtonText,
-                    { color: currentVote === 'DISMISS' ? '#999' : '#4CAF50' }
+                    { color: currentVote === 'DISMISS' ? '#999' : '#22C55E' }
                   ]}>
-                    Still there ✅
+                    Still there âœ…
                   </Text>
                 </>
               )}
@@ -326,7 +326,7 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
                     styles.voteButtonText,
                     { color: currentVote === 'CONFIRM' ? '#999' : '#F44336' }
                   ]}>
-                    All clear ❌
+                    All clear âŒ
                   </Text>
                 </>
               )}
@@ -344,7 +344,7 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
           <View style={styles.dangerWarning}>
             <Ionicons name="warning" size={18} color="#D32F2F" />
             <Text style={styles.dangerText}>
-              ⚠️ 500m danger zone marked on map. Exercise caution in this area.
+              âš ï¸ 500m danger zone marked on map. Exercise caution in this area.
             </Text>
           </View>
         )}
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
   verifiedText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#4CAF50',
+    color: '#22C55E',
     marginLeft: 4,
   },
   title: {
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 40,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   votingContainer: {
     marginBottom: SPACING.MD,
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   confirmButton: {
-    borderColor: '#4CAF50',
+    borderColor: '#22C55E',
     backgroundColor: 'rgba(76, 175, 80, 0.05)',
   },
   dismissButton: {
