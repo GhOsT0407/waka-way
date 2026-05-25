@@ -55,5 +55,10 @@ module.exports = {
       'expo-web-browser',
       '@rnmapbox/maps',
     ],
+    extra: {
+      eas: {
+        projectId: 'b1fcec62-311f-49f8-bfa6-73b3e0e90cef',
+      },
+    },
   },
 };
