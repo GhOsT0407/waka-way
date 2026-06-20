@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "724949286243",
+    "project_id": "waka-way",
+    "storage_bucket": "waka-way.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:724949286243:android:ec9d19484a516867916756",
+        "android_client_info": {
+          "package_name": "com.wakaway.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBvQtJxPwnwPJlBzxU96rVZRA3CNsmxhJ4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
