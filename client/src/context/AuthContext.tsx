@@ -1,313 +1,153 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../lib/supabase';
-import { Session, User as SupabaseUser } from '@supabase/supabase-js';
-
-// Set to true to use mock auth (for testing when Supabase is unavailable)
-// Set to false to use real Supabase authentication
-const USE_MOCK_AUTH = false;
-
-// Mock user storage key
-const MOCK_USERS_KEY = '@waka_mock_users';
-const MOCK_SESSION_KEY = '@waka_mock_session';
+import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 
 interface User {
   id: string;
   email: string;
   name: string;
   avatar_url?: string;
-}
-
-interface MockStoredUser {
-  id: string;
-  email: string;
-  password: string;
-  name: string;
+  phone?: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
+  firebaseUser: FirebaseAuthTypes.User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  // Email/password
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (email: string, password: string, name: string) => Promise<{ success: boolean; needsConfirmation: boolean; error?: string }>;
+  // Phone OTP
+  sendOTP: (phoneNumber: string) => Promise<{ success: boolean; confirmation?: FirebaseAuthTypes.ConfirmationResult; error?: string }>;
+  verifyOTP: (confirmation: FirebaseAuthTypes.ConfirmationResult, code: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  updateProfile: (name: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
 
-// Helper to transform Supabase user to our User type
-const transformUser = (supabaseUser: SupabaseUser): User => ({
-  id: supabaseUser.id,
-  email: supabaseUser.email || '',
-  name: supabaseUser.user_metadata?.full_name || 
-        supabaseUser.user_metadata?.name || 
-        supabaseUser.email?.split('@')[0] || 'User',
-  avatar_url: supabaseUser.user_metadata?.avatar_url,
+const transformUser = (fbUser: FirebaseAuthTypes.User): User => ({
+  id:         fbUser.uid,
+  email:      fbUser.email ?? '',
+  name:       fbUser.displayName ?? fbUser.email?.split('@')[0] ?? fbUser.phoneNumber ?? 'User',
+  avatar_url: fbUser.photoURL ?? undefined,
+  phone:      fbUser.phoneNumber ?? undefined,
 });
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseAuthTypes.User | null>(null);
+  const [user, setUser]                 = useState<User | null>(null);
+  const [isLoading, setIsLoading]       = useState(true);
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // ============ MOCK AUTH HELPERS ============
-  const getMockUsers = async (): Promise<MockStoredUser[]> => {
-    try {
-      const usersJson = await AsyncStorage.getItem(MOCK_USERS_KEY);
-      return usersJson ? JSON.parse(usersJson) : [];
-    } catch {
-      return [];
-    }
-  };
-
-  const saveMockUser = async (newUser: MockStoredUser) => {
-    const users = await getMockUsers();
-    users.push(newUser);
-    await AsyncStorage.setItem(MOCK_USERS_KEY, JSON.stringify(users));
-  };
-
-  const saveMockSession = async (userData: User) => {
-    await AsyncStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(userData));
-  };
-
-  const clearMockSession = async () => {
-    await AsyncStorage.removeItem(MOCK_SESSION_KEY);
-  };
-
-  const loadMockSession = async (): Promise<User | null> => {
-    try {
-      const sessionJson = await AsyncStorage.getItem(MOCK_SESSION_KEY);
-      return sessionJson ? JSON.parse(sessionJson) : null;
-    } catch {
-      return null;
-    }
-  };
-
-  // ============ MOCK AUTH FUNCTIONS ============
-  const mockLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const users = await getMockUsers();
-      const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-
-      if (!foundUser) {
-        return { success: false, error: 'No account found with this email. Please sign up first.' };
-      }
-
-      if (foundUser.password !== password) {
-        return { success: false, error: 'Invalid password. Please try again.' };
-      }
-
-      const userData: User = {
-        id: foundUser.id,
-        email: foundUser.email,
-        name: foundUser.name,
-      };
-
-      setUser(userData);
-      setSession({ user: userData } as any); // Mock session
-      await saveMockSession(userData);
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Mock login error:', error);
-      return { success: false, error: 'Login failed. Please try again.' };
-    }
-  };
-
-  const mockSignup = async (email: string, password: string, name: string): Promise<{ success: boolean; needsConfirmation: boolean; error?: string }> => {
-    try {
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const users = await getMockUsers();
-      const existingUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-
-      if (existingUser) {
-        return { success: false, needsConfirmation: false, error: 'An account with this email already exists.' };
-      }
-
-      const newUser: MockStoredUser = {
-        id: `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        email: email.toLowerCase(),
-        password,
-        name,
-      };
-
-      await saveMockUser(newUser);
-
-      // Auto-login after signup (no email confirmation in mock mode)
-      const userData: User = {
-        id: newUser.id,
-        email: newUser.email,
-        name: newUser.name,
-      };
-
-      setUser(userData);
-      setSession({ user: userData } as any);
-      await saveMockSession(userData);
-
-      return { success: true, needsConfirmation: false };
-    } catch (error: any) {
-      console.error('Mock signup error:', error);
-      return { success: false, needsConfirmation: false, error: 'Signup failed. Please try again.' };
-    }
-  };
-
-  const mockLogout = async () => {
-    try {
-      await clearMockSession();
-      setUser(null);
-      setSession(null);
-    } catch (error) {
-      console.error('Mock logout error:', error);
-    }
-  };
-
-  // ============ REAL SUPABASE AUTH FUNCTIONS ============
-  const supabaseLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        console.error('Login error:', error.message);
-        return { success: false, error: error.message };
-      }
-
-      if (data.user) {
-        setUser(transformUser(data.user));
-        return { success: true };
-      }
-      return { success: false, error: 'Unable to sign in' };
-    } catch (error: any) {
-      console.error('Login error:', error);
-      if (error?.message?.includes('Network request failed')) {
-        return { success: false, error: 'No internet connection. Please check your network and try again.' };
-      }
-      return { success: false, error: error?.message || 'Login failed' };
-    }
-  };
-
-  const supabaseSignup = async (email: string, password: string, name: string): Promise<{ success: boolean; needsConfirmation: boolean; error?: string }> => {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: name,
-          },
-        },
-      });
-
-      if (error) {
-        console.error('Signup error:', error.message);
-        return { success: false, needsConfirmation: false, error: error.message };
-      }
-
-      if (data.user) {
-        if (data.session) {
-          setUser(transformUser(data.user));
-          return { success: true, needsConfirmation: false };
-        } else {
-          console.log('Email confirmation required');
-          return { success: true, needsConfirmation: true };
-        }
-      }
-      return { success: false, needsConfirmation: false, error: 'Unknown error occurred' };
-    } catch (error: any) {
-      console.error('Signup error:', error);
-      if (error?.message?.includes('Network request failed')) {
-        return { success: false, needsConfirmation: false, error: 'No internet connection. Please check your network and try again.' };
-      }
-      return { success: false, needsConfirmation: false, error: error?.message || 'Signup failed' };
-    }
-  };
-
-  const supabaseLogout = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Logout error:', error);
-      }
-      setUser(null);
-      setSession(null);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-
-  // ============ INITIALIZATION ============
   useEffect(() => {
-    if (USE_MOCK_AUTH) {
-      // Load mock session
-      loadMockSession().then((savedUser) => {
-        if (savedUser) {
-          setUser(savedUser);
-          setSession({ user: savedUser } as any);
-        }
-        setIsLoading(false);
-      });
-    } else {
-      // Use real Supabase auth
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
-        if (session?.user) {
-          setUser(transformUser(session.user));
-        }
-        setIsLoading(false);
-      });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          console.log('Auth event:', event);
-          setSession(session);
-          if (session?.user) {
-            setUser(transformUser(session.user));
-          } else {
-            setUser(null);
-          }
-          setIsLoading(false);
-        }
-      );
-
-      return () => subscription.unsubscribe();
-    }
+    const unsubscribe = auth().onAuthStateChanged((fbUser) => {
+      setFirebaseUser(fbUser);
+      setUser(fbUser ? transformUser(fbUser) : null);
+      setIsLoading(false);
+    });
+    return unsubscribe;
   }, []);
 
-  // Select auth functions based on mode
-  const login = USE_MOCK_AUTH ? mockLogin : supabaseLogin;
-  const signup = USE_MOCK_AUTH ? mockSignup : supabaseSignup;
-  const logout = USE_MOCK_AUTH ? mockLogout : supabaseLogout;
+  // ── Email / Password ────────────────────────────────────────────────────────
 
-  const value: AuthContextType = {
-    user,
-    session,
-    isLoading,
-    isAuthenticated: !!user,
-    login,
-    signup,
-    logout,
+  const login = async (email: string, password: string) => {
+    try {
+      await auth().signInWithEmailAndPassword(email, password);
+      return { success: true };
+    } catch (error: any) {
+      const msg = firebaseErrorMessage(error.code);
+      return { success: false, error: msg };
+    }
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const signup = async (email: string, password: string, name: string) => {
+    try {
+      const { user: fbUser } = await auth().createUserWithEmailAndPassword(email, password);
+      await fbUser.updateProfile({ displayName: name });
+      return { success: true, needsConfirmation: false };
+    } catch (error: any) {
+      const msg = firebaseErrorMessage(error.code);
+      return { success: false, needsConfirmation: false, error: msg };
+    }
+  };
+
+  // ── Phone OTP ───────────────────────────────────────────────────────────────
+
+  const sendOTP = async (phoneNumber: string) => {
+    try {
+      // Ensure number is in international format e.g. +2348012345678
+      const formatted = phoneNumber.startsWith('+') ? phoneNumber : `+234${phoneNumber.replace(/^0/, '')}`;
+      const confirmation = await auth().signInWithPhoneNumber(formatted);
+      return { success: true, confirmation };
+    } catch (error: any) {
+      return { success: false, error: firebaseErrorMessage(error.code) };
+    }
+  };
+
+  const verifyOTP = async (confirmation: FirebaseAuthTypes.ConfirmationResult, code: string) => {
+    try {
+      await confirmation.confirm(code);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: 'Invalid code. Please try again.' };
+    }
+  };
+
+  // ── Logout ──────────────────────────────────────────────────────────────────
+
+  const logout = async () => {
+    await auth().signOut();
+  };
+
+  // ── Update profile ──────────────────────────────────────────────────────────
+
+  const updateProfile = async (name: string) => {
+    if (firebaseUser) {
+      await firebaseUser.updateProfile({ displayName: name });
+      setUser(transformUser({ ...firebaseUser, displayName: name } as any));
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={{
+      user, firebaseUser, isLoading,
+      isAuthenticated: !!user,
+      login, signup, sendOTP, verifyOTP, logout, updateProfile,
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
+
+// ── Friendly error messages ───────────────────────────────────────────────────
+
+function firebaseErrorMessage(code: string): string {
+  switch (code) {
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Invalid email or password.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists.';
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Please try again later.';
+    case 'auth/invalid-phone-number':
+      return 'Invalid phone number. Use format: 08012345678';
+    case 'auth/quota-exceeded':
+      return 'SMS quota exceeded. Try again later.';
+    case 'auth/network-request-failed':
+      return 'No internet connection. Check your network.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
+}

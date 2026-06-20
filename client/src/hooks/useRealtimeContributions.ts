@@ -156,8 +156,6 @@ export function useRealtimeContributions(
             }
           }
 
-          console.log('🔔 New contribution received:', newContribution.title);
-
           // Add to state (prepend for newest first)
           setContributions((prev) => [newContribution, ...prev]);
 
@@ -194,16 +192,10 @@ export function useRealtimeContributions(
           onDeleteRef.current?.(deletedId);
         }
       )
-      .subscribe((status) => {
-        console.log('Realtime subscription status:', status);
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Successfully subscribed to real-time updates');
-        }
-      });
+      .subscribe();
 
     // Cleanup subscription on unmount
     return () => {
-      console.log('Cleaning up realtime subscription');
       supabase.removeChannel(channel);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

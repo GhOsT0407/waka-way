@@ -21,7 +21,7 @@ import { FareEstimateCard } from '../components/FareEstimateCard';
 import { SmartRouteOptions } from '../components/SmartRouteOptions';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES, GOOGLE_MAPS_API_KEY } from '../utils/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
 import { getRoute } from '../services/api';
 import type { TransportMode } from '../types/routing';
 import { SmartRouteResult, RouteOption } from '../services/smartRoutingService';
@@ -199,7 +199,7 @@ export default function RouteDetailScreen({ route, navigation }: any) {
             const data = await getRoute(id);
             setActiveRoute(data);
         } catch (e) {
-            console.log('Error loading route', e);
+            console.error('Error loading route', e);
         }
     };
 
@@ -213,9 +213,7 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                     s.destination_name === (activeRoute?.destination ?? smartRoute?.destination.name)
             );
             if (match) { setIsSaved(true); setSavedRouteId(match.id); }
-        } catch (e) {
-            console.log('checkIfSaved error', e);
-        }
+        } catch {}
     };
 
     const saveJourney = async () => {
@@ -229,15 +227,11 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                 setIsSaved(false);
                 setSavedRouteId(null);
             }
-        } catch (e) {
-            console.log('saveJourney error', e);
-        }
+        } catch {}
     };
 
-    const handleTransportModeSelect = (mode: TransportMode, priceRange: any) => {
+    const handleTransportModeSelect = (mode: TransportMode) => {
         setSelectedTransportMode(mode);
-        // In a real app, you might want to update the route with the selected mode and price
-        console.log(`Selected ${mode} with estimated fare: ${priceRange.formatted}`);
     };
 
     const applyRouteOptionToActiveRoute = (option: RouteOption) => {
@@ -315,11 +309,6 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                             ? [activeRoute.origin_coords, activeRoute.destination_coords]
                             : undefined
                     }
-                    directions={{
-                        origin: activeRoute.origin_coords,
-                        destination: activeRoute.destination_coords,
-                        apikey: GOOGLE_MAPS_API_KEY,
-                    }}
                 />
 
                 {/* Header Gradient */}

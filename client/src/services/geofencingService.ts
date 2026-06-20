@@ -63,7 +63,6 @@ export async function configureGeofenceNotifications(): Promise<boolean> {
     }
     
     if (finalStatus !== 'granted') {
-      console.log('Notification permission not granted');
       return false;
     }
     
@@ -156,7 +155,6 @@ export async function startRouteMonitoring(
       }
     );
     
-    console.log('Route monitoring started');
     return true;
   } catch (error) {
     console.error('Error starting route monitoring:', error);
@@ -175,7 +173,6 @@ export async function stopRouteMonitoring(): Promise<void> {
   activeRoute = null;
   currentLegIndex = 0;
   alertCooldowns.clear();
-  console.log('Route monitoring stopped');
 }
 
 /**

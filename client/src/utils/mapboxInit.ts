@@ -1,49 +1,34 @@
-import MapboxGL from '@rnmapbox/maps';
+// MapLibre v10+ does not require an access token — no init needed.
 
-let initialized = false;
+export function initMapbox() {}
 
-export function initMapbox() {
-  if (initialized) return;
-  const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-  MapboxGL.setAccessToken(token);
-  initialized = true;
-}
-
-// Mapbox uses [longitude, latitude] — opposite of react-native-maps
-export function toLngLat(lat: number, lng: number): [number, number] {
-  return [lng, lat];
-}
-
-export function boundsFromCoords(coords: [number, number][]): {
-  ne: [number, number];
-  sw: [number, number];
-} {
-  const lngs = coords.map(c => c[0]);
-  const lats = coords.map(c => c[1]);
+/** Convert {lat,lng} coords to a GeoJSON bounding box [NE, SW] */
+export function boundsFromCoords(coords: { latitude: number; longitude: number }[]) {
+  const lngs = coords.map(c => c.longitude);
+  const lats  = coords.map(c => c.latitude);
   return {
-    ne: [Math.max(...lngs), Math.max(...lats)],
-    sw: [Math.min(...lngs), Math.min(...lats)],
+    ne: [Math.max(...lngs), Math.max(...lats)] as [number, number],
+    sw: [Math.min(...lngs), Math.min(...lats)] as [number, number],
   };
 }
 
-// Approximate real-world-radius circle as a GeoJSON polygon
+/** Approximate a circle as a closed GeoJSON polygon (for FillLayer radius overlays) */
 export function circlePolygon(
-  lng: number,
   lat: number,
+  lng: number,
   radiusMeters: number,
-  steps = 48,
+  steps = 64,
 ): GeoJSON.Feature<GeoJSON.Polygon> {
   const coords: [number, number][] = [];
-  for (let i = 0; i < steps; i++) {
+  for (let i = 0; i <= steps; i++) {
     const angle = (i / steps) * 2 * Math.PI;
-    const dx = (radiusMeters * Math.cos(angle)) / (111320 * Math.cos((lat * Math.PI) / 180));
-    const dy = (radiusMeters * Math.sin(angle)) / 110540;
-    coords.push([lng + dx, lat + dy]);
+    const dlat  = (radiusMeters / 111320) * Math.cos(angle);
+    const dlng  = (radiusMeters / (111320 * Math.cos((lat * Math.PI) / 180))) * Math.sin(angle);
+    coords.push([lng + dlng, lat + dlat]);
   }
-  coords.push(coords[0]);
   return {
-    type: 'Feature',
-    geometry: { type: 'Polygon', coordinates: [coords] },
+    type:       'Feature',
     properties: {},
+    geometry:   { type: 'Polygon', coordinates: [coords] },
   };
 }

@@ -1,6 +1,16 @@
+import './utils/mapboxInit'; // Initialize MapLibre (setAccessToken) before any map renders
 import React, { useState, useEffect, useCallback } from 'react';
 import { View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
+import {
+  useFonts,
+  PlusJakartaSans_300Light,
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+} from '@expo-google-fonts/plus-jakarta-sans';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -22,6 +32,7 @@ import NotificationsScreen from './screens/NotificationsScreen';
 import PreferencesScreen from './screens/PreferencesScreen';
 import OnboardingScreen, { ONBOARDING_DONE_KEY } from './screens/OnboardingScreen';
 import NavigationScreen from './screens/NavigationScreen';
+import WakaWaySplash from './screens/WakaWaySplash';
 import { ThemeProvider, useAppTheme } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -45,15 +56,17 @@ function AuthStack() {
 }
 
 function AppNavigator() {
-  const { isAuthenticated, isLoading, session } = useAuth();
+  const { isAuthenticated, isLoading, firebaseUser } = useAuth();
   const { theme, isDark } = useAppTheme();
 
-  // Keep Django API client in sync with Supabase session token
+  // Keep Django API client in sync with Firebase ID token
   useEffect(() => {
-    wireAuthToken(session?.access_token ?? null);
-  }, [session]);
+    if (!firebaseUser) { wireAuthToken(null); return; }
+    firebaseUser.getIdToken().then(token => wireAuthToken(token)).catch(() => wireAuthToken(null));
+  }, [firebaseUser]);
   const { isOnline } = useNetworkStatus();
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
+  const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDING_DONE_KEY).then((val) => {
@@ -63,11 +76,12 @@ function AppNavigator() {
 
   const appReady = !isLoading && onboardingDone !== null;
 
-  const onLayoutRootView = useCallback(async () => {
-    if (appReady) {
-      await SplashScreen.hideAsync();
-    }
+  // Hide native splash as soon as fonts + auth + onboarding state are ready
+  useEffect(() => {
+    if (appReady) SplashScreen.hideAsync();
   }, [appReady]);
+
+  const onLayoutRootView = useCallback(() => {}, []);
 
   const navigationTheme = isDark
     ? {
@@ -95,8 +109,10 @@ function AppNavigator() {
         },
       };
 
-  if (!appReady) {
-    return null;
+  if (!appReady) return null;
+
+  if (!splashDone) {
+    return <WakaWaySplash onDone={() => setSplashDone(true)} />;
   }
 
   if (!onboardingDone) {
@@ -199,6 +215,17 @@ function AppNavigator() {
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_300Light,
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+  });
+
+  if (!fontsLoaded) return null;
+
   return (
     <ErrorBoundary>
       <SafeAreaProvider>

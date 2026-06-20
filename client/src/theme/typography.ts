@@ -1,15 +1,21 @@
-// Wakaway typography — DM Sans scale, 4pt base grid
+export const Fonts = {
+  thin:      'PlusJakartaSans_300Light',
+  regular:   'PlusJakartaSans_400Regular',
+  medium:    'PlusJakartaSans_500Medium',
+  semibold:  'PlusJakartaSans_600SemiBold',
+  bold:      'PlusJakartaSans_700Bold',
+  extrabold: 'PlusJakartaSans_800ExtraBold',
+} as const;
+
 export const Typography = {
-  // Size scale
   xs:   10,
   sm:   12,
   md:   14,
   lg:   16,
   xl:   20,
-  xxl:  24,
-  hero: 32,
+  xxl:  26,
+  hero: 36,
 
-  // Weights
   regular:  '400' as const,
   medium:   '500' as const,
   semibold: '600' as const,

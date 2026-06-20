@@ -109,7 +109,6 @@ export const configureProximityNotifications = async (): Promise<boolean> => {
       ]);
     }
 
-    console.log('✅ Proximity notifications configured');
     return true;
   } catch (error) {
     console.error('Error configuring notifications:', error);
@@ -181,7 +180,6 @@ export const sendProximityNotification = async (
 ): Promise<void> => {
   // Check if recently notified
   if (await wasRecentlyNotified(contribution.id)) {
-    console.log(`Skipping notification for ${contribution.id} - recently notified`);
     return;
   }
 
@@ -221,7 +219,6 @@ export const sendProximityNotification = async (
     // Mark as notified
     await markAlertNotified(contribution.id);
 
-    console.log(`🔔 Proximity notification sent for: ${contribution.title} (${distanceText} away)`);
   } catch (error) {
     console.error('Error sending proximity notification:', error);
   }
@@ -348,7 +345,6 @@ export const startProximityWatching = async (
       }
     );
 
-    console.log('✅ Proximity watching started');
     return true;
   } catch (error) {
     console.error('Error starting proximity watching:', error);
@@ -370,7 +366,6 @@ export const stopProximityWatching = (): void => {
   if (locationSubscription) {
     locationSubscription.remove();
     locationSubscription = null;
-    console.log('Proximity watching stopped');
   }
 };
 
@@ -379,7 +374,6 @@ export const stopProximityWatching = (): void => {
  */
 export const clearNotificationHistory = async (): Promise<void> => {
   await AsyncStorage.removeItem(NOTIFIED_ALERTS_KEY);
-  console.log('Notification history cleared');
 };
 
 export default {

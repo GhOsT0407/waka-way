@@ -161,6 +161,7 @@ const RouteOptionCard: React.FC<{
   const transitLegs    = option.legs.filter((l) => l.mode !== 'walk');
   const boardingLeg    = transitLegs[0];
   const boardingNote   = boardingLeg ? boardingLeg.instruction : '';
+  const primaryColor   = boardingLeg ? getModeConfig(boardingLeg.mode).bg : tokens.accent;
 
   return (
     <Pressable
@@ -174,6 +175,9 @@ const RouteOptionCard: React.FC<{
       accessibilityRole="button"
       accessibilityLabel={`${option.name}, fare ${option.priceFormatted}`}
     >
+      {/* Left accent stripe — primary mode color */}
+      <View style={[card.leftAccent, { backgroundColor: primaryColor }]} />
+
       {/* ── Top row: fare box + meta + difficulty ─────────────────────── */}
       <View style={card.topRow}>
         {/* Fare box */}
@@ -195,8 +199,8 @@ const RouteOptionCard: React.FC<{
               {option.name}
             </Text>
             {option.isRecommended && (
-              <View style={[card.bestBadge, { backgroundColor: tokens.accent }]}>
-                <Text style={card.bestText}>Best</Text>
+              <View style={card.bestBadge}>
+                <Text style={card.bestText}>BEST VALUE</Text>
               </View>
             )}
           </View>
@@ -270,12 +274,25 @@ const RouteOptionCard: React.FC<{
 const card = StyleSheet.create({
   wrap: {
     borderRadius: 16,
-    padding: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingLeft: 20,
+    paddingRight: 16,
     marginBottom: 10,
     borderWidth: 1.5,
+    overflow: 'hidden',
   },
   wrapSelected: { borderWidth: 2 },
   wrapPressed:  { opacity: 0.92 },
+
+  // Left mode accent stripe
+  leftAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+  },
 
   // Top row
   topRow:    { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
@@ -286,8 +303,8 @@ const card = StyleSheet.create({
   metaBlock: { flex: 1 },
   nameRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   optionName:{ fontSize: 15, fontWeight: '600', letterSpacing: -0.2, flex: 1 },
-  bestBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
-  bestText:  { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  bestBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: '#22C55E' },
+  bestText:  { color: '#FFFFFF', fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
   metaLine:  { fontSize: 13, fontWeight: '400' },
 
   diffChip:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, flexShrink: 0 },

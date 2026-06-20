@@ -14,12 +14,12 @@ import {
   Platform,
   Pressable,
   Dimensions,
+  ScrollView,
 } from 'react-native';
-import { PanGestureHandler, State as GestureState } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 
@@ -28,45 +28,30 @@ import { searchPlaces, getPlaceDetails, isWithinLagos } from '../services/places
 import { searchRoutes } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import TransportModeSelector from '../components/TransportModeSelector';
+import { WakaWaySpinner } from '../components/WakaWaySpinner';
 import type { TransportMode } from '../services/smartRoutingService';
+import { WW } from '../theme/colors';
+import { Fonts } from '../theme/typography';
 
-// ─── Layout constants ────────────────────────────────────────────────────────
+// ─── Layout ───────────────────────────────────────────────────────────────────
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const SHEET_PEEK = 280;
-const SHEET_FULL = SCREEN_HEIGHT * 0.85;
+const MAP_RATIO   = 0.50; // map occupies 50% of screen height
+const MAP_HEIGHT  = SCREEN_HEIGHT * MAP_RATIO;
 
-// ─── Dark tokens (map + sheet) ───────────────────────────────────────────────
-const D = {
-  sheetBg:   '#0F1117',
-  surface:   '#1A1D27',
-  text:      '#F1F5F9',
-  textSub:   'rgba(241,245,249,0.55)',
-  textMuted: 'rgba(241,245,249,0.3)',
-  divider:   'rgba(255,255,255,0.07)',
-  accent:    '#FF6B35',
-} as const;
-
-// ─── Light tokens (search overlay) ──────────────────────────────────────────
-const L = {
-  bg:       '#F8F7F5',
-  surface:  '#FFFFFF',
-  surface2: '#F2F1EF',
-  accent:   '#E8541A',
-  text:     '#111111',
-  textSub:  '#6B6B6B',
-  textMuted:'#9E9E9E',
-  divider:  '#E5E5E5',
-} as const;
-
-const MODE: Record<string, { bg: string; text: string; label: string }> = {
-  danfo: { bg: '#F5C518', text: '#111111', label: 'Danfo' },
-  brt:   { bg: '#1A5BDB', text: '#FFFFFF', label: 'BRT'   },
-  keke:  { bg: '#2D7A4F', text: '#FFFFFF', label: 'Keke'  },
-  okada: { bg: '#D93025', text: '#FFFFFF', label: 'Okada' },
+// Transport mode metadata
+const MODE: Record<string, { bg: string; text: string; label: string; icon: string }> = {
+  danfo: { bg: WW.danfo,  text: WW.danfoText,  label: 'Danfo',  icon: 'bus-outline'      },
+  brt:   { bg: WW.brt,    text: WW.brtText,    label: 'BRT',    icon: 'train-outline'    },
+  keke:  { bg: WW.keke,   text: WW.kekeText,   label: 'Keke',   icon: 'bicycle-outline'  },
+  okada: { bg: WW.okada,  text: WW.okadaText,  label: 'Okada',  icon: 'bicycle-outline'  },
+  walk:  { bg: WW.walk,   text: WW.walkText,   label: 'Walk',   icon: 'walk-outline'     },
+  ferry: { bg: WW.ferry,  text: WW.ferryText,  label: 'Ferry',  icon: 'boat-outline'     },
 };
 
 const RECENT_SEARCHES_KEY = 'recentSearches';
 const TRANSPORT_PREF_KEY  = 'preferredFirstLegTransportMode';
+const HOME_PLACE_KEY      = 'quickPick_home';
+const WORK_PLACE_KEY      = 'quickPick_work';
 const MAX_RECENT          = 8;
 const MOCK_LOCATION       = { latitude: 6.5244, longitude: 3.3792 };
 
@@ -87,16 +72,106 @@ interface SearchItem {
   placeId?: string;
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
-const ModeBadge = ({ mode }: { mode: string }) => {
-  const m = MODE[mode];
-  if (!m) return null;
+// ─── Journey timeline strip ───────────────────────────────────────────────────
+const JourneyStrip = ({ modes }: { modes: readonly string[] }) => (
+  <View style={s.strip}>
+    {modes.map((m, i) => {
+      const cfg = MODE[m];
+      if (!cfg) return null;
+      const flex = m === 'walk' ? 0.6 : m === 'brt' ? 2 : 1.3;
+      return (
+        <React.Fragment key={`${m}-${i}`}>
+          <View style={[s.stripSeg, { flex, backgroundColor: cfg.bg }]} />
+          {i < modes.length - 1 && <View style={s.stripGap} />}
+        </React.Fragment>
+      );
+    })}
+  </View>
+);
+
+// ─── Popular route card ───────────────────────────────────────────────────────
+const RouteCard = ({
+  item,
+  onPress,
+}: {
+  item: typeof POPULAR_ROUTES[number];
+  onPress: () => void;
+}) => {
+  const pressAnim = useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () =>
+    Animated.spring(pressAnim, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start();
+  const onPressOut = () =>
+    Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true, speed: 30 }).start();
+
   return (
-    <View style={[s.badge, { backgroundColor: m.bg }]}>
-      <Text style={[s.badgeText, { color: m.text }]}>{m.label}</Text>
-    </View>
+    <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut}>
+      <Animated.View style={[s.routeCard, { transform: [{ scale: pressAnim }] }]}>
+        {/* Fare hero */}
+        <View style={s.routeCardTop}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.routeCardRoute} numberOfLines={1}>
+              {item.from} → {item.to}
+            </Text>
+            <Text style={s.routeCardFare}>{item.fare}</Text>
+          </View>
+          <View style={s.routeCardTimePill}>
+            <Ionicons name="time-outline" size={11} color={WW.textSub} />
+            <Text style={s.routeCardTime}>{item.time}</Text>
+          </View>
+        </View>
+
+        {/* Journey timeline strip */}
+        <JourneyStrip modes={item.modes} />
+
+        {/* Mode chips */}
+        <View style={s.routeCardModes}>
+          {item.modes.map((m) => {
+            const cfg = MODE[m];
+            return cfg ? (
+              <View key={m} style={[s.modeChip, { backgroundColor: cfg.bg }]}>
+                <Ionicons name={cfg.icon as any} size={10} color={cfg.text} />
+                <Text style={[s.modeChipText, { color: cfg.text }]}>{cfg.label}</Text>
+              </View>
+            ) : null;
+          })}
+        </View>
+      </Animated.View>
+    </Pressable>
   );
 };
+
+// ─── Quick pick tile (Home / Work shortcut) ───────────────────────────────────
+const QuickPickTile = ({
+  label,
+  icon,
+  dest,
+  accentColor,
+  onPress,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  dest: SearchItem | null;
+  accentColor: string;
+  onPress: () => void;
+}) => (
+  <TouchableOpacity
+    style={[s.qpTile, !dest && s.qpTileDim]}
+    onPress={onPress}
+    activeOpacity={dest ? 0.7 : 1}
+    disabled={!dest}
+  >
+    <View style={[s.qpIconWrap, { backgroundColor: dest ? accentColor + '22' : WW.bgElevated }]}>
+      <Ionicons name={icon} size={18} color={dest ? accentColor : WW.textMuted} />
+    </View>
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <Text style={s.qpLabel}>{label}</Text>
+      <Text style={s.qpAddress} numberOfLines={1}>
+        {dest ? dest.name : 'Not set'}
+      </Text>
+    </View>
+  </TouchableOpacity>
+);
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }: any) {
@@ -117,21 +192,32 @@ export default function HomeScreen({ navigation }: any) {
   const [showModeSelector, setShowModeSelector] = useState(false);
   const [pendingDest, setPendingDest]         = useState<SearchItem | null>(null);
   const [routeLoading, setRouteLoading]       = useState(false);
+  const [isSwapped, setIsSwapped]             = useState(false);
+
+  const [homeDest, setHomeDest] = useState<SearchItem | null>(null);
+  const [workDest, setWorkDest] = useState<SearchItem | null>(null);
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const overlayAnim   = useRef(new Animated.Value(0)).current;
-
-  // Bottom sheet
-  const sheetAnim   = useRef(new Animated.Value(SHEET_PEEK)).current;
-  const currentSnap = useRef(SHEET_PEEK);
-  const dragBase    = useRef(SHEET_PEEK);
-  const [sheetExpanded, setSheetExpanded] = useState(false);
+  const recedeAnim    = useRef(new Animated.Value(0)).current;
+  const breatheAnim   = useRef(new Animated.Value(1)).current;
 
   // ── Boot ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     loadRecentSearches();
     loadCurrentLocation();
     loadSavedPref();
+    loadQuickPicks();
+
+    // Search bar breathing animation — subtle pulse when idle
+    const breathe = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breatheAnim, { toValue: 1.015, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(breatheAnim, { toValue: 1,     duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    breathe.start();
+    return () => breathe.stop();
   }, []);
 
   // ── Debounced search ──────────────────────────────────────────────────────
@@ -147,68 +233,43 @@ export default function HomeScreen({ navigation }: any) {
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
   }, [query]);
 
-  // ── Sheet gestures ────────────────────────────────────────────────────────
-  const snapSheet = (target: number) => {
-    currentSnap.current = target;
-    setSheetExpanded(target === SHEET_FULL);
-    Animated.spring(sheetAnim, {
-      toValue: target,
-      friction: 8,
-      tension: 50,
-      useNativeDriver: false,
-    }).start();
-  };
-
-  const onSheetGesture = ({ nativeEvent }: any) => {
-    const next = Math.max(
-      SHEET_PEEK,
-      Math.min(SHEET_FULL, dragBase.current + (-nativeEvent.translationY))
-    );
-    sheetAnim.setValue(next);
-  };
-
-  const onSheetStateChange = ({ nativeEvent }: any) => {
-    if (nativeEvent.state === GestureState.BEGAN) {
-      sheetAnim.stopAnimation();
-      dragBase.current = currentSnap.current;
-    }
-    if (nativeEvent.oldState === GestureState.ACTIVE) {
-      const vy  = nativeEvent.velocityY;
-      const cur = dragBase.current + (-nativeEvent.translationY);
-      if (vy < -500) {
-        snapSheet(SHEET_FULL);
-      } else if (vy > 500) {
-        snapSheet(SHEET_PEEK);
-      } else {
-        snapSheet(cur > (SHEET_PEEK + SHEET_FULL) / 2 ? SHEET_FULL : SHEET_PEEK);
-      }
-    }
-  };
-
   // ── Search overlay ────────────────────────────────────────────────────────
   const openSearch = useCallback(() => {
     setIsSearchOpen(true);
-    Animated.timing(overlayAnim, {
-      toValue: 1,
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => inputRef.current?.focus());
-  }, [overlayAnim]);
+    Animated.parallel([
+      Animated.timing(overlayAnim, {
+        toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true,
+      }),
+      Animated.timing(recedeAnim, {
+        toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: false,
+      }),
+    ]).start(() => inputRef.current?.focus());
+  }, [overlayAnim, recedeAnim]);
 
   const closeSearch = useCallback(() => {
     Keyboard.dismiss();
-    Animated.timing(overlayAnim, {
-      toValue: 0,
-      duration: 160,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => {
+    Animated.parallel([
+      Animated.timing(overlayAnim, {
+        toValue: 0, duration: 160, easing: Easing.in(Easing.cubic), useNativeDriver: true,
+      }),
+      Animated.timing(recedeAnim, {
+        toValue: 0, duration: 160, easing: Easing.in(Easing.cubic), useNativeDriver: false,
+      }),
+    ]).start(() => {
       setIsSearchOpen(false);
       setQuery('');
       setSuggestions([]);
     });
-  }, [overlayAnim]);
+  }, [overlayAnim, recedeAnim]);
+
+  const handleSwap = useCallback(() => {
+    if (!pendingDest?.coordinates) {
+      openSearch();
+      return;
+    }
+    setIsSwapped(prev => !prev);
+    setShowModeSelector(true);
+  }, [pendingDest, openSearch]);
 
   // ── Data loaders ──────────────────────────────────────────────────────────
   const loadRecentSearches = async () => {
@@ -247,6 +308,17 @@ export default function HomeScreen({ navigation }: any) {
     }
   };
 
+  const loadQuickPicks = async () => {
+    try {
+      const [homeRaw, workRaw] = await Promise.all([
+        AsyncStorage.getItem(HOME_PLACE_KEY),
+        AsyncStorage.getItem(WORK_PLACE_KEY),
+      ]);
+      if (homeRaw) setHomeDest(JSON.parse(homeRaw));
+      if (workRaw) setWorkDest(JSON.parse(workRaw));
+    } catch {}
+  };
+
   // ── Route handlers ────────────────────────────────────────────────────────
   const handleDestinationSelect = useCallback(async (item: SearchItem) => {
     closeSearch();
@@ -278,18 +350,28 @@ export default function HomeScreen({ navigation }: any) {
         return;
       }
       await saveRecentSearch({ ...pendingDest, coordinates: coords });
+
+      const origin      = isSwapped ? coords      : userCoords;
+      const destination = isSwapped ? userCoords  : coords;
+      const destName    = isSwapped
+        ? (locationName || 'Current location')
+        : pendingDest.name;
+      const destDetails = isSwapped
+        ? { id: 'current', name: destName, address: 'Your current location', coordinates: userCoords }
+        : pendingDest;
+
       const result = await searchRoutes({
-        origin: userCoords,
-        destination: coords,
-        destinationName: pendingDest.name,
-        destinationDetails: pendingDest,
+        origin,
+        destination,
+        destinationName: destName,
+        destinationDetails: destDetails,
         preferredFirstLegMode: mode,
       });
       if (result?.legacyRoute) {
         navigation.replace('RouteDetail', {
           routeData:      result.legacyRoute,
           smartRouteData: result.smartRoute,
-          destination:    pendingDest,
+          destination:    destDetails,
         });
       }
     } catch (err) {
@@ -297,43 +379,21 @@ export default function HomeScreen({ navigation }: any) {
     } finally {
       setRouteLoading(false);
       setPendingDest(null);
+      setIsSwapped(false);
     }
   };
 
   const userInitial = user?.email?.[0]?.toUpperCase() ?? '?';
-
-  // ── Render helpers ────────────────────────────────────────────────────────
-  const renderRouteRow = useCallback(({ item }: { item: typeof POPULAR_ROUTES[number] }) => (
-    <Pressable
-      style={({ pressed }) => [s.routeRow, pressed && s.routeRowPressed]}
-      onPress={openSearch}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.from} to ${item.to}, ${item.fare}`}
-    >
-      <View style={{ flex: 1 }}>
-        <Text style={s.routeRowTitle} numberOfLines={1}>
-          {item.from} → {item.to}
-        </Text>
-        <Text style={s.routeRowSub}>{item.time} · {item.fare}</Text>
-      </View>
-      <View style={s.routeRowRight}>
-        <View style={s.badgeRow}>
-          {item.modes.map((m) => <ModeBadge key={m} mode={m} />)}
-        </View>
-        <Ionicons name="chevron-forward" size={15} color={D.textMuted} />
-      </View>
-    </Pressable>
-  ), [openSearch]);
 
   const renderResultRow = useCallback((item: SearchItem, isRecent: boolean) => (
     <TouchableOpacity
       key={item.id}
       style={s.resultRow}
       onPress={() => handleDestinationSelect(item)}
-      activeOpacity={0.7}
+      activeOpacity={0.75}
     >
       <View style={s.resultIcon}>
-        <Ionicons name={isRecent ? 'time-outline' : 'location-outline'} size={17} color={L.textSub} />
+        <Ionicons name={isRecent ? 'time-outline' : 'location-outline'} size={16} color={WW.textSub} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={s.resultName} numberOfLines={1}>{item.name}</Text>
@@ -347,185 +407,216 @@ export default function HomeScreen({ navigation }: any) {
     <View style={s.root}>
       <StatusBar style="light" />
 
-      {/* Full-screen map */}
-      <WakaWayMapView
-        style={StyleSheet.absoluteFill}
-        initialRegion={{
-          latitude: userCoords.latitude,
-          longitude: userCoords.longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }}
-      />
-
-      {/* Top gradient for header legibility */}
-      <LinearGradient
-        colors={['rgba(0,0,0,0.72)', 'rgba(0,0,0,0.28)', 'transparent']}
-        style={[s.topGradient, { height: insets.top + 180 }]}
-        pointerEvents="none"
-      />
-
-      {/* Floating header */}
-      <View style={[s.floatingHeader, { paddingTop: insets.top + 14 }]}>
-        <Text style={s.wordmark}>WAKAWAY</Text>
-        <View style={s.headerRight}>
-          <TouchableOpacity
-            style={s.iconBtn}
-            onPress={() => navigation.navigate('Notifications')}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityLabel="Notifications"
-          >
-            <Ionicons name="notifications-outline" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('You')}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityLabel="Profile"
-          >
-            <View style={s.avatarCircle}>
-              <Text style={s.avatarText}>{userInitial}</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+      {/* ── Main content — recedes when search opens ──────────────────── */}
+      <Animated.View style={[
+        s.mainContent,
+        {
+          transform: [
+            { scale: recedeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.93] }) },
+            { translateY: recedeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 10] }) },
+          ],
+          borderRadius: recedeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 22] }),
+          overflow: 'hidden',
+        },
+      ]}>
+      {/* ── Map section (top 50%) ───────────────────────────────────────── */}
+      <View style={s.mapSection}>
+        <WakaWayMapView
+          style={StyleSheet.absoluteFill}
+          initialRegion={{
+            latitude: userCoords.latitude,
+            longitude: userCoords.longitude,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
+          }}
+          hideCenterButton
+        />
       </View>
 
-      {/* Floating search bar */}
-      <View style={[s.searchFloat, { top: insets.top + 66 }]}>
-        <TouchableOpacity
-          style={s.searchPill}
-          onPress={openSearch}
-          activeOpacity={0.82}
-          accessibilityRole="search"
-          accessibilityLabel="Search destination"
-        >
-          <Ionicons name="search-outline" size={17} color="rgba(255,255,255,0.65)" />
-          <Text style={s.searchPillText}>Where are you going?</Text>
-          <View style={s.swapPill}>
-            <Ionicons name="swap-vertical" size={15} color="rgba(255,255,255,0.5)" />
-          </View>
-        </TouchableOpacity>
+      {/* ── Content section (bottom 50%) ────────────────────────────────── */}
+      <View style={[s.contentSection, { paddingBottom: insets.bottom }]}>
 
-        <View style={s.originChip}>
-          <Ionicons name="radio-button-on" size={10} color={D.accent} />
-          <Text style={s.originText} numberOfLines={1}>
-            {locationReady ? (locationName || 'Current location') : 'Detecting location…'}
-          </Text>
+        {/* Header row */}
+        <View style={[s.header, { paddingTop: 16 }]}>
+          <Text style={s.wordmark}>WAKA<Text style={s.wordmarkAccent}>WAY</Text></Text>
+          <View style={s.headerRight}>
+            <TouchableOpacity
+              style={s.iconBtn}
+              onPress={() => navigation.navigate('Notifications')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="notifications-outline" size={19} color={WW.textSub} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('You')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <View style={s.avatarCircle}>
+                <Text style={s.avatarText}>{userInitial}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
 
-      {/* Bottom sheet */}
-      <PanGestureHandler onGestureEvent={onSheetGesture} onHandlerStateChange={onSheetStateChange}>
-        <Animated.View style={[s.sheet, { height: sheetAnim }]}>
-          {/* Drag handle */}
-          <View style={s.handleRow}>
-            <View style={s.handle} />
-          </View>
-
-          {/* Sheet title */}
-          <View style={s.sheetTitleRow}>
-            <Text style={s.sectionLabel}>POPULAR ROUTES</Text>
-            {sheetExpanded && (
+        {/* Search bar — breathes when idle */}
+        <View style={s.searchArea}>
+          <Animated.View style={{ transform: [{ scale: isSearchOpen ? 1 : breatheAnim }] }}>
+            <View style={s.searchRow}>
               <TouchableOpacity
-                onPress={() => snapSheet(SHEET_PEEK)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={s.searchPill}
+                onPress={openSearch}
+                activeOpacity={0.9}
+                accessibilityRole="search"
               >
-                <Ionicons name="chevron-down" size={18} color={D.textMuted} />
+                <View style={s.searchIconWrap}>
+                  <Ionicons name="search" size={15} color={WW.orange} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.searchPillText}>Where you dey go?</Text>
+                  <Text style={s.searchPillSub} numberOfLines={1}>
+                    {locationReady ? (locationName || 'Current location') : 'Detecting location…'}
+                  </Text>
+                </View>
+                {/* Danfo stripe accent */}
+                <View style={s.searchStripe} />
               </TouchableOpacity>
-            )}
-          </View>
 
-          {/* Routes list */}
-          <FlatList
-            data={POPULAR_ROUTES}
-            keyExtractor={(item) => item.id}
-            renderItem={renderRouteRow}
-            contentContainerStyle={s.listContent}
-            ItemSeparatorComponent={() => <View style={s.rowSep} />}
-            showsVerticalScrollIndicator={false}
-            scrollEnabled={sheetExpanded}
-            bounces={sheetExpanded}
-            keyboardShouldPersistTaps="handled"
-            decelerationRate="normal"
-            overScrollMode="never"
-          />
-        </Animated.View>
-      </PanGestureHandler>
+              <TouchableOpacity
+                style={[s.swapBtn, isSwapped && s.swapBtnActive]}
+                onPress={handleSwap}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name="swap-vertical"
+                  size={16}
+                  color={isSwapped ? '#fff' : WW.textSub}
+                />
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
 
-      {/* Route loading overlay */}
+        {/* Danfo stripe divider */}
+        <View style={s.stripeDivider}>
+          <View style={s.stripeDividerLine} />
+          <Text style={s.stripeDividerLabel}>POPULAR ROUTES</Text>
+          <View style={s.stripeDividerLine} />
+        </View>
+
+        {/* Popular routes — horizontal scroll */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.routesScroll}
+          decelerationRate="fast"
+          snapToInterval={260}
+          snapToAlignment="start"
+        >
+          {POPULAR_ROUTES.map((item) => (
+            <RouteCard key={item.id} item={item} onPress={openSearch} />
+          ))}
+        </ScrollView>
+      </View>
+      </Animated.View>
+
+      {/* Route loading overlay — WakaWay W-spinner */}
       {routeLoading && (
         <View style={s.loadingOverlay}>
-          <View style={s.loadingCard}>
-            <ActivityIndicator size="large" color={L.accent} />
-            <Text style={s.loadingText}>Finding routes…</Text>
-            <Text style={s.loadingHint}>Checking danfo, BRT, and keke options</Text>
-          </View>
+          <WakaWaySpinner
+            size={96}
+            accent={WW.orange}
+            onDark={true}
+            label="FINDING YOUR ROUTE"
+          />
         </View>
       )}
 
-      {/* Search overlay */}
+      {/* Search overlay — frosted glass, morphs from search bar */}
       {isSearchOpen && (
         <Animated.View
           style={[
             s.searchOverlay,
-            { paddingTop: insets.top },
             {
               opacity: overlayAnim,
               transform: [{
                 translateY: overlayAnim.interpolate({
-                  inputRange: [0, 1], outputRange: [24, 0],
+                  inputRange: [0, 1], outputRange: [32, 0],
                 }),
               }],
             },
           ]}
         >
-          <View style={s.overlayHeader}>
-            <TouchableOpacity
-              onPress={closeSearch}
-              style={s.backBtn}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityLabel="Close search"
-            >
-              <Ionicons name="arrow-back" size={22} color={L.text} />
+          {/* Frosted background */}
+          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: WW.frosted }]} />
+
+          {/* Search header */}
+          <View style={[s.overlayHeader, { paddingTop: insets.top + 12 }]}>
+            <TouchableOpacity onPress={closeSearch} style={s.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="arrow-back" size={20} color={WW.text} />
             </TouchableOpacity>
             <View style={s.inputWrap}>
-              <Ionicons name="search" size={16} color={L.textSub} />
+              <Ionicons name="search" size={15} color={WW.orange} />
               <TextInput
                 ref={inputRef}
                 style={s.textInput}
                 placeholder="Search places in Lagos…"
-                placeholderTextColor={L.textMuted}
+                placeholderTextColor={WW.textMuted}
                 value={query}
                 onChangeText={setQuery}
                 returnKeyType="search"
                 autoCorrect={false}
                 autoCapitalize="words"
-                onSubmitEditing={() => {
-                  if (suggestions.length > 0) handleDestinationSelect(suggestions[0]);
-                }}
+                onSubmitEditing={() => { if (suggestions.length > 0) handleDestinationSelect(suggestions[0]); }}
               />
               {query.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => { setQuery(''); setSuggestions([]); }}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="close-circle" size={17} color={L.textMuted} />
+                <TouchableOpacity onPress={() => { setQuery(''); setSuggestions([]); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={16} color={WW.textMuted} />
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          <View style={s.overlayDivider} />
+          {/* Danfo stripe under search */}
+          <View style={s.overlayStripe} />
+
+          {/* Quick picks — Home / Work shortcuts */}
+          {!query.trim() && (homeDest || workDest) && (
+            <View style={s.qpSection}>
+              <Text style={s.qpSectionLabel}>GO TO</Text>
+              <View style={s.qpRow}>
+                {homeDest && (
+                  <QuickPickTile
+                    label="Home"
+                    icon="home-outline"
+                    dest={homeDest}
+                    accentColor={WW.green}
+                    onPress={() => handleDestinationSelect(homeDest!)}
+                  />
+                )}
+                {workDest && (
+                  <QuickPickTile
+                    label="Work"
+                    icon="briefcase-outline"
+                    dest={workDest}
+                    accentColor={WW.brt}
+                    onPress={() => handleDestinationSelect(workDest!)}
+                  />
+                )}
+              </View>
+            </View>
+          )}
 
           {searching ? (
             <View style={s.centerState}>
-              <ActivityIndicator color={L.accent} />
+              <ActivityIndicator color={WW.orange} />
             </View>
           ) : query.trim() ? (
             suggestions.length === 0 ? (
               <View style={s.centerState}>
-                <Ionicons name="search-outline" size={48} color={L.divider} />
+                <Ionicons name="search-outline" size={44} color={WW.border} />
                 <Text style={s.emptyTitle}>No places found</Text>
-                <Text style={s.emptyHint}>Try a different name or area</Text>
+                <Text style={s.emptyHint}>Try a different name or area in Lagos</Text>
               </View>
             ) : (
               <FlatList
@@ -534,8 +625,6 @@ export default function HomeScreen({ navigation }: any) {
                 renderItem={({ item }) => renderResultRow(item, false)}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
-                decelerationRate="normal"
-                overScrollMode="never"
                 contentContainerStyle={{ paddingBottom: 40 }}
               />
             )
@@ -546,21 +635,13 @@ export default function HomeScreen({ navigation }: any) {
               renderItem={({ item }) => renderResultRow(item, true)}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              decelerationRate="normal"
-              overScrollMode="never"
               contentContainerStyle={{ paddingBottom: 40 }}
-              ListHeaderComponent={
-                recentItems.length > 0
-                  ? <Text style={s.recentLabel}>RECENT</Text>
-                  : null
-              }
+              ListHeaderComponent={recentItems.length > 0 ? <Text style={s.recentLabel}>RECENT</Text> : null}
               ListEmptyComponent={
                 <View style={s.centerState}>
-                  <Ionicons name="bus-outline" size={48} color={L.divider} />
+                  <Ionicons name="bus-outline" size={44} color={WW.border} />
                   <Text style={s.emptyTitle}>Where to?</Text>
-                  <Text style={s.emptyHint}>
-                    Type a place — e.g. "Lekki Phase 1" or "Oshodi"
-                  </Text>
+                  <Text style={s.emptyHint}>Type a place — e.g. "Lekki Phase 1"</Text>
                 </View>
               }
             />
@@ -580,252 +661,282 @@ export default function HomeScreen({ navigation }: any) {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0F1117' },
+  root:        { flex: 1, backgroundColor: WW.bg },
+  mainContent: { flex: 1 },
 
-  // Gradient overlay
-  topGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+  // ── Split layout ────────────────────────────────────────────────────────────
+  mapSection: {
+    height: MAP_HEIGHT,
+    overflow: 'hidden',
+  },
+  contentSection: {
+    flex: 1,
+    backgroundColor: WW.bg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: -20,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.5, shadowRadius: 20 },
+      android: { elevation: 20 },
+    }),
   },
 
-  // Floating header
-  floatingHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+  // ── Header ──────────────────────────────────────────────────────────────────
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   wordmark: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
+    fontFamily: Fonts.extrabold,
+    fontSize: 22,
+    color: WW.text,
+    letterSpacing: -0.5,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
+  wordmarkAccent: { color: WW.orange },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: WW.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: WW.border,
   },
   avatarCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: D.accent,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: WW.orange,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  avatarText: { fontFamily: Fonts.bold, color: '#fff', fontSize: 14 },
 
-  // Floating search bar
-  searchFloat: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    gap: 10,
-  },
+  // ── Search bar ──────────────────────────────────────────────────────────────
+  searchArea: { paddingHorizontal: 16, marginBottom: 16 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   searchPill: {
-    height: 52,
-    backgroundColor: 'rgba(10,10,15,0.78)',
-    borderRadius: 14,
+    flex: 1,
+    height: 58,
+    backgroundColor: WW.bgElevated,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: WW.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 6,
+    paddingRight: 12,
+    gap: 10,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios:     { shadowColor: WW.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12 },
+      android: { elevation: 6 },
+    }),
+  },
+  searchIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: WW.orangeDim,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchPillText: {
+    fontFamily: Fonts.semibold,
+    fontSize: 15,
+    color: WW.text,
+  },
+  searchPillSub: {
+    fontFamily: Fonts.regular,
+    fontSize: 11,
+    color: WW.textMuted,
+    marginTop: 1,
+  },
+  // Danfo stripe on search bar right edge
+  searchStripe: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: WW.stripe,
+    borderTopRightRadius: 16,
+    borderBottomRightRadius: 16,
+  },
+  swapBtn: {
+    width: 48,
+    height: 58,
+    borderRadius: 16,
+    backgroundColor: WW.bgElevated,
+    borderWidth: 1,
+    borderColor: WW.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 8 },
+      android: { elevation: 4 },
+    }),
+  },
+  swapBtnActive: { backgroundColor: WW.orange, borderColor: WW.orange },
+
+  // ── Danfo stripe divider ────────────────────────────────────────────────────
+  stripeDivider: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    gap: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  stripeDividerLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: WW.stripe,
+    borderRadius: 1,
+    opacity: 0.5,
+  },
+  stripeDividerLabel: {
+    fontFamily: Fonts.bold,
+    fontSize: 10,
+    color: WW.stripe,
+    letterSpacing: 1.4,
+  },
+
+  // ── Route cards (horizontal scroll) ────────────────────────────────────────
+  routesScroll: { paddingLeft: 16, paddingRight: 8, gap: 10 },
+  routeCard: {
+    width: 250,
+    backgroundColor: WW.bgElevated,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: WW.border,
+    gap: 10,
     ...Platform.select({
       ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 },
       android: { elevation: 8 },
     }),
   },
-  searchPillText: {
+  routeCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  routeCardRoute: {
+    fontFamily: Fonts.semibold,
+    fontSize: 14,
+    color: WW.text,
     flex: 1,
-    fontSize: 15,
-    fontWeight: '400',
-    color: 'rgba(255,255,255,0.5)',
   },
-  swapPill: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  routeCardFare: {
+    fontFamily: Fonts.extrabold,
+    fontSize: 22,
+    color: WW.orange,
+    letterSpacing: -0.5,
+    marginTop: 2,
   },
-  originChip: {
+  routeCardTimePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(10,10,15,0.72)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-  },
-  originText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.55)',
-  },
-
-  // Bottom sheet
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: D.sheetBg,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.08)',
-    ...Platform.select({
-      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.4, shadowRadius: 24 },
-      android: { elevation: 24 },
-    }),
-  },
-  handleRow: {
-    alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 4,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  sheetTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 14,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: D.textMuted,
-    letterSpacing: 1.1,
-  },
-
-  // Route rows (dark)
-  listContent: { paddingHorizontal: 16, paddingBottom: 40 },
-  routeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: D.surface,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  routeRowPressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
-  routeRowTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: D.text,
-    marginBottom: 4,
-  },
-  routeRowSub: {
-    fontSize: 13,
-    fontWeight: '400',
-    color: D.textSub,
-  },
-  routeRowRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-  },
-  badgeRow: { flexDirection: 'row', gap: 4 },
-  badge: {
+    gap: 3,
+    backgroundColor: WW.bgSurface,
     paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: WW.border,
+  },
+  routeCardTime: {
+    fontFamily: Fonts.medium,
+    fontSize: 11,
+    color: WW.textSub,
+  },
+  routeCardModes: { flexDirection: 'row', gap: 5 },
+  modeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 999,
   },
-  badgeText: { fontSize: 10, fontWeight: '700' },
-  rowSep: { height: 8 },
+  modeChipText: { fontFamily: Fonts.bold, fontSize: 10 },
 
-  // Loading overlay
+  // Journey timeline strip
+  strip: { flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden' },
+  stripSeg: { height: 6, borderRadius: 3 },
+  stripGap: { width: 2 },
+
+  // ── Loading overlay ─────────────────────────────────────────────────────────
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15,17,23,0.75)',
+    backgroundColor: WW.scrim,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 100,
   },
   loadingCard: {
-    backgroundColor: '#1A1D27',
-    borderRadius: 20,
+    backgroundColor: WW.bgElevated,
+    borderRadius: 22,
     paddingHorizontal: 32,
     paddingVertical: 28,
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: WW.border,
     minWidth: 240,
   },
   loadingText: {
+    fontFamily: Fonts.semibold,
     fontSize: 16,
-    fontWeight: '600',
-    color: D.text,
-    marginTop: 4,
+    color: WW.text,
   },
   loadingHint: {
+    fontFamily: Fonts.regular,
     fontSize: 13,
-    color: D.textSub,
+    color: WW.textSub,
     textAlign: 'center',
   },
 
-  // Search overlay (light)
+  // ── Search overlay (frosted dark) ───────────────────────────────────────────
   searchOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: L.bg,
     zIndex: 200,
+  },
+  overlayStripe: {
+    height: 3,
+    backgroundColor: WW.stripe,
+    marginHorizontal: 16,
+    borderRadius: 2,
+    marginBottom: 8,
+    opacity: 0.7,
   },
   overlayHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingBottom: 12,
     gap: 10,
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    backgroundColor: WW.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: WW.border,
     flexShrink: 0,
   },
   inputWrap: {
     flex: 1,
     height: 48,
-    backgroundColor: L.surface,
-    borderRadius: 12,
+    backgroundColor: WW.bgElevated,
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: L.divider,
+    borderColor: WW.orange,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
@@ -833,14 +944,10 @@ const s = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '400',
-    color: L.text,
+    fontFamily: Fonts.medium,
+    fontSize: 15,
+    color: WW.text,
     padding: 0,
-  },
-  overlayDivider: {
-    height: 1,
-    backgroundColor: L.divider,
   },
 
   // Results
@@ -851,32 +958,33 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: L.divider,
+    borderBottomColor: WW.divider,
   },
   resultIcon: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: L.surface2,
+    borderRadius: 10,
+    backgroundColor: WW.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   resultName: {
+    fontFamily: Fonts.semibold,
     fontSize: 15,
-    fontWeight: '500',
-    color: L.text,
+    color: WW.text,
   },
   resultAddress: {
+    fontFamily: Fonts.regular,
     fontSize: 12,
-    color: L.textSub,
+    color: WW.textSub,
     marginTop: 2,
   },
   recentLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: L.textSub,
-    letterSpacing: 0.9,
+    fontFamily: Fonts.bold,
+    fontSize: 10,
+    color: WW.stripe,
+    letterSpacing: 1.2,
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 8,
@@ -888,16 +996,71 @@ const s = StyleSheet.create({
     paddingTop: 80,
   },
   emptyTitle: {
+    fontFamily: Fonts.bold,
     fontSize: 18,
-    fontWeight: '600',
-    color: L.text,
+    color: WW.text,
     marginTop: 16,
   },
   emptyHint: {
+    fontFamily: Fonts.regular,
     fontSize: 14,
-    color: L.textSub,
+    color: WW.textSub,
     marginTop: 6,
     textAlign: 'center',
     lineHeight: 22,
+  },
+
+  // ── Quick picks (Home / Work) ───────────────────────────────────────────────
+  qpSection: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  qpSectionLabel: {
+    fontFamily: Fonts.bold,
+    fontSize: 10,
+    color: WW.stripe,
+    letterSpacing: 1.3,
+    marginBottom: 10,
+  },
+  qpRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 8,
+  },
+  qpTile: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: WW.bgElevated,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: WW.border,
+    overflow: 'hidden',
+  },
+  qpTileDim: {
+    opacity: 0.4,
+  },
+  qpIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  qpLabel: {
+    fontFamily: Fonts.bold,
+    fontSize: 11,
+    color: WW.textSub,
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+  qpAddress: {
+    fontFamily: Fonts.semibold,
+    fontSize: 13,
+    color: WW.text,
   },
 });

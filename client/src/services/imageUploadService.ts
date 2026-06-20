@@ -213,8 +213,6 @@ export async function uploadImageToSupabase(
       };
     }
 
-    console.log('✅ Image uploaded successfully:', urlData.publicUrl);
-
     return {
       success: true,
       publicUrl: urlData.publicUrl,

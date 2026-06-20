@@ -39,7 +39,9 @@ export const BORDER_RADIUS = {
   ROUND: 50,
 } as const;
 
-export const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+export const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY || '';
+export const MAPTILER_DARK_STYLE = `https://api.maptiler.com/maps/darkmatter/style.json?key=${process.env.EXPO_PUBLIC_MAPTILER_KEY || ''}`;
+export const ORS_API_KEY = process.env.EXPO_PUBLIC_ORS_API_KEY || '';
 
 export const FONT_SIZES = {
   DISPLAY_LARGE: 32,

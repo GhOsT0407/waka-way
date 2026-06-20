@@ -73,7 +73,6 @@ export async function cacheAreaOffline(
   }
 
   await Promise.all(downloads);
-  console.log('Offline tiles cached successfully');
 }
 
 /**

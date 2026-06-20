@@ -1,4 +1,5 @@
-import { GOOGLE_MAPS_API_KEY } from '../utils/constants';
+// Google Directions API is no longer used — replaced by OpenRouteService (directionsService.ts)
+const GOOGLE_MAPS_API_KEY = '';
 
 // ─── Types ────────────────────────────────────────────────────
 

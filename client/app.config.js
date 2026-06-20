@@ -1,5 +1,3 @@
-const mapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-
 module.exports = {
   expo: {
     name: 'WakaWay',
@@ -25,12 +23,10 @@ module.exports = {
         NSLocationAlwaysAndWhenInUseUsageDescription:
           'WakaWay needs your location to find nearby transport stops and suggest routes.',
       },
-      config: {
-        googleMapsApiKey: mapsKey,
-      },
     },
     android: {
       package: 'com.wakaway.app',
+      googleServicesFile: './google-services.json',
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',
@@ -42,18 +38,22 @@ module.exports = {
         'ACCESS_COARSE_LOCATION',
         // ACCESS_BACKGROUND_LOCATION intentionally omitted — app only needs foreground location
       ],
-      config: {
-        googleMaps: {
-          apiKey: mapsKey,
-        },
-      },
     },
     web: {
       favicon: './assets/favicon.png',
     },
     plugins: [
+      '@maplibre/maplibre-react-native',
       'expo-web-browser',
-      '@rnmapbox/maps',
+      '@react-native-firebase/app',
+      [
+        'expo-notifications',
+        {
+          icon: './assets/icon.png',
+          color: '#F5C518',
+          sounds: [],
+        },
+      ],
     ],
     extra: {
       eas: {

@@ -298,8 +298,6 @@ export function useContributions(options: UseContributionsOptions = {}): UseCont
     );
 
     if (distance <= proximityRadius) {
-      console.log(`🚨 Proximity alert: ${newAlert.title} is ${distance.toFixed(2)}km away`);
-      
       // Mark as notified
       notifiedAlerts.current.add(newAlert.id);
 
@@ -349,8 +347,6 @@ export function useContributions(options: UseContributionsOptions = {}): UseCont
           // Check if active
           if (!isActive(newContribution)) return;
 
-          console.log('🆕 New contribution:', newContribution.title);
-
           // Add to state
           setAlerts((prev) => [newContribution, ...prev]);
 
@@ -375,13 +371,11 @@ export function useContributions(options: UseContributionsOptions = {}): UseCont
           if (!isActive(updated)) {
             // Remove from state if no longer active
             setAlerts((prev) => prev.filter((a) => a.id !== updated.id));
-            console.log('🗑️ Contribution expired/rejected:', updated.id);
           } else {
             // Update in state
             setAlerts((prev) =>
               prev.map((a) => (a.id === updated.id ? updated : a))
             );
-            console.log('📝 Contribution updated:', updated.id);
           }
         }
       )
@@ -395,12 +389,9 @@ export function useContributions(options: UseContributionsOptions = {}): UseCont
         (payload) => {
           const deletedId = (payload.old as { id: string }).id;
           setAlerts((prev) => prev.filter((a) => a.id !== deletedId));
-          console.log('🗑️ Contribution deleted:', deletedId);
         }
       )
-      .subscribe((status) => {
-        console.log('Realtime subscription status:', status);
-      });
+      .subscribe();
 
     // Cleanup
     return () => {
@@ -442,7 +433,6 @@ export function useContributions(options: UseContributionsOptions = {}): UseCont
           return newMap;
         });
 
-        console.log(`✅ Vote ${result.action}: ${voteType} on ${contributionId}`);
         return true;
       }
 
