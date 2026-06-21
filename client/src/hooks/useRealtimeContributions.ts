@@ -225,45 +225,35 @@ export function useNearbyAlerts(
 }
 
 /**
- * Confirm a contribution (increment confirms counter)
- * Uses RPC function to safely update without full row access
+ * Confirm a contribution — atomic RPC, also recalculates ai_score
+ * and auto-approves at 5+ confirms.
  */
 export async function confirmContribution(contributionId: string): Promise<boolean> {
   try {
-    const { error } = await supabase.rpc('confirm_contribution', {
+    const { data, error } = await supabase.rpc('confirm_contribution', {
       contribution_id: contributionId,
     });
-
-    if (error) {
-      console.error('Error confirming contribution:', error);
-      return false;
-    }
-
-    return true;
+    if (error) { console.error('confirmContribution:', error); return false; }
+    return data?.success ?? false;
   } catch (err) {
-    console.error('Error confirming contribution:', err);
+    console.error('confirmContribution:', err);
     return false;
   }
 }
 
 /**
- * Dismiss a contribution (increment dismisses counter)
- * Uses RPC function to safely update without full row access
+ * Dismiss a contribution — atomic RPC, also recalculates ai_score
+ * and auto-rejects at 3+ dismisses or clear majority.
  */
 export async function dismissContribution(contributionId: string): Promise<boolean> {
   try {
-    const { error } = await supabase.rpc('dismiss_contribution', {
+    const { data, error } = await supabase.rpc('dismiss_contribution', {
       contribution_id: contributionId,
     });
-
-    if (error) {
-      console.error('Error dismissing contribution:', error);
-      return false;
-    }
-
-    return true;
+    if (error) { console.error('dismissContribution:', error); return false; }
+    return data?.success ?? false;
   } catch (err) {
-    console.error('Error dismissing contribution:', err);
+    console.error('dismissContribution:', err);
     return false;
   }
 }

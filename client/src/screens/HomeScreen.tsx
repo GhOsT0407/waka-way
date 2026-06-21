@@ -19,7 +19,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 
@@ -34,9 +33,11 @@ import { WW } from '../theme/colors';
 import { Fonts } from '../theme/typography';
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const MAP_RATIO   = 0.50; // map occupies 50% of screen height
 const MAP_HEIGHT  = SCREEN_HEIGHT * MAP_RATIO;
+// Approx Y distance from the overlay input (top) to the search pill (lower half)
+const PILL_OFFSET = SCREEN_HEIGHT * 0.38;
 
 // Transport mode metadata
 const MODE: Record<string, { bg: string; text: string; label: string; icon: string }> = {
@@ -54,6 +55,8 @@ const HOME_PLACE_KEY      = 'quickPick_home';
 const WORK_PLACE_KEY      = 'quickPick_work';
 const MAX_RECENT          = 8;
 const MOCK_LOCATION       = { latitude: 6.5244, longitude: 3.3792 };
+
+const IOS_EASE = Easing.bezier(0.32, 0.72, 0, 1);
 
 const POPULAR_ROUTES = [
   { id: '1', from: 'Ojuelegba', to: 'CMS',            modes: ['danfo', 'brt'],   fare: '₦400–₦600',   time: '45 min' },
@@ -93,9 +96,11 @@ const JourneyStrip = ({ modes }: { modes: readonly string[] }) => (
 const RouteCard = ({
   item,
   onPress,
+  mountAnim,
 }: {
   item: typeof POPULAR_ROUTES[number];
   onPress: () => void;
+  mountAnim: Animated.Value;
 }) => {
   const pressAnim = useRef(new Animated.Value(1)).current;
 
@@ -106,7 +111,13 @@ const RouteCard = ({
 
   return (
     <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut}>
-      <Animated.View style={[s.routeCard, { transform: [{ scale: pressAnim }] }]}>
+      <Animated.View style={[s.routeCard, {
+        opacity: mountAnim,
+        transform: [
+          { scale: pressAnim },
+          { translateY: mountAnim.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) },
+        ],
+      }]}>
         {/* Fare hero */}
         <View style={s.routeCardTop}>
           <View style={{ flex: 1 }}>
@@ -197,10 +208,17 @@ export default function HomeScreen({ navigation }: any) {
   const [homeDest, setHomeDest] = useState<SearchItem | null>(null);
   const [workDest, setWorkDest] = useState<SearchItem | null>(null);
 
-  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const overlayAnim   = useRef(new Animated.Value(0)).current;
-  const recedeAnim    = useRef(new Animated.Value(0)).current;
-  const breatheAnim   = useRef(new Animated.Value(1)).current;
+  const searchTimeout  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overlayAnim    = useRef(new Animated.Value(0)).current;
+  const recedeAnim     = useRef(new Animated.Value(0)).current;
+  const breatheAnim    = useRef(new Animated.Value(1)).current;
+  const backBtnAnim    = useRef(new Animated.Value(0)).current;
+  const dotPulseAnim   = useRef(new Animated.Value(0)).current;
+  const locPulseAnim   = useRef(new Animated.Value(0)).current;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const routeCardAnims = useRef(POPULAR_ROUTES.map(() => new Animated.Value(0))).current;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const searchStagger  = useRef([...Array(8)].map(() => new Animated.Value(0))).current;
 
   // ── Boot ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -209,7 +227,7 @@ export default function HomeScreen({ navigation }: any) {
     loadSavedPref();
     loadQuickPicks();
 
-    // Search bar breathing animation — subtle pulse when idle
+    // Breathe: search pill subtle scale pulse
     const breathe = Animated.loop(
       Animated.sequence([
         Animated.timing(breatheAnim, { toValue: 1.015, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
@@ -217,7 +235,39 @@ export default function HomeScreen({ navigation }: any) {
       ])
     );
     breathe.start();
-    return () => breathe.stop();
+
+    // Mount stagger: route cards fade+slide up
+    Animated.sequence([
+      Animated.delay(140),
+      Animated.stagger(70, routeCardAnims.map(a =>
+        Animated.timing(a, { toValue: 1, duration: 500, easing: IOS_EASE, useNativeDriver: true })
+      )),
+    ]).start();
+
+    // Dotpulse: notification badge ring
+    const dotPulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(dotPulseAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(dotPulseAnim, { toValue: 0, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    dotPulse.start();
+
+    // Locpulse: expanding ring at user location center
+    const locPulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(locPulseAnim, { toValue: 1, duration: 2600, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+        Animated.delay(800),
+        Animated.timing(locPulseAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ])
+    );
+    locPulse.start();
+
+    return () => {
+      breathe.stop();
+      dotPulse.stop();
+      locPulse.stop();
+    };
   }, []);
 
   // ── Debounced search ──────────────────────────────────────────────────────
@@ -236,31 +286,44 @@ export default function HomeScreen({ navigation }: any) {
   // ── Search overlay ────────────────────────────────────────────────────────
   const openSearch = useCallback(() => {
     setIsSearchOpen(true);
+    backBtnAnim.setValue(0);
+    searchStagger.forEach(a => a.setValue(0));
+    // Focus immediately so the keyboard starts rising as the overlay slides up
+    setTimeout(() => inputRef.current?.focus(), 50);
     Animated.parallel([
       Animated.timing(overlayAnim, {
-        toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true,
+        toValue: 1, duration: 420, easing: IOS_EASE, useNativeDriver: true,
       }),
       Animated.timing(recedeAnim, {
-        toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: false,
+        toValue: 1, duration: 500, easing: IOS_EASE, useNativeDriver: false,
       }),
-    ]).start(() => inputRef.current?.focus());
-  }, [overlayAnim, recedeAnim]);
+      Animated.spring(backBtnAnim, {
+        toValue: 1, friction: 7, tension: 60, useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Stagger in quick picks + recents after overlay settles
+      Animated.stagger(50, searchStagger.map(a =>
+        Animated.timing(a, { toValue: 1, duration: 380, easing: IOS_EASE, useNativeDriver: true })
+      )).start();
+    });
+  }, [overlayAnim, recedeAnim, backBtnAnim, searchStagger]);
 
   const closeSearch = useCallback(() => {
     Keyboard.dismiss();
+    searchStagger.forEach(a => a.setValue(0));
     Animated.parallel([
       Animated.timing(overlayAnim, {
-        toValue: 0, duration: 160, easing: Easing.in(Easing.cubic), useNativeDriver: true,
+        toValue: 0, duration: 280, easing: Easing.in(Easing.cubic), useNativeDriver: true,
       }),
       Animated.timing(recedeAnim, {
-        toValue: 0, duration: 160, easing: Easing.in(Easing.cubic), useNativeDriver: false,
+        toValue: 0, duration: 400, easing: Easing.in(Easing.cubic), useNativeDriver: false,
       }),
     ]).start(() => {
       setIsSearchOpen(false);
       setQuery('');
       setSuggestions([]);
     });
-  }, [overlayAnim, recedeAnim]);
+  }, [overlayAnim, recedeAnim, searchStagger]);
 
   const handleSwap = useCallback(() => {
     if (!pendingDest?.coordinates) {
@@ -431,6 +494,14 @@ export default function HomeScreen({ navigation }: any) {
           }}
           hideCenterButton
         />
+        {/* Locpulse — expanding ring centered on user location */}
+        <View style={s.locPulseAnchor} pointerEvents="none">
+          <Animated.View style={[s.locPulseRing, {
+            transform: [{ scale: locPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 2.9] }) }],
+            opacity: locPulseAnim.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.6, 0.18, 0] }),
+          }]} />
+          <View style={s.locDot} />
+        </View>
       </View>
 
       {/* ── Content section (bottom 50%) ────────────────────────────────── */}
@@ -446,6 +517,11 @@ export default function HomeScreen({ navigation }: any) {
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons name="notifications-outline" size={19} color={WW.textSub} />
+              {/* Notification dot — dotpulse */}
+              <Animated.View style={[s.notifDot, {
+                transform: [{ scale: dotPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] }) }],
+                opacity: dotPulseAnim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [1, 0.9, 0.3] }),
+              }]} />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => navigation.navigate('You')}
@@ -458,8 +534,10 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* Search bar — breathes when idle */}
-        <View style={s.searchArea}>
+        {/* Search bar — breathes when idle, fades out as overlay opens */}
+        <Animated.View style={[s.searchArea, {
+          opacity: overlayAnim.interpolate({ inputRange: [0, 0.15], outputRange: [1, 0], extrapolate: 'clamp' }),
+        }]}>
           <Animated.View style={{ transform: [{ scale: isSearchOpen ? 1 : breatheAnim }] }}>
             <View style={s.searchRow}>
               <TouchableOpacity
@@ -494,7 +572,7 @@ export default function HomeScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
           </Animated.View>
-        </View>
+        </Animated.View>
 
         {/* Danfo stripe divider */}
         <View style={s.stripeDivider}>
@@ -512,8 +590,8 @@ export default function HomeScreen({ navigation }: any) {
           snapToInterval={260}
           snapToAlignment="start"
         >
-          {POPULAR_ROUTES.map((item) => (
-            <RouteCard key={item.id} item={item} onPress={openSearch} />
+          {POPULAR_ROUTES.map((item, i) => (
+            <RouteCard key={item.id} item={item} onPress={openSearch} mountAnim={routeCardAnims[i]} />
           ))}
         </ScrollView>
       </View>
@@ -531,30 +609,38 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       )}
 
-      {/* Search overlay — frosted glass, morphs from search bar */}
+      {/* Search overlay — slides up from the pill position, fully opaque */}
       {isSearchOpen && (
         <Animated.View
           style={[
             s.searchOverlay,
             {
-              opacity: overlayAnim,
+              opacity: overlayAnim.interpolate({ inputRange: [0, 0.3], outputRange: [0, 1], extrapolate: 'clamp' }),
               transform: [{
                 translateY: overlayAnim.interpolate({
-                  inputRange: [0, 1], outputRange: [32, 0],
+                  inputRange: [0, 1], outputRange: [PILL_OFFSET, 0],
                 }),
               }],
             },
           ]}
         >
-          {/* Frosted background */}
-          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: WW.frosted }]} />
+          {/* Solid dark background — no bleed-through */}
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: WW.bg }]} />
 
           {/* Search header */}
           <View style={[s.overlayHeader, { paddingTop: insets.top + 12 }]}>
-            <TouchableOpacity onPress={closeSearch} style={s.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="arrow-back" size={20} color={WW.text} />
-            </TouchableOpacity>
+            {/* Back button — springs in from left */}
+            <Animated.View style={{
+              opacity: backBtnAnim,
+              transform: [
+                { scale: backBtnAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
+                { translateX: backBtnAnim.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }) },
+              ],
+            }}>
+              <TouchableOpacity onPress={closeSearch} style={s.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="arrow-back" size={20} color={WW.text} />
+              </TouchableOpacity>
+            </Animated.View>
             <View style={s.inputWrap}>
               <Ionicons name="search" size={15} color={WW.orange} />
               <TextInput
@@ -580,31 +666,38 @@ export default function HomeScreen({ navigation }: any) {
           {/* Danfo stripe under search */}
           <View style={s.overlayStripe} />
 
-          {/* Quick picks — Home / Work shortcuts */}
+          {/* Quick picks — Home / Work shortcuts (stagger in) */}
           {!query.trim() && (homeDest || workDest) && (
-            <View style={s.qpSection}>
+            <Animated.View style={[s.qpSection, {
+              opacity: searchStagger[0],
+              transform: [{ translateY: searchStagger[0].interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+            }]}>
               <Text style={s.qpSectionLabel}>GO TO</Text>
               <View style={s.qpRow}>
                 {homeDest && (
-                  <QuickPickTile
-                    label="Home"
-                    icon="home-outline"
-                    dest={homeDest}
-                    accentColor={WW.green}
-                    onPress={() => handleDestinationSelect(homeDest!)}
-                  />
+                  <Animated.View style={{ flex: 1, opacity: searchStagger[1], transform: [{ translateY: searchStagger[1].interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }}>
+                    <QuickPickTile
+                      label="Home"
+                      icon="home-outline"
+                      dest={homeDest}
+                      accentColor={WW.green}
+                      onPress={() => handleDestinationSelect(homeDest!)}
+                    />
+                  </Animated.View>
                 )}
                 {workDest && (
-                  <QuickPickTile
-                    label="Work"
-                    icon="briefcase-outline"
-                    dest={workDest}
-                    accentColor={WW.brt}
-                    onPress={() => handleDestinationSelect(workDest!)}
-                  />
+                  <Animated.View style={{ flex: 1, opacity: searchStagger[2], transform: [{ translateY: searchStagger[2].interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }}>
+                    <QuickPickTile
+                      label="Work"
+                      icon="briefcase-outline"
+                      dest={workDest}
+                      accentColor={WW.brt}
+                      onPress={() => handleDestinationSelect(workDest!)}
+                    />
+                  </Animated.View>
                 )}
               </View>
-            </View>
+            </Animated.View>
           )}
 
           {searching ? (
@@ -629,22 +722,34 @@ export default function HomeScreen({ navigation }: any) {
               />
             )
           ) : (
-            <FlatList
-              data={recentItems.slice(0, 6)}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => renderResultRow(item, true)}
+            <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 40 }}
-              ListHeaderComponent={recentItems.length > 0 ? <Text style={s.recentLabel}>RECENT</Text> : null}
-              ListEmptyComponent={
+            >
+              {recentItems.length > 0 ? (
+                <>
+                  <Text style={s.recentLabel}>RECENT</Text>
+                  {recentItems.slice(0, 6).map((item, i) => {
+                    const idx = Math.min(i + 3, 7);
+                    return (
+                      <Animated.View key={item.id} style={{
+                        opacity: searchStagger[idx],
+                        transform: [{ translateY: searchStagger[idx].interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+                      }}>
+                        {renderResultRow(item, true)}
+                      </Animated.View>
+                    );
+                  })}
+                </>
+              ) : (
                 <View style={s.centerState}>
                   <Ionicons name="bus-outline" size={44} color={WW.border} />
                   <Text style={s.emptyTitle}>Where to?</Text>
                   <Text style={s.emptyHint}>Type a place — e.g. "Lekki Phase 1"</Text>
                 </View>
-              }
-            />
+              )}
+            </ScrollView>
           )}
         </Animated.View>
       )}
@@ -1008,6 +1113,55 @@ const s = StyleSheet.create({
     marginTop: 6,
     textAlign: 'center',
     lineHeight: 22,
+  },
+
+  // ── Notification dot (dotpulse) ────────────────────────────────────────────
+  notifDot: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#EF4444',
+    borderWidth: 1.5,
+    borderColor: WW.bgElevated,
+  },
+
+  // ── Location pulse (map overlay) ───────────────────────────────────────────
+  locPulseAnchor: {
+    position: 'absolute',
+    left: '50%',
+    top: '55%',
+    marginLeft: -17,
+    marginTop: -17,
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locPulseRing: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: 17,
+    backgroundColor: WW.green,
+  },
+  locDot: {
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
+    backgroundColor: WW.green,
+    borderWidth: 2.5,
+    borderColor: WW.bg,
+  },
+
+  // ── Blinking cursor ────────────────────────────────────────────────────────
+  caretWrap: { justifyContent: 'center', height: 20 },
+  caret: {
+    width: 2,
+    height: 16,
+    borderRadius: 1,
+    backgroundColor: WW.orange,
   },
 
   // ── Quick picks (Home / Work) ───────────────────────────────────────────────

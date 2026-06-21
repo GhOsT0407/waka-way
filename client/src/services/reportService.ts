@@ -80,6 +80,11 @@ async function addReportSupabase(report: Omit<Report, 'id' | 'createdAt' | 'conf
 
   if (error) throw error;
 
+  // Trigger AI verification asynchronously — fire-and-forget
+  supabase.functions
+    .invoke('verify-report', { body: { contribution_id: data.id } })
+    .catch(() => {}); // non-fatal if edge function not deployed
+
   return {
     id: data.id,
     latitude: data.latitude,
@@ -126,30 +131,19 @@ async function getReportsSupabase(): Promise<Report[]> {
   }));
 }
 
-async function confirmReportSupabase(id: string): Promise<Report | null> {
-  const { data: current } = await supabase
+const contribTypeToReport: Record<string, ReportType> = {
+  traffic: 'Traffic',
+  hazard:  'Hazard',
+  security:'Security',
+};
+
+async function fetchRow(id: string): Promise<Report | null> {
+  const { data } = await supabase
     .from('contributions')
-    .select('confirms')
+    .select('id, latitude, longitude, type, title, description, status, confirms, dismisses, ai_score, created_at')
     .eq('id', id)
     .single();
-
-  if (!current) return null;
-
-  const { data, error } = await supabase
-    .from('contributions')
-    .update({ confirms: (current.confirms || 0) + 1 })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) return null;
-
-  const contribTypeToReport: Record<string, ReportType> = {
-    traffic: 'Traffic',
-    hazard: 'Hazard',
-    security: 'Security',
-  };
-
+  if (!data) return null;
   return {
     id: data.id,
     latitude: data.latitude,
@@ -158,42 +152,25 @@ async function confirmReportSupabase(id: string): Promise<Report | null> {
     createdAt: data.created_at,
     confirms: data.confirms || 0,
     dismisses: data.dismisses || 0,
+    title: data.title,
+    description: data.description,
+    status: data.status,
+    ai_score: data.ai_score,
   };
 }
 
+// Atomic confirm via RPC — single UPDATE, no read-modify-write race
+async function confirmReportSupabase(id: string): Promise<Report | null> {
+  const { data, error } = await supabase.rpc('confirm_contribution', { contribution_id: id });
+  if (error || !data?.success) return null;
+  return fetchRow(id);
+}
+
+// Atomic dismiss via RPC
 async function dismissReportSupabase(id: string): Promise<Report | null> {
-  const { data: current } = await supabase
-    .from('contributions')
-    .select('dismisses')
-    .eq('id', id)
-    .single();
-
-  if (!current) return null;
-
-  const { data, error } = await supabase
-    .from('contributions')
-    .update({ dismisses: (current.dismisses || 0) + 1 })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) return null;
-
-  const contribTypeToReport: Record<string, ReportType> = {
-    traffic: 'Traffic',
-    hazard: 'Hazard',
-    security: 'Security',
-  };
-
-  return {
-    id: data.id,
-    latitude: data.latitude,
-    longitude: data.longitude,
-    type: contribTypeToReport[data.type] || 'Hazard',
-    createdAt: data.created_at,
-    confirms: data.confirms || 0,
-    dismisses: data.dismisses || 0,
-  };
+  const { data, error } = await supabase.rpc('dismiss_contribution', { contribution_id: id });
+  if (error || !data?.success) return null;
+  return fetchRow(id);
 }
 
 // ===== MAIN EXPORTS (auto-switch between Supabase and local) =====
