@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 // Contribution type matching your Supabase schema
 export interface Contribution {
@@ -125,79 +124,7 @@ export function useRealtimeContributions(
   }, [filterKey, excludeExpired]);
 
   useEffect(() => {
-    // Fetch initial data
     fetchContributions();
-
-    // Set up real-time subscription
-    const channel: RealtimeChannel = supabase
-      .channel('contributions-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'contributions',
-        },
-        (payload: RealtimePostgresChangesPayload<Contribution>) => {
-          const newContribution = payload.new as Contribution;
-
-          // Check if contribution matches our filters
-          if (filterTypes && filterTypes.length > 0) {
-            if (!filterTypes.includes(newContribution.type)) {
-              return; // Skip if doesn't match filter
-            }
-          }
-
-          // Check expiration
-          if (excludeExpired && newContribution.expires_at) {
-            const expiresAt = new Date(newContribution.expires_at);
-            if (expiresAt <= new Date()) {
-              return; // Skip expired
-            }
-          }
-
-          // Add to state (prepend for newest first)
-          setContributions((prev) => [newContribution, ...prev]);
-
-          onNewRef.current?.(newContribution);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'contributions',
-        },
-        (payload: RealtimePostgresChangesPayload<Contribution>) => {
-          const updatedContribution = payload.new as Contribution;
-          setContributions((prev) =>
-            prev.map((c) =>
-              c.id === updatedContribution.id ? updatedContribution : c
-            )
-          );
-          onUpdateRef.current?.(updatedContribution);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'contributions',
-        },
-        (payload: RealtimePostgresChangesPayload<Contribution>) => {
-          const deletedId = (payload.old as { id: string }).id;
-          setContributions((prev) => prev.filter((c) => c.id !== deletedId));
-          onDeleteRef.current?.(deletedId);
-        }
-      )
-      .subscribe();
-
-    // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(channel);
-    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchContributions, filterKey, excludeExpired]);
 
@@ -224,36 +151,36 @@ export function useNearbyAlerts(
   });
 }
 
-/**
- * Confirm a contribution — atomic RPC, also recalculates ai_score
- * and auto-approves at 5+ confirms.
- */
 export async function confirmContribution(contributionId: string): Promise<boolean> {
   try {
-    const { data, error } = await supabase.rpc('confirm_contribution', {
-      contribution_id: contributionId,
-    });
-    if (error) { console.error('confirmContribution:', error); return false; }
-    return data?.success ?? false;
-  } catch (err) {
-    console.error('confirmContribution:', err);
+    const { data } = await supabase
+      .from('contributions')
+      .select('confirms')
+      .eq('id', contributionId)
+      .single();
+    const { error } = await supabase
+      .from('contributions')
+      .update({ confirms: (data?.confirms ?? 0) + 1 })
+      .eq('id', contributionId);
+    return !error;
+  } catch {
     return false;
   }
 }
 
-/**
- * Dismiss a contribution — atomic RPC, also recalculates ai_score
- * and auto-rejects at 3+ dismisses or clear majority.
- */
 export async function dismissContribution(contributionId: string): Promise<boolean> {
   try {
-    const { data, error } = await supabase.rpc('dismiss_contribution', {
-      contribution_id: contributionId,
-    });
-    if (error) { console.error('dismissContribution:', error); return false; }
-    return data?.success ?? false;
-  } catch (err) {
-    console.error('dismissContribution:', err);
+    const { data } = await supabase
+      .from('contributions')
+      .select('dismisses')
+      .eq('id', contributionId)
+      .single();
+    const { error } = await supabase
+      .from('contributions')
+      .update({ dismisses: (data?.dismisses ?? 0) + 1 })
+      .eq('id', contributionId);
+    return !error;
+  } catch {
     return false;
   }
 }

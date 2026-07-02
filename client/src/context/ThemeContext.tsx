@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState } from 'react';
-import { useColorScheme } from 'react-native';
-import { LightColors, DarkColors } from '../theme/colors';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
+import { LightColors, DarkColors, WW_LIGHT, WW_DARK } from '../theme/colors';
 
 export const COLORS = {
   PRIMARY:         '#E8541A',
@@ -58,22 +58,50 @@ interface ThemeContextType {
   light: typeof LightColors;
   dark: typeof DarkColors;
   tokens: typeof LightColors | typeof DarkColors;
+  // WakaWay brand palette — flips with day/night same as everything else
+  WW: typeof WW_DARK;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const systemScheme = useColorScheme();
-  const [manualDark, setManualDark] = useState<boolean | null>(null);
+// Night runs 7pm–6am local time; everything else is day. Lagos doesn't
+// observe DST and sits close enough to the equator that this fixed window
+// tracks real dusk/dawn well enough without needing a location lookup.
+const NIGHT_START_HOUR = 19;
+const NIGHT_END_HOUR   = 6;
 
-  const isDark = manualDark !== null ? manualDark : systemScheme === 'dark';
+function isNightNow(): boolean {
+  const hour = new Date().getHours();
+  return hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR;
+}
+
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [manualDark, setManualDark] = useState<boolean | null>(null);
+  // Bumping this forces a re-render so the day/night check re-evaluates —
+  // isNightNow() itself isn't reactive, it just reads the clock.
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 60_000);
+    const onAppStateChange = (state: AppStateStatus) => {
+      if (state === 'active') setTick((t) => t + 1);
+    };
+    const sub = AppState.addEventListener('change', onAppStateChange);
+    return () => {
+      clearInterval(interval);
+      sub.remove();
+    };
+  }, []);
+
+  const isDark = manualDark !== null ? manualDark : isNightNow();
   const theme  = isDark ? DARK_COLORS : COLORS;
   const tokens = isDark ? DarkColors  : LightColors;
+  const WW     = isDark ? WW_DARK     : WW_LIGHT;
 
   const toggleTheme = () => setManualDark((prev) => (prev !== null ? !prev : !isDark));
 
   return (
-    <ThemeContext.Provider value={{ theme, isDark, toggleTheme, light: LightColors, dark: DarkColors, tokens }}>
+    <ThemeContext.Provider value={{ theme, isDark, toggleTheme, light: LightColors, dark: DarkColors, tokens, WW }}>
       {children}
     </ThemeContext.Provider>
   );

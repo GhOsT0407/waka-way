@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Sentry } from '../../lib/sentry';
 
 interface Props {
   children: React.ReactNode;
@@ -27,6 +28,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // Log internally — never surface raw error text to the user
     console.error('[ErrorBoundary]', error.message, info.componentStack);
+    Sentry.captureException(error, { contexts: { react: { componentStack: info.componentStack } } });
   }
 
   reset = () => this.setState({ hasError: false });

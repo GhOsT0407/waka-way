@@ -1,7 +1,26 @@
 // WakaWay design system v2
-// Palette: danfo orange + arrival green, near-black dark background
+// Palette: danfo orange + arrival green. Brand accents stay constant across
+// themes; only the neutral canvas (bg/text/border) flips for day vs night.
 
-export const WW = {
+export interface WWColors {
+  orange: string; orangeGlow: string; orangeDim: string;
+  green: string; greenGlow: string; greenDim: string;
+  stripe: string; stripeDim: string;
+  bg: string; bgSurface: string; bgElevated: string; bgOverlay: string;
+  text: string; textSub: string; textMuted: string;
+  textOnOrange: string; textOnGreen: string;
+  border: string; borderStrong: string; divider: string;
+  danfo: string; danfoText: string;
+  brt: string; brtText: string;
+  keke: string; kekeText: string;
+  okada: string; okadaText: string;
+  walk: string; walkText: string;
+  ferry: string; ferryText: string;
+  error: string; warning: string;
+  scrim: string; frosted: string;
+}
+
+export const WW_DARK: WWColors = {
   // ── Brand ──────────────────────────────────────────────────────────────────
   orange:        '#F5C518',   // danfo yellow — primary action / CTA
   orangeGlow:    '#F7D44A',   // hover / lighter state
@@ -52,6 +71,61 @@ export const WW = {
   scrim:         'rgba(0,0,0,0.7)',
   frosted:       'rgba(8,13,11,0.85)',
 } as const;
+
+export const WW_LIGHT: WWColors = {
+  // ── Brand — identical to dark, brand accents don't change with theme ───────
+  orange:        '#F5C518',
+  orangeGlow:    '#F7D44A',
+  orangeDim:     'rgba(245,197,24,0.15)',
+  green:         '#5DBB63',
+  greenGlow:     '#7DCF81',
+  greenDim:      'rgba(93,187,99,0.15)',
+
+  stripe:        '#F5C518',
+  stripeDim:     'rgba(245,197,24,0.2)',
+
+  // ── Backgrounds ────────────────────────────────────────────────────────────
+  bg:            '#F5F7F5',
+  bgSurface:     '#FFFFFF',
+  bgElevated:    '#EFF2EF',
+  bgOverlay:     'rgba(255,255,255,0.94)',
+
+  // ── Text ───────────────────────────────────────────────────────────────────
+  text:          '#0A0F0C',
+  textSub:       'rgba(10,15,12,0.62)',
+  textMuted:     'rgba(10,15,12,0.38)',
+  textOnOrange:  '#FFFFFF',
+  textOnGreen:   '#FFFFFF',
+
+  // ── Borders & dividers ─────────────────────────────────────────────────────
+  border:        'rgba(10,15,12,0.10)',
+  borderStrong:  'rgba(10,15,12,0.18)',
+  divider:       'rgba(10,15,12,0.08)',
+
+  // ── Transport mode colors — identical to dark ──────────────────────────────
+  danfo:         '#F5C518',
+  danfoText:     '#111111',
+  brt:           '#2563EB',
+  brtText:       '#FFFFFF',
+  keke:          '#5DBB63',
+  kekeText:      '#FFFFFF',
+  okada:         '#EF4444',
+  okadaText:     '#FFFFFF',
+  walk:          'rgba(10,15,12,0.10)',
+  walkText:      '#0A0F0C',
+  ferry:         '#0EA5E9',
+  ferryText:     '#FFFFFF',
+
+  // ── Semantic ────────────────────────────────────────────────────────────────
+  error:         '#FF4444',
+  warning:       '#F5C518',
+  scrim:         'rgba(0,0,0,0.5)',
+  frosted:       'rgba(255,255,255,0.9)',
+} as const;
+
+// Legacy default — static dark palette, kept so any import I haven't yet
+// rewired to theme context still resolves instead of crashing.
+export const WW = WW_DARK;
 
 // Legacy aliases — used by components not yet migrated
 export const Colors = {

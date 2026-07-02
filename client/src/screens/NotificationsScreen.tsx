@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAppTheme } from '../context/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
 import { getAllContributions, voteOnContribution } from '../services/supabaseDataService';
@@ -60,9 +61,16 @@ export default function NotificationsScreen({ navigation }: any) {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    loadContributions();
+  // Refetch every time this screen comes into focus — don't rely solely on
+  // Realtime, since stack screens stay mounted in the background and the
+  // initial fetch can go stale if Realtime delivery is flaky.
+  useFocusEffect(
+    useCallback(() => {
+      loadContributions();
+    }, [loadContributions])
+  );
 
+  useEffect(() => {
     const channel = supabase
       .channel('contributions-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contributions' }, (payload) => {

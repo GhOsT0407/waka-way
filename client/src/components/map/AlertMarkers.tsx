@@ -1,9 +1,8 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import { Marker, Circle } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { Contribution } from '../../hooks/useRealtimeContributions';
-import { circlePolygon } from '../../utils/mapboxInit';
 
 const MARKER_CONFIG: Record<string, {
   color: string;
@@ -51,24 +50,18 @@ export const AlertMarkers: React.FC<AlertMarkersProps> = ({
         return (
           <React.Fragment key={contribution.id}>
             {config.showCircle && (
-              <MapLibreGL.ShapeSource
-                id={`am-circle-src-${contribution.id}`}
-                shape={circlePolygon(contribution.latitude, contribution.longitude, config.circleRadius)}
-              >
-                <MapLibreGL.FillLayer
-                  id={`am-circle-fill-${contribution.id}`}
-                  style={{
-                    fillColor:        `${config.color}33`,
-                    fillOutlineColor: config.color,
-                  }}
-                />
-              </MapLibreGL.ShapeSource>
+              <Circle
+                center={{ latitude: contribution.latitude, longitude: contribution.longitude }}
+                radius={config.circleRadius}
+                fillColor={`${config.color}33`}
+                strokeColor={config.color}
+                strokeWidth={1}
+              />
             )}
 
-            <MapLibreGL.PointAnnotation
-              id={`am-marker-${contribution.id}`}
-              coordinate={[contribution.longitude, contribution.latitude]}
-              onSelected={() => onMarkerPress?.(contribution)}
+            <Marker
+              coordinate={{ latitude: contribution.latitude, longitude: contribution.longitude }}
+              onPress={() => onMarkerPress?.(contribution)}
             >
               <View style={styles.markerWrapper}>
                 <View style={[styles.markerContainer, { backgroundColor: config.color }]}>
@@ -76,7 +69,7 @@ export const AlertMarkers: React.FC<AlertMarkersProps> = ({
                 </View>
                 <View style={[styles.markerTip, { borderTopColor: config.color }]} />
               </View>
-            </MapLibreGL.PointAnnotation>
+            </Marker>
           </React.Fragment>
         );
       })}

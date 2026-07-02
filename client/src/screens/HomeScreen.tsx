@@ -28,9 +28,13 @@ import { searchRoutes } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import TransportModeSelector from '../components/TransportModeSelector';
 import { WakaWaySpinner } from '../components/WakaWaySpinner';
+import LiveAlertsFeed from '../components/LiveAlertsFeed';
 import type { TransportMode } from '../services/smartRoutingService';
-import { WW } from '../theme/colors';
+import { useAppTheme } from '../context/ThemeContext';
+import type { WW_DARK as WWShape } from '../theme/colors';
 import { Fonts } from '../theme/typography';
+
+type WW = typeof WWShape;
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -40,14 +44,16 @@ const MAP_HEIGHT  = SCREEN_HEIGHT * MAP_RATIO;
 const PILL_OFFSET = SCREEN_HEIGHT * 0.38;
 
 // Transport mode metadata
-const MODE: Record<string, { bg: string; text: string; label: string; icon: string }> = {
-  danfo: { bg: WW.danfo,  text: WW.danfoText,  label: 'Danfo',  icon: 'bus-outline'      },
-  brt:   { bg: WW.brt,    text: WW.brtText,    label: 'BRT',    icon: 'train-outline'    },
-  keke:  { bg: WW.keke,   text: WW.kekeText,   label: 'Keke',   icon: 'bicycle-outline'  },
-  okada: { bg: WW.okada,  text: WW.okadaText,  label: 'Okada',  icon: 'bicycle-outline'  },
-  walk:  { bg: WW.walk,   text: WW.walkText,   label: 'Walk',   icon: 'walk-outline'     },
-  ferry: { bg: WW.ferry,  text: WW.ferryText,  label: 'Ferry',  icon: 'boat-outline'     },
-};
+function getModeMap(WW: WW): Record<string, { bg: string; text: string; label: string; icon: string }> {
+  return {
+    danfo: { bg: WW.danfo,  text: WW.danfoText,  label: 'Danfo',  icon: 'bus-outline'      },
+    brt:   { bg: WW.brt,    text: WW.brtText,    label: 'BRT',    icon: 'train-outline'    },
+    keke:  { bg: WW.keke,   text: WW.kekeText,   label: 'Keke',   icon: 'bicycle-outline'  },
+    okada: { bg: WW.okada,  text: WW.okadaText,  label: 'Okada',  icon: 'bicycle-outline'  },
+    walk:  { bg: WW.walk,   text: WW.walkText,   label: 'Walk',   icon: 'walk-outline'     },
+    ferry: { bg: WW.ferry,  text: WW.ferryText,  label: 'Ferry',  icon: 'boat-outline'     },
+  };
+}
 
 const RECENT_SEARCHES_KEY = 'recentSearches';
 const TRANSPORT_PREF_KEY  = 'preferredFirstLegTransportMode';
@@ -76,21 +82,26 @@ interface SearchItem {
 }
 
 // ─── Journey timeline strip ───────────────────────────────────────────────────
-const JourneyStrip = ({ modes }: { modes: readonly string[] }) => (
-  <View style={s.strip}>
-    {modes.map((m, i) => {
-      const cfg = MODE[m];
-      if (!cfg) return null;
-      const flex = m === 'walk' ? 0.6 : m === 'brt' ? 2 : 1.3;
-      return (
-        <React.Fragment key={`${m}-${i}`}>
-          <View style={[s.stripSeg, { flex, backgroundColor: cfg.bg }]} />
-          {i < modes.length - 1 && <View style={s.stripGap} />}
-        </React.Fragment>
-      );
-    })}
-  </View>
-);
+const JourneyStrip = ({ modes }: { modes: readonly string[] }) => {
+  const { WW } = useAppTheme();
+  const MODE = getModeMap(WW);
+  const s = makeStyles(WW);
+  return (
+    <View style={s.strip}>
+      {modes.map((m, i) => {
+        const cfg = MODE[m];
+        if (!cfg) return null;
+        const flex = m === 'walk' ? 0.6 : m === 'brt' ? 2 : 1.3;
+        return (
+          <React.Fragment key={`${m}-${i}`}>
+            <View style={[s.stripSeg, { flex, backgroundColor: cfg.bg }]} />
+            {i < modes.length - 1 && <View style={s.stripGap} />}
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+};
 
 // ─── Popular route card ───────────────────────────────────────────────────────
 const RouteCard = ({
@@ -102,6 +113,9 @@ const RouteCard = ({
   onPress: () => void;
   mountAnim: Animated.Value;
 }) => {
+  const { WW } = useAppTheme();
+  const MODE = getModeMap(WW);
+  const s = makeStyles(WW);
   const pressAnim = useRef(new Animated.Value(1)).current;
 
   const onPressIn = () =>
@@ -165,30 +179,36 @@ const QuickPickTile = ({
   dest: SearchItem | null;
   accentColor: string;
   onPress: () => void;
-}) => (
-  <TouchableOpacity
-    style={[s.qpTile, !dest && s.qpTileDim]}
-    onPress={onPress}
-    activeOpacity={dest ? 0.7 : 1}
-    disabled={!dest}
-  >
-    <View style={[s.qpIconWrap, { backgroundColor: dest ? accentColor + '22' : WW.bgElevated }]}>
-      <Ionicons name={icon} size={18} color={dest ? accentColor : WW.textMuted} />
-    </View>
-    <View style={{ flex: 1, minWidth: 0 }}>
-      <Text style={s.qpLabel}>{label}</Text>
-      <Text style={s.qpAddress} numberOfLines={1}>
-        {dest ? dest.name : 'Not set'}
-      </Text>
-    </View>
-  </TouchableOpacity>
-);
+}) => {
+  const { WW } = useAppTheme();
+  const s = makeStyles(WW);
+  return (
+    <TouchableOpacity
+      style={[s.qpTile, !dest && s.qpTileDim]}
+      onPress={onPress}
+      activeOpacity={dest ? 0.7 : 1}
+      disabled={!dest}
+    >
+      <View style={[s.qpIconWrap, { backgroundColor: dest ? accentColor + '22' : WW.bgElevated }]}>
+        <Ionicons name={icon} size={18} color={dest ? accentColor : WW.textMuted} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={s.qpLabel}>{label}</Text>
+        <Text style={s.qpAddress} numberOfLines={1}>
+          {dest ? dest.name : 'Not set'}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }: any) {
   const insets   = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const { user } = useAuth();
+  const { WW, isDark } = useAppTheme();
+  const s = makeStyles(WW);
 
   const [userCoords, setUserCoords]     = useState(MOCK_LOCATION);
   const [locationName, setLocationName] = useState('');
@@ -468,7 +488,7 @@ export default function HomeScreen({ navigation }: any) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={s.root}>
-      <StatusBar style="light" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       {/* ── Main content — recedes when search opens ──────────────────── */}
       <Animated.View style={[
@@ -573,6 +593,9 @@ export default function HomeScreen({ navigation }: any) {
             </View>
           </Animated.View>
         </Animated.View>
+
+        {/* Live community alerts */}
+        <LiveAlertsFeed onSeeAll={() => navigation.navigate('Notifications')} />
 
         {/* Danfo stripe divider */}
         <View style={s.stripeDivider}>
@@ -765,7 +788,8 @@ export default function HomeScreen({ navigation }: any) {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
+function makeStyles(WW: WW) {
+  return StyleSheet.create({
   root:        { flex: 1, backgroundColor: WW.bg },
   mainContent: { flex: 1 },
 
@@ -1217,4 +1241,5 @@ const s = StyleSheet.create({
     fontSize: 13,
     color: WW.text,
   },
-});
+  });
+}

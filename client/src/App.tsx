@@ -1,4 +1,3 @@
-import './utils/mapboxInit'; // Initialize MapLibre (setAccessToken) before any map renders
 import React, { useState, useEffect, useCallback } from 'react';
 import { View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
@@ -37,8 +36,10 @@ import { ThemeProvider, useAppTheme } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { wireAuthToken } from './services/api';
+import { initSentry } from './lib/sentry';
 
 SplashScreen.preventAutoHideAsync();
+initSentry();
 
 const Stack = createNativeStackNavigator();
 

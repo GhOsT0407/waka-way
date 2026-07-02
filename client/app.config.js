@@ -12,11 +12,14 @@ module.exports = {
     splash: {
       image: './assets/splash-icon.png',
       resizeMode: 'contain',
-      backgroundColor: '#2ECC71',
+      backgroundColor: '#080D0B',
     },
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.wakaway.app',
+      config: {
+        googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
+      },
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
           'WakaWay needs your location to find nearby transport stops and suggest routes.',
@@ -27,9 +30,14 @@ module.exports = {
     android: {
       package: 'com.wakaway.app',
       googleServicesFile: './google-services.json',
+      config: {
+        googleMaps: {
+          apiKey: process.env.GOOGLE_MAPS_API_KEY,
+        },
+      },
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
-        backgroundColor: '#ffffff',
+        backgroundColor: '#F5C518',
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
@@ -43,17 +51,24 @@ module.exports = {
       favicon: './assets/favicon.png',
     },
     plugins: [
-      '@maplibre/maplibre-react-native',
       'expo-web-browser',
       '@react-native-firebase/app',
       [
         'expo-notifications',
         {
-          icon: './assets/icon.png',
+          icon: './assets/notification-icon.png',
           color: '#F5C518',
           sounds: [],
         },
       ],
+      [
+        'expo-image-picker',
+        {
+          photosPermission: 'WakaWay accesses your photos to attach them to a report.',
+          cameraPermission: 'WakaWay uses your camera to take a photo for a report.',
+        },
+      ],
+      '@sentry/react-native/expo',
     ],
     extra: {
       eas: {

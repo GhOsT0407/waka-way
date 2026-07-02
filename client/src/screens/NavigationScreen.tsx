@@ -9,26 +9,15 @@ import {
   PanResponder,
   ActivityIndicator,
 } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 import type { RouteOption, RouteLeg } from '../services/smartRoutingService';
-import {
-  getActiveIncidents,
-  getIncidentsOnRoute,
-  getRerouteDecision,
-  incidentSummaryText,
-  incidentColor,
-  ScoredIncident,
-  RerouteDecision,
-} from '../services/incidentService';
-import { searchRoutes } from '../services/api';
 import { fetchAllLegGeometries, LatLng } from '../services/directionsService';
-import { MAPTILER_DARK_STYLE } from '../utils/constants';
-import { WW } from '../theme/colors';
+import { GOOGLE_MAPS_DARK_STYLE } from '../utils/constants';
 
 const ADVANCE_THRESHOLD_M = 80;
 const PEEK_HEIGHT = 72;
@@ -113,7 +102,7 @@ export default function NavigationScreen({ route, navigation }: any) {
   };
 
   const legs: RouteLeg[] = option.legs;
-  const cameraRef = useRef<MapLibreGL.Camera>(null);
+  const mapRef = useRef<MapView>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const currentLegRef = useRef(0);
 
@@ -168,14 +157,6 @@ export default function NavigationScreen({ route, navigation }: any) {
   const [legGeometries, setLegGeometries] = useState<(LatLng[] | null)[]>([]);
   const [geometriesLoaded, setGeometriesLoaded] = useState(false);
 
-  const [liveIncidents, setLiveIncidents]       = useState<ScoredIncident[]>([]);
-  const [liveDecision, setLiveDecision]         = useState<RerouteDecision>('none');
-  const [incidentDismissed, setIncidentDismissed] = useState(false);
-  const [reroutingLive, setReroutingLive]       = useState(false);
-  const [activeLeg, setActiveLeg]               = useState(option);
-  const activeLegRef = useRef(option);
-  const incidentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const currentLeg = legs[currentLegIndex];
   const nextLeg = legs[currentLegIndex + 1];
   const remainingMins = legs
@@ -208,75 +189,16 @@ export default function NavigationScreen({ route, navigation }: any) {
 
       // Fit camera to full route once geometry is ready
       const allCoords = geometries.flatMap(g => g ?? []);
-      if (allCoords.length > 1 && cameraRef.current) {
-        const lngs = allCoords.map(c => c.longitude);
-        const lats  = allCoords.map(c => c.latitude);
-        cameraRef.current.fitBounds(
-          [Math.max(...lngs), Math.max(...lats)],
-          [Math.min(...lngs), Math.min(...lats)],
-          [80, 80, 260, 80],
-          500,
-        );
+      if (allCoords.length > 1 && mapRef.current) {
+        mapRef.current.fitToCoordinates(allCoords, {
+          edgePadding: { top: 80, right: 80, bottom: 260, left: 80 },
+          animated: true,
+        });
       }
 
       setTimeout(() => setNavMode('tracking'), 3000);
     })();
   }, []);
-
-  // Poll for incidents on remaining legs every 90 seconds
-  useEffect(() => {
-    const checkIncidents = async () => {
-      const remainingLegs = activeLegRef.current.legs.slice(currentLegRef.current);
-      if (remainingLegs.length === 0) return;
-      const all      = await getActiveIncidents();
-      const onRoute  = getIncidentsOnRoute(remainingLegs, all);
-      const decision = getRerouteDecision(onRoute);
-      setLiveIncidents(onRoute);
-      setLiveDecision(decision);
-      if (decision === 'auto' && !incidentDismissed) {
-        doLiveReroute(onRoute);
-      }
-    };
-
-    checkIncidents();
-    incidentPollRef.current = setInterval(checkIncidents, 90_000);
-    return () => {
-      if (incidentPollRef.current) clearInterval(incidentPollRef.current);
-    };
-  }, []);
-
-  const doLiveReroute = async (incidents: ScoredIncident[]) => {
-    if (reroutingLive || incidents.length === 0) return;
-    setReroutingLive(true);
-    try {
-      const firstLeg  = activeLegRef.current.legs[0];
-      const lastLeg   = activeLegRef.current.legs[activeLegRef.current.legs.length - 1];
-      const avoidPoints = incidents.map((i) => ({
-        latitude:  i.latitude,
-        longitude: i.longitude,
-        radiusKm:  i.avoidRadiusKm,
-      }));
-      const result = await searchRoutes({
-        origin:          { latitude: firstLeg.from.latitude,  longitude: firstLeg.from.longitude },
-        destination:     { latitude: lastLeg.to.latitude,     longitude: lastLeg.to.longitude },
-        destinationName,
-        avoidPoints,
-      });
-      if (result?.smartRoute) {
-        const newOption =
-          result.smartRoute.options.find((o) => o.id === result.smartRoute.recommendedOptionId) ??
-          result.smartRoute.options[0];
-        if (newOption) {
-          activeLegRef.current = newOption;
-          setActiveLeg(newOption);
-          setLiveIncidents([]);
-          setLiveDecision('none');
-          setIncidentDismissed(false);
-        }
-      }
-    } catch {}
-    setReroutingLive(false);
-  };
 
   useEffect(() => {
     (async () => {
@@ -318,14 +240,12 @@ export default function NavigationScreen({ route, navigation }: any) {
           if (isTracking && navMode === 'tracking') {
             const rawBearing = loc.coords.heading ?? 0;
             const heading    = rawBearing >= 0 ? smoothHeading(rawBearing) : _smoothedHeading;
-            cameraRef.current?.setCamera({
-              centerCoordinate: [coord.longitude, coord.latitude],
-              zoomLevel:        NAV_ZOOM,
+            mapRef.current?.animateCamera({
+              center: { latitude: coord.latitude, longitude: coord.longitude },
+              zoom:   NAV_ZOOM,
               heading,
-              pitch:            NAV_PITCH,
-              animationDuration: 800,
-              animationMode:    'easeTo',
-            });
+              pitch:  NAV_PITCH,
+            }, { duration: 800 });
           }
         },
       );
@@ -350,23 +270,21 @@ export default function NavigationScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
-      {/* Full-screen MapLibre map */}
-      <MapLibreGL.MapView
+      {/* Full-screen Google map */}
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
-        styleURL={MAPTILER_DARK_STYLE}
-        logoEnabled={false}
-        attributionEnabled={false}
-        compassEnabled
+        customMapStyle={GOOGLE_MAPS_DARK_STYLE as any}
+        showsCompass
+        initialRegion={{
+          latitude: legs[0]?.from.latitude ?? 6.5244,
+          longitude: legs[0]?.from.longitude ?? 3.3792,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        }}
         onPress={() => { collapseSheet(); setIsTracking(false); }}
       >
-        <MapLibreGL.Camera
-          ref={cameraRef}
-          defaultSettings={{
-            centerCoordinate: [legs[0]?.from.longitude ?? 3.3792, legs[0]?.from.latitude ?? 6.5244],
-            zoomLevel: 13,
-          }}
-        />
-
         {/* Route polylines — rendered after ORS responds */}
         {geometriesLoaded && legs.map((leg, i) => {
           const coords = legGeometries[i];
@@ -375,37 +293,25 @@ export default function NavigationScreen({ route, navigation }: any) {
           const isPast    = i < currentLegIndex;
           const color     = isPast ? '#555555' : (LEG_COLORS[leg.mode] ?? Colors.blue);
 
-          const geoJson: GeoJSON.Feature<GeoJSON.LineString> = {
-            type:       'Feature',
-            properties: {},
-            geometry:   {
-              type:        'LineString',
-              coordinates: coords.map(c => [c.longitude, c.latitude]),
-            },
-          };
-
           return (
             <React.Fragment key={`route-${i}`}>
               {/* White casing for the active leg */}
               {isCurrent && (
-                <MapLibreGL.ShapeSource id={`route-casing-src-${i}`} shape={geoJson}>
-                  <MapLibreGL.LineLayer
-                    id={`route-casing-${i}`}
-                    style={{ lineColor: '#FFFFFF', lineWidth: 12, lineCap: 'round', lineJoin: 'round' }}
-                  />
-                </MapLibreGL.ShapeSource>
-              )}
-              <MapLibreGL.ShapeSource id={`route-src-${i}`} shape={geoJson}>
-                <MapLibreGL.LineLayer
-                  id={`route-line-${i}`}
-                  style={{
-                    lineColor: color,
-                    lineWidth: isCurrent ? 7 : 4,
-                    lineCap:   'round',
-                    lineJoin:  'round',
-                  }}
+                <Polyline
+                  coordinates={coords}
+                  strokeColor="#FFFFFF"
+                  strokeWidth={12}
+                  lineCap="round"
+                  lineJoin="round"
                 />
-              </MapLibreGL.ShapeSource>
+              )}
+              <Polyline
+                coordinates={coords}
+                strokeColor={color}
+                strokeWidth={isCurrent ? 7 : 4}
+                lineCap="round"
+                lineJoin="round"
+              />
             </React.Fragment>
           );
         })}
@@ -415,10 +321,9 @@ export default function NavigationScreen({ route, navigation }: any) {
           const isCurrent = i === currentLegIndex;
           const isFinal   = i === legs.length - 1;
           return (
-            <MapLibreGL.PointAnnotation
+            <Marker
               key={`wp-${i}`}
-              id={`wp-${i}`}
-              coordinate={[leg.to.longitude, leg.to.latitude]}
+              coordinate={{ latitude: leg.to.latitude, longitude: leg.to.longitude }}
               anchor={{ x: 0.5, y: 0.5 }}
             >
               <View style={[
@@ -426,65 +331,29 @@ export default function NavigationScreen({ route, navigation }: any) {
                 isFinal   && styles.waypointFinal,
                 isCurrent && !isFinal && styles.waypointCurrent,
               ]} />
-            </MapLibreGL.PointAnnotation>
+            </Marker>
           );
         })}
 
         {/* User location dot */}
         {userCoords && (
-          <MapLibreGL.PointAnnotation
-            id="user-loc"
-            coordinate={[userCoords.longitude, userCoords.latitude]}
+          <Marker
+            coordinate={{ latitude: userCoords.latitude, longitude: userCoords.longitude }}
             anchor={{ x: 0.5, y: 0.5 }}
           >
             <View style={styles.userOuter}>
               <View style={styles.userPulseStatic} />
               <View style={styles.userDot} />
             </View>
-          </MapLibreGL.PointAnnotation>
+          </Marker>
         )}
-      </MapLibreGL.MapView>
+      </MapView>
 
       {/* Route loading indicator */}
       {!geometriesLoaded && (
         <View style={styles.routeLoadingBadge}>
           <ActivityIndicator size="small" color="#fff" />
           <Text style={styles.routeLoadingText}>Loading road route…</Text>
-        </View>
-      )}
-
-      {/* Live incident banner */}
-      {liveDecision !== 'none' && !incidentDismissed && (
-        <View style={[
-          styles.incidentBanner,
-          { top: insets.top + 8, borderLeftColor: incidentColor(liveDecision), backgroundColor: incidentColor(liveDecision) + '22' },
-        ]}>
-          <Text style={styles.incidentBannerIcon}>
-            {liveDecision === 'auto' ? '🚨' : liveDecision === 'suggest' ? '⚠️' : 'ℹ️'}
-          </Text>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.incidentBannerTitle, { color: incidentColor(liveDecision) }]}>
-              {liveDecision === 'auto' ? 'Rerouting around traffic...' :
-               liveDecision === 'suggest' ? 'Congestion ahead' : 'Incident near route'}
-            </Text>
-            <Text style={styles.incidentBannerSub} numberOfLines={1}>
-              {incidentSummaryText(liveIncidents)}
-            </Text>
-          </View>
-          {liveDecision === 'suggest' && (
-            <TouchableOpacity
-              style={[styles.incidentRerouteBtn, { backgroundColor: incidentColor(liveDecision) }]}
-              onPress={() => doLiveReroute(liveIncidents)}
-              disabled={reroutingLive}
-            >
-              {reroutingLive
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={styles.incidentRerouteTxt}>Avoid</Text>}
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={() => setIncidentDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="close" size={16} color={Colors.textSecondary} />
-          </TouchableOpacity>
         </View>
       )}
 
@@ -726,20 +595,4 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
   routeLoadingText: { color: '#fff', fontSize: 13, fontWeight: '500' },
-
-  incidentBanner: {
-    position: 'absolute', left: 12, right: 12,
-    borderRadius: 12, borderLeftWidth: 4,
-    padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10,
-    zIndex: 20,
-    ...Platform.select({
-      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 },
-      android: { elevation: 10 },
-    }),
-  },
-  incidentBannerIcon:  { fontSize: 18 },
-  incidentBannerTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
-  incidentBannerSub:   { fontSize: 11, color: Colors.textSecondary },
-  incidentRerouteBtn:  { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, minWidth: 54, alignItems: 'center' },
-  incidentRerouteTxt:  { color: '#fff', fontSize: 12, fontWeight: '700' },
 });

@@ -39,9 +39,35 @@ export const BORDER_RADIUS = {
   ROUND: 50,
 } as const;
 
+// MapTiler is still used for place search/geocoding (placesService.ts) —
+// map rendering itself now runs on Google Maps via react-native-maps.
 export const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY || '';
-export const MAPTILER_DARK_STYLE = `https://api.maptiler.com/maps/darkmatter/style.json?key=${process.env.EXPO_PUBLIC_MAPTILER_KEY || ''}`;
 export const ORS_API_KEY = process.env.EXPO_PUBLIC_ORS_API_KEY || '';
+
+// Google Maps custom style (dark mode) — matches the WW_DARK brand palette.
+// Light mode uses Google's default style (pass an empty array).
+export const GOOGLE_MAPS_DARK_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#0b0f0d' }] },
+  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8a9590' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0b0f0d' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#d4d9d6' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#131815' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6b756f' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#10180f' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1d2420' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#0b0f0d' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a9590' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2a2418' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#0b0f0d' }] },
+  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#F5C518' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#131815' }] },
+  { featureType: 'transit.station', elementType: 'labels.text.fill', stylers: [{ color: '#8a9590' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#060a09' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a5550' }] },
+] as const;
+
+export const GOOGLE_MAPS_LIGHT_STYLE = [] as const;
 
 export const FONT_SIZES = {
   DISPLAY_LARGE: 32,
@@ -59,8 +85,8 @@ export const API_BASE_URL = __DEV__
   ? 'http://localhost:8000/api/v1'
   : 'https://waka-way-production.up.railway.app/api/v1';
 
-// Set to true to use local mock data (no Django backend required)
-export const USE_MOCK_DATA = false;
+// Django backend is not required — routing runs client-side via smartRoutingService
+export const USE_MOCK_DATA = true;
 
 export const REPORT_TYPES = {
   FARE_UPDATE: 'fare_update',

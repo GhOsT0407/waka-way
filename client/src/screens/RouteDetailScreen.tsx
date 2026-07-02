@@ -26,16 +26,7 @@ import { getRoute } from '../services/api';
 import type { TransportMode } from '../types/routing';
 import { SmartRouteResult, RouteOption } from '../services/smartRoutingService';
 import { addRouteHistory, saveRoute, deleteSavedRoute, getSavedRoutes } from '../services/supabaseDataService';
-import {
-  getActiveIncidents,
-  getIncidentsOnRoute,
-  getRerouteDecision,
-  incidentSummaryText,
-  incidentColor,
-  ScoredIncident,
-  RerouteDecision,
-} from '../services/incidentService';
-import { searchRoutes } from '../services/api';
+import FareDisputeModal from '../components/FareDisputeModal';
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -61,11 +52,8 @@ export default function RouteDetailScreen({ route, navigation }: any) {
     const [isFuelScarce, setIsFuelScarce] = useState(false);
     const [canScroll, setCanScroll] = useState(false);
 
-    // Incident intelligence
-    const [routeIncidents, setRouteIncidents]   = useState<ScoredIncident[]>([]);
-    const [rerouteDecision, setRerouteDecision] = useState<RerouteDecision>('none');
-    const [incidentDismissed, setIncidentDismissed] = useState(false);
-    const [reroutingActive, setReroutingActive] = useState(false);
+    // Fare dispute
+    const [disputeVisible, setDisputeVisible] = useState(false);
 
     // Bottom sheet animation
     const sheetHeight = useRef(new Animated.Value(SNAP_POINTS.COLLAPSED)).current;
@@ -117,7 +105,6 @@ export default function RouteDetailScreen({ route, navigation }: any) {
             loadRoute(routeId);
         } else if (activeRoute) {
             checkIfSaved();
-            checkRouteIncidents();
             // Start in COLLAPSED so the map is visible; user swipes up to expand
             Animated.spring(sheetHeight, {
                 toValue: SNAP_POINTS.COLLAPSED,
@@ -129,46 +116,6 @@ export default function RouteDetailScreen({ route, navigation }: any) {
             setCanScroll(false);
         }
     }, [routeId, activeRoute]);
-
-    const checkRouteIncidents = async () => {
-        const option =
-            smartRoute?.options.find((o) => o.id === smartRoute.recommendedOptionId) ??
-            smartRoute?.options[0];
-        if (!option) return;
-        const all = await getActiveIncidents();
-        const onRoute = getIncidentsOnRoute(option.legs, all);
-        setRouteIncidents(onRoute);
-        setRerouteDecision(getRerouteDecision(onRoute));
-    };
-
-    const handleReroute = async () => {
-        const option =
-            smartRoute?.options.find((o) => o.id === smartRoute.recommendedOptionId) ??
-            smartRoute?.options[0];
-        if (!option || routeIncidents.length === 0) return;
-        setReroutingActive(true);
-        try {
-            const avoidPoints = routeIncidents.map((i) => ({
-                latitude:  i.latitude,
-                longitude: i.longitude,
-                radiusKm:  i.avoidRadiusKm,
-            }));
-            const result = await searchRoutes({
-                origin:      activeRoute.origin_coords,
-                destination: activeRoute.destination_coords,
-                destinationName: activeRoute.destination,
-                avoidPoints,
-            });
-            if (result?.smartRoute) {
-                setSmartRoute(result.smartRoute);
-                setActiveRoute((prev: any) => ({ ...prev, ...result.legacyRoute }));
-                setRouteIncidents([]);
-                setRerouteDecision('none');
-                setIncidentDismissed(false);
-            }
-        } catch {}
-        setReroutingActive(false);
-    };
 
     // Expand sheet to full height
     const expandSheet = () => {
@@ -386,47 +333,6 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                         bounces={canScroll}
                         nestedScrollEnabled={true}
                     >
-                    {/* ── Incident alert banner ───────────────────────── */}
-                    {rerouteDecision !== 'none' && !incidentDismissed && (
-                        <View style={[
-                            styles.incidentBanner,
-                            { borderLeftColor: incidentColor(rerouteDecision), backgroundColor: incidentColor(rerouteDecision) + '18' },
-                        ]}>
-                            <View style={styles.incidentBannerLeft}>
-                                <Text style={[styles.incidentIcon]}>
-                                    {rerouteDecision === 'auto' ? '🚨' : rerouteDecision === 'suggest' ? '⚠️' : 'ℹ️'}
-                                </Text>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[styles.incidentTitle, { color: incidentColor(rerouteDecision) }]}>
-                                        {rerouteDecision === 'auto'    ? 'Heavy traffic on your route'   :
-                                         rerouteDecision === 'suggest' ? 'Congestion reported ahead'     :
-                                         'Minor incident near your route'}
-                                    </Text>
-                                    <Text style={styles.incidentSub} numberOfLines={2}>
-                                        {incidentSummaryText(routeIncidents)}
-                                    </Text>
-                                </View>
-                            </View>
-                            <View style={styles.incidentActions}>
-                                {(rerouteDecision === 'auto' || rerouteDecision === 'suggest') && (
-                                    <TouchableOpacity
-                                        style={[styles.rerouteBtn, { backgroundColor: incidentColor(rerouteDecision) }]}
-                                        onPress={handleReroute}
-                                        disabled={reroutingActive}
-                                    >
-                                        {reroutingActive
-                                            ? <ActivityIndicator size="small" color="#fff" />
-                                            : <Text style={styles.rerouteBtnText}>Reroute</Text>
-                                        }
-                                    </TouchableOpacity>
-                                )}
-                                <TouchableOpacity onPress={() => setIncidentDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                    <Ionicons name="close" size={18} color={theme.TEXT_SECONDARY} />
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    )}
-
                     {/* Smart Route Options - Show multiple route choices */}
                     {smartRoute && showSmartOptions ? (
                         <SmartRouteOptions
@@ -513,16 +419,28 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                 </PanGestureHandler>
             </Animated.View>
 
-            {/* Bottom action bar — hide Start Journey when SmartRouteOptions shows its own */}
-            {!(smartRoute && showSmartOptions) && (
-                <View style={[styles.fabContainer, { backgroundColor: theme.CARD_BACKGROUND, borderTopColor: theme.BORDER }]}>
-                    <TouchableOpacity
-                        style={[styles.saveFab, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: theme.BORDER }]}
-                        onPress={saveJourney}
-                        accessibilityLabel={isSaved ? 'Unsave route' : 'Save route'}
-                    >
-                        <Ionicons name={isSaved ? 'heart' : 'heart-outline'} size={22} color={isSaved ? '#EF4444' : theme.TEXT_SECONDARY} />
-                    </TouchableOpacity>
+            {/* Bottom action bar — always visible */}
+            <View style={[styles.fabContainer, { backgroundColor: theme.CARD_BACKGROUND, borderTopColor: theme.BORDER }]}>
+                {/* Save */}
+                <TouchableOpacity
+                    style={[styles.iconFab, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: theme.BORDER }]}
+                    onPress={saveJourney}
+                    accessibilityLabel={isSaved ? 'Unsave route' : 'Save route'}
+                >
+                    <Ionicons name={isSaved ? 'heart' : 'heart-outline'} size={20} color={isSaved ? '#EF4444' : theme.TEXT_SECONDARY} />
+                </TouchableOpacity>
+
+                {/* Fare Dispute Shield */}
+                <TouchableOpacity
+                    style={[styles.iconFab, { backgroundColor: 'rgba(93,187,99,0.10)', borderColor: 'rgba(93,187,99,0.25)' }]}
+                    onPress={() => setDisputeVisible(true)}
+                    accessibilityLabel="Check correct fare"
+                >
+                    <Ionicons name="shield-checkmark-outline" size={20} color="#5DBB63" />
+                </TouchableOpacity>
+
+                {/* Start Journey — only when SmartRouteOptions isn't showing its own */}
+                {!(smartRoute && showSmartOptions) && (
                     <TouchableOpacity
                         style={[styles.fab, { backgroundColor: theme.PRIMARY }]}
                         onPress={() => startJourney()}
@@ -530,8 +448,24 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                         <Ionicons name="navigate" size={18} color="#fff" />
                         <Text style={styles.fabText}>Start Journey</Text>
                     </TouchableOpacity>
-                </View>
-            )}
+                )}
+            </View>
+        {/* Fare Dispute Modal */}
+        <FareDisputeModal
+            visible={disputeVisible}
+            onClose={() => setDisputeVisible(false)}
+            origin={smartRoute?.origin.name ?? activeRoute?.origin ?? 'Origin'}
+            destination={smartRoute?.destination.name ?? activeRoute?.destination ?? 'Destination'}
+            legs={
+                (selectedOption ?? smartRoute?.options.find((o) => o.id === smartRoute?.recommendedOptionId) ?? smartRoute?.options[0])?.legs ?? []
+            }
+            totalMin={
+                (selectedOption ?? smartRoute?.options.find((o) => o.id === smartRoute?.recommendedOptionId) ?? smartRoute?.options[0])?.totalPriceMin ?? activeRoute?.total_fare ?? 0
+            }
+            totalMax={
+                (selectedOption ?? smartRoute?.options.find((o) => o.id === smartRoute?.recommendedOptionId) ?? smartRoute?.options[0])?.totalPriceMax ?? activeRoute?.total_fare ?? 0
+            }
+        />
         </View>
     );
 }
@@ -763,6 +697,15 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         flexShrink: 0,
     },
+    iconFab: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        flexShrink: 0,
+    },
     fab: {
         flex: 1,
         flexDirection: 'row',
@@ -829,40 +772,4 @@ const styles = StyleSheet.create({
     sheetContentContainer: {
         paddingBottom: 120,
     },
-
-    // Incident banner
-    incidentBanner: {
-        marginHorizontal: 16,
-        marginBottom: 12,
-        borderRadius: 12,
-        borderLeftWidth: 4,
-        padding: 12,
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        gap: 10,
-    },
-    incidentBannerLeft: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        gap: 10,
-    },
-    incidentIcon:  { fontSize: 20, marginTop: 1 },
-    incidentTitle: { fontSize: 13, fontWeight: '700', marginBottom: 3 },
-    incidentSub:   { fontSize: 12, color: '#94A3B8', lineHeight: 16 },
-    incidentActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        flexShrink: 0,
-    },
-    rerouteBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        minWidth: 70,
-        alignItems: 'center',
-    },
-    rerouteBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });

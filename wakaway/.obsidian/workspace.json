@@ -1,0 +1,224 @@
+{
+  "main": {
+    "id": "869aafd1e1ffe399",
+    "type": "split",
+    "children": [
+      {
+        "id": "f17b60329abaaa73",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "bfc358a6dcae4fba",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "decisions/0005-sentry-for-crash-reporting.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "0005-sentry-for-crash-reporting"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "1876eebda662081b",
+    "type": "split",
+    "children": [
+      {
+        "id": "d126e7d623b09289",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "4c202fee12352b65",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "af364e15a0969f2a",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "f9f874702f5e2d31",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "938bd2539eb4fdc9",
+    "type": "split",
+    "children": [
+      {
+        "id": "72f3ea3f0f52f04d",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "929782562986532d",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "372868fdff2bd014",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "83b85298df39b0e5",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "0e56353b777baefb",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "606726b7446e84ee",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false,
+      "obsidian42-brat:BRAT": false,
+      "claude-code-mcp:Toggle Claude Terminal": false
+    }
+  },
+  "active": "bfc358a6dcae4fba",
+  "lastOpenFiles": [
+    "Architecture.md.tmp.11804.9ed6633bf082",
+    "Architecture.md.tmp.11804.81dbcee07116",
+    "Active Context.md.tmp.11804.71ea21cb9f2b",
+    "Active Context.md.tmp.11804.278e0da8ac11",
+    "Active Context.md",
+    "decisions/0008-commit-only-the-flagged-components.md",
+    "decisions/0008-commit-only-the-flagged-components.md.tmp.11804.2b4fb36a4df8",
+    "decisions/0007-keep-dead-code-and-legacy-pipeline.md",
+    "decisions/0006-scope-first-tests-to-smart-routing-engine.md",
+    "decisions/0006-scope-first-tests-to-smart-routing-engine.md.tmp.11804.de831ace2f03",
+    "decisions/0005-sentry-for-crash-reporting.md",
+    "decisions/0004-add-image-picker-permission-strings.md",
+    "decisions/0003-django-production-hardening.md",
+    "decisions/0002-revoke-execute-on-handle-new-user.md",
+    "decisions/0002-revoke-execute-on-handle-new-user.md.tmp.11804.6b56e94d365c",
+    "decisions/0001-require-auth-for-vote-rpc.md",
+    "decisions",
+    "Testing.md",
+    "Architecture.md.tmp.11804.ab5f78df20cc",
+    "Crash Reporting.md",
+    "Service Duplication & Dead Code.md",
+    "useRealtimeContributions Hook.md",
+    "useContributions Hook.md",
+    "useRouting Hook.md",
+    "useRouting Hook.md.tmp.11804.0fd5995b0776",
+    "Geofencing Service.md",
+    "Proximity Alert Service.md",
+    "API Client.md",
+    "Image Upload Service.md",
+    "Supabase Data Service.md",
+    "Report Service.md",
+    "Location Service.md",
+    "Places Service.md",
+    "Google Directions Service (Deprecated).md",
+    "Directions Service.md",
+    "Navigation & Screens.md.tmp.17776.af8c9754da6f"
+  ]
+}
