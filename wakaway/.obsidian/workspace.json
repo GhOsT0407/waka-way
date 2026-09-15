@@ -4,21 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "f17b60329abaaa73",
+        "id": "d1b6ace16b26ca96",
         "type": "tabs",
         "children": [
           {
-            "id": "bfc358a6dcae4fba",
+            "id": "84407a5aa6271446",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "decisions/0005-sentry-for-crash-reporting.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "0005-sentry-for-crash-reporting"
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
             }
           }
         ]
@@ -41,7 +37,9 @@
               "type": "file-explorer",
               "state": {
                 "sortOrder": "alphabetical",
-                "autoReveal": false
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
               },
               "icon": "lucide-folder-closed",
               "title": "Files"
@@ -182,8 +180,15 @@
       "claude-code-mcp:Toggle Claude Terminal": false
     }
   },
-  "active": "bfc358a6dcae4fba",
+  "active": "84407a5aa6271446",
   "lastOpenFiles": [
+    "Untitled 3.md",
+    "Untitled.canvas",
+    "Untitled",
+    "Untitled 2.md",
+    "Untitled 1.md",
+    "Untitled.md",
+    "decisions/0005-sentry-for-crash-reporting.md",
     "Architecture.md.tmp.11804.9ed6633bf082",
     "Architecture.md.tmp.11804.81dbcee07116",
     "Active Context.md.tmp.11804.71ea21cb9f2b",
@@ -194,7 +199,6 @@
     "decisions/0007-keep-dead-code-and-legacy-pipeline.md",
     "decisions/0006-scope-first-tests-to-smart-routing-engine.md",
     "decisions/0006-scope-first-tests-to-smart-routing-engine.md.tmp.11804.de831ace2f03",
-    "decisions/0005-sentry-for-crash-reporting.md",
     "decisions/0004-add-image-picker-permission-strings.md",
     "decisions/0003-django-production-hardening.md",
     "decisions/0002-revoke-execute-on-handle-new-user.md",
@@ -208,17 +212,12 @@
     "useRealtimeContributions Hook.md",
     "useContributions Hook.md",
     "useRouting Hook.md",
-    "useRouting Hook.md.tmp.11804.0fd5995b0776",
     "Geofencing Service.md",
     "Proximity Alert Service.md",
     "API Client.md",
     "Image Upload Service.md",
     "Supabase Data Service.md",
     "Report Service.md",
-    "Location Service.md",
-    "Places Service.md",
-    "Google Directions Service (Deprecated).md",
-    "Directions Service.md",
-    "Navigation & Screens.md.tmp.17776.af8c9754da6f"
+    "Location Service.md"
   ]
 }

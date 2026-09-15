@@ -1,207 +1,137 @@
-// WakaWay design system v2
-// Palette: danfo orange + arrival green. Brand accents stay constant across
-// themes; only the neutral canvas (bg/text/border) flips for day vs night.
+// WakaWay design system v3 — the single colour source.
+//
+// Two complete sets, WW_LIGHT and WW_DARK, reached through useAppTheme().WW.
+// Brand accents and transport-mode colours are identical in both; only the
+// neutral canvas and the semantic state colours flip, and the latter only
+// where a value fails contrast on the other ground.
+//
+// Values come from the redesign canvas (WakaWay Redesigned Screens, pass 01)
+// with the contrast corrections from DESIGN_CRITIQUE.md applied: every text /
+// ground pair below clears WCAG AA 4.5:1 on its own theme's surfaces.
+//
+// Naming note: `orange`, `orangeGlow`, `orangeDim` hold danfo YELLOW. The
+// name predates the palette and is kept for now because ~130 call sites use
+// it; renaming is a separate cleanup.
 
 export interface WWColors {
+  // brand
   orange: string; orangeGlow: string; orangeDim: string;
-  green: string; greenGlow: string; greenDim: string;
   stripe: string; stripeDim: string;
+  textOnOrange: string;
+
+  // neutral canvas
   bg: string; bgSurface: string; bgElevated: string; bgOverlay: string;
   text: string; textSub: string; textMuted: string;
-  textOnOrange: string; textOnGreen: string;
   border: string; borderStrong: string; divider: string;
+  scrim: string; frosted: string;
+
+  // semantic state — kept separate from transport-mode colour on purpose
+  green: string; greenGlow: string; greenDim: string; textOnGreen: string;
+  warning: string; warningDim: string; warningText: string; textOnWarning: string;
+  error: string; errorDim: string;
+
+  // transport modes — the only place saturation is allowed to be loud
   danfo: string; danfoText: string;
   brt: string; brtText: string;
   keke: string; kekeText: string;
   okada: string; okadaText: string;
   walk: string; walkText: string;
   ferry: string; ferryText: string;
-  error: string; warning: string;
-  scrim: string; frosted: string;
 }
 
-export const WW_DARK: WWColors = {
-  // ── Brand ──────────────────────────────────────────────────────────────────
-  orange:        '#F5C518',   // danfo yellow — primary action / CTA
-  orangeGlow:    '#F7D44A',   // hover / lighter state
+// ── Shared: brand + transport, identical in both themes ─────────────────────
+const BRAND = {
+  orange:        '#F5C518',   // danfo yellow — the single accent
+  orangeGlow:    '#F7D44A',
   orangeDim:     'rgba(245,197,24,0.15)',
-  green:         '#5DBB63',   // nature grass green — arrival / success / safe
-  greenGlow:     '#7DCF81',
-  greenDim:      'rgba(93,187,99,0.15)',
+  stripe:        '#F5C518',   // the danfo stripe motif
+  stripeDim:     'rgba(245,197,24,0.20)',
+  textOnOrange:  '#1A1200',   // 11.40:1 — white on this yellow is 1.63:1
 
-  // ── Danfo stripe — the brand motif ─────────────────────────────────────────
-  stripe:        '#F5C518',   // danfo yellow stripe — brand motif (same as primary)
-  stripeDim:     'rgba(245,197,24,0.2)',
-
-  // ── Backgrounds ────────────────────────────────────────────────────────────
-  bg:            '#080D0B',   // near-black forest dark
-  bgSurface:     '#0F1610',   // card surface
-  bgElevated:    '#162019',   // elevated card
-  bgOverlay:     'rgba(8,13,11,0.92)',
-
-  // ── Text ───────────────────────────────────────────────────────────────────
-  text:          '#F0F5F2',
-  textSub:       'rgba(240,245,242,0.6)',
-  textMuted:     'rgba(240,245,242,0.35)',
-  textOnOrange:  '#FFFFFF',
-  textOnGreen:   '#FFFFFF',
-
-  // ── Borders & dividers ─────────────────────────────────────────────────────
-  border:        'rgba(240,245,242,0.08)',
-  borderStrong:  'rgba(240,245,242,0.16)',
-  divider:       'rgba(240,245,242,0.06)',
-
-  // ── Transport mode colors ───────────────────────────────────────────────────
   danfo:         '#F5C518',
-  danfoText:     '#111111',
-  brt:           '#2563EB',
+  danfoText:     '#1A1200',
+  brt:           '#1E6FD9',   // white on this: 4.85:1
   brtText:       '#FFFFFF',
-  keke:          '#5DBB63',
-  kekeText:      '#FFFFFF',
-  okada:         '#EF4444',
-  okadaText:     '#FFFFFF',
-  walk:          'rgba(240,245,242,0.25)',
-  walkText:      '#F0F5F2',
+  keke:          '#5DBB63',   // ink on this: 7.55:1 — white was 2.40:1
+  kekeText:      '#14161A',
+  okada:         '#EF4444',   // ink on this: 4.94:1 — white only clears large-text
+  okadaText:     '#1A1200',
+  // Ferry routes were removed from the engine (76ca3e7); tokens kept until the
+  // product decision is made either way.
   ferry:         '#0EA5E9',
   ferryText:     '#FFFFFF',
-
-  // ── Semantic ────────────────────────────────────────────────────────────────
-  error:         '#FF4444',
-  warning:       '#F5C518',
-  scrim:         'rgba(0,0,0,0.7)',
-  frosted:       'rgba(8,13,11,0.85)',
 } as const;
 
 export const WW_LIGHT: WWColors = {
-  // ── Brand — identical to dark, brand accents don't change with theme ───────
-  orange:        '#F5C518',
-  orangeGlow:    '#F7D44A',
-  orangeDim:     'rgba(245,197,24,0.15)',
-  green:         '#5DBB63',
-  greenGlow:     '#7DCF81',
-  greenDim:      'rgba(93,187,99,0.15)',
+  ...BRAND,
 
-  stripe:        '#F5C518',
-  stripeDim:     'rgba(245,197,24,0.2)',
-
-  // ── Backgrounds ────────────────────────────────────────────────────────────
-  bg:            '#F5F7F5',
+  // ── Canvas ─────────────────────────────────────────────────────────────────
+  bg:            '#FBFAF8',
   bgSurface:     '#FFFFFF',
-  bgElevated:    '#EFF2EF',
+  bgElevated:    '#F2F1ED',
   bgOverlay:     'rgba(255,255,255,0.94)',
 
-  // ── Text ───────────────────────────────────────────────────────────────────
-  text:          '#0A0F0C',
-  textSub:       'rgba(10,15,12,0.62)',
-  textMuted:     'rgba(10,15,12,0.38)',
-  textOnOrange:  '#FFFFFF',
-  textOnGreen:   '#FFFFFF',
+  text:          '#14161A',   // 17.36:1 on bg
+  textSub:       '#43464E',   //  9.05:1
+  textMuted:     '#6B6E76',   //  4.89:1 — the canvas's #8A8D95 was 3.18:1
 
-  // ── Borders & dividers ─────────────────────────────────────────────────────
-  border:        'rgba(10,15,12,0.10)',
-  borderStrong:  'rgba(10,15,12,0.18)',
-  divider:       'rgba(10,15,12,0.08)',
+  border:        'rgba(20,22,26,0.10)',
+  borderStrong:  'rgba(20,22,26,0.18)',
+  divider:       'rgba(20,22,26,0.07)',
+  scrim:         'rgba(0,0,0,0.50)',
+  frosted:       'rgba(255,255,255,0.94)',   // 0.90 let map labels read through text on device
 
-  // ── Transport mode colors — identical to dark ──────────────────────────────
-  danfo:         '#F5C518',
-  danfoText:     '#111111',
-  brt:           '#2563EB',
-  brtText:       '#FFFFFF',
-  keke:          '#5DBB63',
-  kekeText:      '#FFFFFF',
-  okada:         '#EF4444',
-  okadaText:     '#FFFFFF',
-  walk:          'rgba(10,15,12,0.10)',
-  walkText:      '#0A0F0C',
-  ferry:         '#0EA5E9',
-  ferryText:     '#FFFFFF',
+  // ── State ──────────────────────────────────────────────────────────────────
+  green:         '#1F7A3D',   // success / arrival — as text on bg: 5.15:1
+  greenGlow:     '#2E9E52',
+  greenDim:      'rgba(31,122,61,0.12)',
+  textOnGreen:   '#FFFFFF',   // 5.37:1
 
-  // ── Semantic ────────────────────────────────────────────────────────────────
-  error:         '#FF4444',
-  warning:       '#F5C518',
-  scrim:         'rgba(0,0,0,0.5)',
-  frosted:       'rgba(255,255,255,0.9)',
-} as const;
+  warning:       '#E08A00',   // as a FILL only; fails as text on this ground
+  warningDim:    'rgba(224,138,0,0.14)',
+  warningText:   '#8F5600',   // warning as text on bg: 5.75:1
+  textOnWarning: '#1A1200',   // 6.90:1
 
-// Legacy default — static dark palette, kept so any import I haven't yet
-// rewired to theme context still resolves instead of crashing.
-export const WW = WW_DARK;
+  error:         '#EF4444',
+  errorDim:      'rgba(239,68,68,0.12)',
 
-// Legacy aliases — used by components not yet migrated
-export const Colors = {
-  mapBackground:   WW.bg,
-  surface:         WW.bgSurface,
-  surfaceElevated: WW.bgElevated,
-  textPrimary:     WW.text,
-  textSecondary:   WW.textSub,
-  textTertiary:    WW.textMuted,
-  blue:            WW.orange,
-  blueLight:       WW.orangeDim,
-  blueDeep:        '#CC4400',
-  border:          WW.border,
-  divider:         WW.divider,
-  sheetBg:         WW.bgSurface,
-  scrim:           WW.scrim,
-  weatherBg:       WW.bgElevated,
-  favoriteGold:    WW.danfo,
-  workBlue:        WW.brt,
-  homeGreen:       WW.keke,
-  savedGray:       WW.textSub,
-  addDark:         WW.bgElevated,
-  success:         WW.green,
-  warning:         WW.warning,
-  error:           WW.error,
-  accent:          WW.orange,
-  accentSubtle:    WW.orangeDim,
-} as const;
+  walk:          'rgba(20,22,26,0.10)',
+  walkText:      '#14161A',
+};
 
-// Light/Dark exports kept for ThemeContext compatibility
-export const LightColors = {
-  bg:              '#F5F7F5',
-  surface:         '#FFFFFF',
-  surfaceSecondary:'#F0F2F0',
-  accent:          WW.orange,
-  accentSubtle:    WW.orangeDim,
-  textPrimary:     '#0A0F0C',
-  textSecondary:   '#4A5550',
-  textMuted:       '#8A9590',
-  textOnAccent:    '#111111',   // dark text on yellow (better contrast than white)
-  divider:         '#E5E8E5',
-  success:         WW.green,
-  successSubtle:   WW.greenDim,
+export const WW_DARK: WWColors = {
+  ...BRAND,
 
-  warning:         WW.stripe,
-  warningSubtle:   WW.stripeDim,
-  error:           WW.error,
-  errorSubtle:     'rgba(255,68,68,0.1)',
-  transportDanfo:  WW.danfo,
-  transportBRT:    WW.brt,
-  transportKeke:   WW.keke,
-  transportOkada:  WW.okada,
-  scrim:           'rgba(0,0,0,0.4)',
-} as const;
+  // ── Canvas ─────────────────────────────────────────────────────────────────
+  bg:            '#14161A',
+  bgSurface:     '#17181C',
+  bgElevated:    '#1F2126',
+  bgOverlay:     'rgba(20,22,26,0.92)',
 
-export const DarkColors = {
-  bg:              WW.bg,
-  surface:         WW.bgSurface,
-  surfaceSecondary:WW.bgElevated,
-  accent:          WW.orange,
-  accentSubtle:    WW.orangeDim,
-  textPrimary:     WW.text,
-  textSecondary:   WW.textSub,
-  textMuted:       WW.textMuted,
-  textOnAccent:    '#FFFFFF',
-  divider:         WW.divider,
-  success:         WW.green,
-  successSubtle:   WW.greenDim,
+  text:          '#F2F1ED',   // 16.03:1 on bg
+  textSub:       '#C7C6C1',   // 10.59:1
+  textMuted:     '#8A8D95',   //  5.45:1 — fine on the dark ground
 
-  warning:         WW.stripe,
-  warningSubtle:   WW.stripeDim,
-  error:           WW.error,
-  errorSubtle:     'rgba(255,68,68,0.1)',
-  transportDanfo:  WW.danfo,
-  transportBRT:    WW.brt,
-  transportKeke:   WW.keke,
-  transportOkada:  WW.okada,
-  scrim:           WW.scrim,
-} as const;
+  border:        'rgba(242,241,237,0.08)',
+  borderStrong:  '#2E3035',
+  divider:       'rgba(242,241,237,0.06)',
+  scrim:         'rgba(0,0,0,0.70)',
+  frosted:       'rgba(20,22,26,0.93)',      // 0.85 let map labels read through text on device
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  green:         '#2E9E52',   // #1F7A3D is 3.37:1 here — too dark for the dark ground
+  greenGlow:     '#3DBA66',
+  greenDim:      'rgba(46,158,82,0.16)',
+  textOnGreen:   '#14161A',   // white on #2E9E52 is 3.43:1; ink is 5.29:1
+
+  warning:       '#E08A00',
+  warningDim:    'rgba(224,138,0,0.16)',
+  warningText:   '#E08A00',   // 6.73:1 on the dark ground — no separate value needed
+  textOnWarning: '#1A1200',
+
+  error:         '#EF4444',
+  errorDim:      'rgba(239,68,68,0.14)',
+
+  walk:          'rgba(242,241,237,0.25)',
+  walkText:      '#F2F1ED',
+};

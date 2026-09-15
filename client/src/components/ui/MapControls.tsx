@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../theme/colors';
+import { useAppTheme } from '../../context/ThemeContext';
+import type { WWColors } from '../../theme/colors';
 
 interface Props {
   isCentered: boolean;
@@ -12,6 +13,8 @@ interface Props {
 function ControlButton({ icon, label, active = false, onPress }: {
   icon: string; label: string; active?: boolean; onPress: () => void;
 }) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -20,12 +23,14 @@ function ControlButton({ icon, label, active = false, onPress }: {
       accessibilityRole="button"
       activeOpacity={0.75}
     >
-      <Ionicons name={icon as any} size={22} color={active ? Colors.blue : Colors.textSecondary} />
+      <Ionicons name={icon as any} size={22} color={active ? WW.orange : WW.textSub} />
     </TouchableOpacity>
   );
 }
 
 export default function MapControls({ isCentered, onCenterPress, onLayersPress }: Props) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   return (
     <View style={styles.container}>
       <ControlButton icon="map-outline"      label="Map layers"        onPress={onLayersPress} />
@@ -34,17 +39,18 @@ export default function MapControls({ isCentered, onCenterPress, onLayersPress }
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
   container: { gap: 8 },
   button: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: WW.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
@@ -52,3 +58,4 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 });
+}

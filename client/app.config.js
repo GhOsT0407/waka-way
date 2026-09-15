@@ -29,7 +29,6 @@ module.exports = {
     },
     android: {
       package: 'com.wakaway.app',
-      googleServicesFile: './google-services.json',
       config: {
         googleMaps: {
           apiKey: process.env.GOOGLE_MAPS_API_KEY,
@@ -52,7 +51,6 @@ module.exports = {
     },
     plugins: [
       'expo-web-browser',
-      '@react-native-firebase/app',
       [
         'expo-notifications',
         {

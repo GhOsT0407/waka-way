@@ -28,20 +28,26 @@ import { searchRoutes } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import TransportModeSelector from '../components/TransportModeSelector';
 import { WakaWaySpinner } from '../components/WakaWaySpinner';
-import LiveAlertsFeed from '../components/LiveAlertsFeed';
+import { BlurView } from 'expo-blur';
+import { useNearbyAlerts } from '../hooks/useRealtimeContributions';
 import type { TransportMode } from '../services/smartRoutingService';
 import { useAppTheme } from '../context/ThemeContext';
 import type { WW_DARK as WWShape } from '../theme/colors';
-import { Fonts } from '../theme/typography';
+import { Fonts, Typography, Tracking } from '../theme/typography';
+import { Space, Radius, HIT } from '../theme/spacing';
 
 type WW = typeof WWShape;
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
-const MAP_RATIO   = 0.50; // map occupies 50% of screen height
-const MAP_HEIGHT  = SCREEN_HEIGHT * MAP_RATIO;
-// Approx Y distance from the overlay input (top) to the search pill (lower half)
-const PILL_OFFSET = SCREEN_HEIGHT * 0.38;
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+// The routes sheet covers this much of the screen; the map is full-bleed behind it.
+const SHEET_MAX_RATIO = 0.46;
+// Distance the search overlay travels up from the field's resting position.
+const PILL_OFFSET = SCREEN_HEIGHT * 0.18;
+
+// Chips in the top chrome. null = all modes; anything else pre-selects the
+// first-leg mode the route engine is asked for.
+const MODE_CHIPS: (TransportMode | null)[] = [null, 'danfo', 'brt', 'keke', 'okada'];
 
 // Transport mode metadata
 function getModeMap(WW: WW): Record<string, { bg: string; text: string; label: string; icon: string }> {
@@ -81,92 +87,65 @@ interface SearchItem {
   placeId?: string;
 }
 
-// ─── Journey timeline strip ───────────────────────────────────────────────────
-const JourneyStrip = ({ modes }: { modes: readonly string[] }) => {
+// ─── Mode chip (top chrome) ───────────────────────────────────────────────────
+const ModeChip = ({
+  label, dot, active, onPress,
+}: { label: string; dot?: string; active: boolean; onPress: () => void }) => {
   const { WW } = useAppTheme();
-  const MODE = getModeMap(WW);
   const s = makeStyles(WW);
   return (
-    <View style={s.strip}>
-      {modes.map((m, i) => {
-        const cfg = MODE[m];
-        if (!cfg) return null;
-        const flex = m === 'walk' ? 0.6 : m === 'brt' ? 2 : 1.3;
-        return (
-          <React.Fragment key={`${m}-${i}`}>
-            <View style={[s.stripSeg, { flex, backgroundColor: cfg.bg }]} />
-            {i < modes.length - 1 && <View style={s.stripGap} />}
-          </React.Fragment>
-        );
-      })}
-    </View>
-  );
-};
-
-// ─── Popular route card ───────────────────────────────────────────────────────
-const RouteCard = ({
-  item,
-  onPress,
-  mountAnim,
-}: {
-  item: typeof POPULAR_ROUTES[number];
-  onPress: () => void;
-  mountAnim: Animated.Value;
-}) => {
-  const { WW } = useAppTheme();
-  const MODE = getModeMap(WW);
-  const s = makeStyles(WW);
-  const pressAnim = useRef(new Animated.Value(1)).current;
-
-  const onPressIn = () =>
-    Animated.spring(pressAnim, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start();
-  const onPressOut = () =>
-    Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true, speed: 30 }).start();
-
-  return (
-    <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut}>
-      <Animated.View style={[s.routeCard, {
-        opacity: mountAnim,
-        transform: [
-          { scale: pressAnim },
-          { translateY: mountAnim.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) },
-        ],
-      }]}>
-        {/* Fare hero */}
-        <View style={s.routeCardTop}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.routeCardRoute} numberOfLines={1}>
-              {item.from} → {item.to}
-            </Text>
-            <Text style={s.routeCardFare}>{item.fare}</Text>
-          </View>
-          <View style={s.routeCardTimePill}>
-            <Ionicons name="time-outline" size={11} color={WW.textSub} />
-            <Text style={s.routeCardTime}>{item.time}</Text>
-          </View>
-        </View>
-
-        {/* Journey timeline strip */}
-        <JourneyStrip modes={item.modes} />
-
-        {/* Mode chips */}
-        <View style={s.routeCardModes}>
-          {item.modes.map((m) => {
-            const cfg = MODE[m];
-            return cfg ? (
-              <View key={m} style={[s.modeChip, { backgroundColor: cfg.bg }]}>
-                <Ionicons name={cfg.icon as any} size={10} color={cfg.text} />
-                <Text style={[s.modeChipText, { color: cfg.text }]}>{cfg.label}</Text>
-              </View>
-            ) : null;
-          })}
-        </View>
-      </Animated.View>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={({ pressed }) => [s.chip, active && s.chipActive, pressed && { opacity: 0.7 }]}
+    >
+      {!!dot && !active && <View style={[s.chipDot, { backgroundColor: dot }]} />}
+      <Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
     </Pressable>
   );
 };
 
-// ─── Quick pick tile (Home / Work shortcut) ───────────────────────────────────
+// ─── Popular route row (routes sheet) ─────────────────────────────────────────
+const PopularRow = ({
+  item, selected, mountAnim, onPress,
+}: {
+  item: typeof POPULAR_ROUTES[number];
+  selected: boolean;
+  mountAnim: Animated.Value;
+  onPress: () => void;
+}) => {
+  const { WW } = useAppTheme();
+  const MODE = getModeMap(WW);
+  const s = makeStyles(WW);
+  const lead = MODE[item.modes[0]];
+  return (
+    <Animated.View style={{
+      opacity: mountAnim,
+      transform: [{ translateY: mountAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+    }}>
+      <TouchableOpacity
+        style={[s.row, selected && s.rowSelected]}
+        onPress={onPress}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.from} to ${item.to}, ${item.time}, ${item.fare}`}
+      >
+        <View style={[s.rowBadge, { backgroundColor: lead.bg }]}>
+          <Text style={[s.rowBadgeText, { color: lead.text }]}>{lead.label.toUpperCase()}</Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={s.rowTitle} numberOfLines={1}>{item.from} → {item.to}</Text>
+          <Text style={s.rowSub} numberOfLines={1}>
+            {item.time} · {item.fare}{item.modes.length > 1 ? ` · ${item.modes.length} legs` : ''}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={WW.textMuted} />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
 const QuickPickTile = ({
   label,
   icon,
@@ -203,7 +182,7 @@ const QuickPickTile = ({
 };
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
-export default function HomeScreen({ navigation }: any) {
+export default function HomeScreen({ navigation, route }: any) {
   const insets   = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const { user } = useAuth();
@@ -227,6 +206,12 @@ export default function HomeScreen({ navigation }: any) {
 
   const [homeDest, setHomeDest] = useState<SearchItem | null>(null);
   const [workDest, setWorkDest] = useState<SearchItem | null>(null);
+  // Measured height of the top chrome, so the alert banner can sit just under it.
+  const [chromeHeight, setChromeHeight] = useState(0);
+
+  // Most recent live community alert, surfaced as a single banner over the map.
+  const { contributions: liveAlerts } = useNearbyAlerts();
+  const topAlert = liveAlerts.find((c) => c.status !== 'rejected') ?? null;
 
   const searchTimeout  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const overlayAnim    = useRef(new Animated.Value(0)).current;
@@ -345,6 +330,16 @@ export default function HomeScreen({ navigation }: any) {
     });
   }, [overlayAnim, recedeAnim, searchStagger]);
 
+  // The Search tab has no screen of its own -- its press lands here as a
+  // param and opens the same overlay the search field does. The value is a
+  // timestamp so each tap re-fires even when the overlay was dismissed.
+  useEffect(() => {
+    if (route?.params?.openSearch) {
+      openSearch();
+      navigation.setParams({ openSearch: undefined });
+    }
+  }, [route?.params?.openSearch, openSearch, navigation]);
+
   const handleSwap = useCallback(() => {
     if (!pendingDest?.coordinates) {
       openSearch();
@@ -376,6 +371,15 @@ export default function HomeScreen({ navigation }: any) {
       if (raw) setSavedPref(raw as TransportMode);
     } catch {}
   };
+
+  // Chips in the top chrome set the same preference the mode selector persists.
+  const setPref = useCallback(async (mode: TransportMode | null) => {
+    setSavedPref(mode);
+    try {
+      if (mode) await AsyncStorage.setItem(TRANSPORT_PREF_KEY, mode);
+      else await AsyncStorage.removeItem(TRANSPORT_PREF_KEY);
+    } catch {}
+  }, []);
 
   const loadCurrentLocation = async () => {
     try {
@@ -436,6 +440,18 @@ export default function HomeScreen({ navigation }: any) {
 
       const origin      = isSwapped ? coords      : userCoords;
       const destination = isSwapped ? userCoords  : coords;
+
+      // The destination is checked above; the origin was not, and a stale or
+      // wrong GPS fix would otherwise route from wherever the phone thinks it is.
+      if (!isWithinLagos(origin.latitude, origin.longitude)) {
+        setRouteLoading(false);
+        Alert.alert(
+          "You don't seem to be in Lagos",
+          'WakaWay can only plan routes that start in Lagos. Check your location and try again.',
+          [{ text: 'OK' }],
+        );
+        return;
+      }
       const destName    = isSwapped
         ? (locationName || 'Current location')
         : pendingDest.name;
@@ -451,7 +467,7 @@ export default function HomeScreen({ navigation }: any) {
         preferredFirstLegMode: mode,
       });
       if (result?.legacyRoute) {
-        navigation.replace('RouteDetail', {
+        navigation.navigate('RouteDetail', {
           routeData:      result.legacyRoute,
           smartRouteData: result.smartRoute,
           destination:    destDetails,
@@ -486,24 +502,24 @@ export default function HomeScreen({ navigation }: any) {
   ), [handleDestinationSelect]);
 
   // ── Render ────────────────────────────────────────────────────────────────
+  const MODE = getModeMap(WW);
+  // Chrome and sheet fade out together as the search overlay slides up.
+  const chromeFade = overlayAnim.interpolate({ inputRange: [0, 0.2], outputRange: [1, 0], extrapolate: 'clamp' });
+  // Translucent material: real blur on iOS, a solid frosted colour on Android
+  // where BlurView is costly and inconsistent. A frosted plate is layered over
+  // the blur on both so text always has a contrast floor (DESIGN_CRITIQUE 2.3).
+  const Frost = Platform.OS === 'ios' ? BlurView : View;
+  const frostProps = Platform.OS === 'ios' ? ({ intensity: 40, tint: isDark ? 'dark' : 'light' } as const) : {};
+
   return (
     <View style={s.root}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      {/* ── Main content — recedes when search opens ──────────────────── */}
+      {/* ── Map — full-bleed behind everything, dims as search opens ───── */}
       <Animated.View style={[
-        s.mainContent,
-        {
-          transform: [
-            { scale: recedeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.93] }) },
-            { translateY: recedeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 10] }) },
-          ],
-          borderRadius: recedeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 22] }),
-          overflow: 'hidden',
-        },
+        StyleSheet.absoluteFill,
+        { opacity: recedeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.45] }) },
       ]}>
-      {/* ── Map section (top 50%) ───────────────────────────────────────── */}
-      <View style={s.mapSection}>
         <WakaWayMapView
           style={StyleSheet.absoluteFill}
           initialRegion={{
@@ -522,104 +538,115 @@ export default function HomeScreen({ navigation }: any) {
           }]} />
           <View style={s.locDot} />
         </View>
-      </View>
+      </Animated.View>
 
-      {/* ── Content section (bottom 50%) ────────────────────────────────── */}
-      <View style={[s.contentSection, { paddingBottom: insets.bottom }]}>
+      {/* ── Top chrome — brand, search field, mode chips on frosted material ── */}
+      <Animated.View
+        style={[s.topChrome, { paddingTop: insets.top + Space.sm, opacity: chromeFade }]}
+        onLayout={(e) => setChromeHeight(e.nativeEvent.layout.height)}
+        pointerEvents={isSearchOpen ? 'none' : 'auto'}
+      >
+        <Frost {...frostProps} style={StyleSheet.absoluteFill} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: WW.frosted }]} />
 
-        {/* Header row */}
-        <View style={[s.header, { paddingTop: 16 }]}>
-          <Text style={s.wordmark}>WAKA<Text style={s.wordmarkAccent}>WAY</Text></Text>
-          <View style={s.headerRight}>
+        <View style={s.brandRow}>
+          <View style={s.brandLeft}>
+            <View style={s.brandMark}><Text style={s.brandGlyph}>W</Text></View>
+            <Text style={s.wordmark}>WakaWay</Text>
+          </View>
+          <View style={s.brandRight}>
+            <View style={s.livePill} accessibilityLabel="Live alerts connected">
+              <View style={s.liveDot} />
+              <Text style={s.liveText}>Live</Text>
+            </View>
             <TouchableOpacity
-              style={s.iconBtn}
+              style={s.bellBtn}
               onPress={() => navigation.navigate('Notifications')}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel="Alerts"
             >
-              <Ionicons name="notifications-outline" size={19} color={WW.textSub} />
-              {/* Notification dot — dotpulse */}
+              <Ionicons name="notifications-outline" size={20} color={WW.text} />
               <Animated.View style={[s.notifDot, {
                 transform: [{ scale: dotPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] }) }],
                 opacity: dotPulseAnim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [1, 0.9, 0.3] }),
               }]} />
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('You')}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <View style={s.avatarCircle}>
-                <Text style={s.avatarText}>{userInitial}</Text>
-              </View>
-            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Search bar — breathes when idle, fades out as overlay opens */}
-        <Animated.View style={[s.searchArea, {
-          opacity: overlayAnim.interpolate({ inputRange: [0, 0.15], outputRange: [1, 0], extrapolate: 'clamp' }),
-        }]}>
-          <Animated.View style={{ transform: [{ scale: isSearchOpen ? 1 : breatheAnim }] }}>
-            <View style={s.searchRow}>
-              <TouchableOpacity
-                style={s.searchPill}
-                onPress={openSearch}
-                activeOpacity={0.9}
-                accessibilityRole="search"
-              >
-                <View style={s.searchIconWrap}>
-                  <Ionicons name="search" size={15} color={WW.orange} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.searchPillText}>Where you dey go?</Text>
-                  <Text style={s.searchPillSub} numberOfLines={1}>
-                    {locationReady ? (locationName || 'Current location') : 'Detecting location…'}
-                  </Text>
-                </View>
-                {/* Danfo stripe accent */}
-                <View style={s.searchStripe} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[s.swapBtn, isSwapped && s.swapBtnActive]}
-                onPress={handleSwap}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="swap-vertical"
-                  size={16}
-                  color={isSwapped ? '#fff' : WW.textSub}
-                />
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
+        {/* Search field — the morph subject; breathes gently when idle */}
+        <Animated.View style={{ transform: [{ scale: isSearchOpen ? 1 : breatheAnim }] }}>
+          <TouchableOpacity
+            style={s.searchField}
+            onPress={openSearch}
+            activeOpacity={0.9}
+            accessibilityRole="search"
+            accessibilityLabel="Search for a destination"
+          >
+            <Ionicons name="search" size={18} color={WW.textMuted} />
+            <Text style={s.searchPlaceholder} numberOfLines={1}>Where you dey go?</Text>
+            <TouchableOpacity
+              style={[s.swapBtn, isSwapped && s.swapBtnActive]}
+              onPress={handleSwap}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={isSwapped ? 'Routing to your location' : 'Route to your location instead'}
+            >
+              <Ionicons name="swap-vertical" size={15} color={isSwapped ? WW.textOnOrange : WW.textMuted} />
+            </TouchableOpacity>
+          </TouchableOpacity>
         </Animated.View>
 
-        {/* Live community alerts */}
-        <LiveAlertsFeed onSeeAll={() => navigation.navigate('Notifications')} />
-
-        {/* Danfo stripe divider */}
-        <View style={s.stripeDivider}>
-          <View style={s.stripeDividerLine} />
-          <Text style={s.stripeDividerLabel}>POPULAR ROUTES</Text>
-          <View style={s.stripeDividerLine} />
-        </View>
-
-        {/* Popular routes — horizontal scroll */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.routesScroll}
-          decelerationRate="fast"
-          snapToInterval={260}
-          snapToAlignment="start"
+          contentContainerStyle={s.chipRow}
+          keyboardShouldPersistTaps="handled"
         >
-          {POPULAR_ROUTES.map((item, i) => (
-            <RouteCard key={item.id} item={item} onPress={openSearch} mountAnim={routeCardAnims[i]} />
+          {MODE_CHIPS.map((m) => (
+            <ModeChip
+              key={m ?? 'all'}
+              label={m ? MODE[m].label : 'All modes'}
+              dot={m ? MODE[m].bg : undefined}
+              active={savedPref === m}
+              onPress={() => setPref(m)}
+            />
           ))}
         </ScrollView>
-      </View>
       </Animated.View>
 
+      {/* ── Live alert banner — the newest community report, one line ──── */}
+      {topAlert && !isSearchOpen && chromeHeight > 0 && (
+        <TouchableOpacity
+          style={[s.alertBanner, { top: chromeHeight + Space.sm }]}
+          onPress={() => navigation.navigate('Notifications')}
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel={`Live alert: ${topAlert.title}`}
+        >
+          <View style={s.alertDot} />
+          <Text style={s.alertText} numberOfLines={1}>{topAlert.title}</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* ── Routes sheet — frosted, over the map, above the tab bar ─────── */}
+      <Animated.View style={[s.sheet, { opacity: chromeFade }]} pointerEvents={isSearchOpen ? 'none' : 'auto'}>
+        <Frost {...frostProps} style={StyleSheet.absoluteFill} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: WW.frosted, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl }]} />
+        <View style={s.sheetHandle} />
+        <View style={s.sheetTitleRow}>
+          <Text style={s.sheetTitle} numberOfLines={1}>
+            {locationReady ? (locationName ? `From ${locationName}` : 'Popular routes') : 'Finding you…'}
+          </Text>
+          <Text style={s.sheetCount}>{POPULAR_ROUTES.length} routes</Text>
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.sheetList}>
+          {POPULAR_ROUTES.map((item, i) => (
+            <PopularRow key={item.id} item={item} selected={i === 0} mountAnim={routeCardAnims[i]} onPress={openSearch} />
+          ))}
+        </ScrollView>
+      </Animated.View>
       {/* Route loading overlay — WakaWay W-spinner */}
       {routeLoading && (
         <View style={s.loadingOverlay}>
@@ -791,211 +818,125 @@ export default function HomeScreen({ navigation }: any) {
 function makeStyles(WW: WW) {
   return StyleSheet.create({
   root:        { flex: 1, backgroundColor: WW.bg },
-  mainContent: { flex: 1 },
 
-  // ── Split layout ────────────────────────────────────────────────────────────
-  mapSection: {
-    height: MAP_HEIGHT,
+  // ── Top chrome ──────────────────────────────────────────────────────────────
+  topChrome: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    paddingHorizontal: Space.lg,
+    paddingBottom: Space.md,
+    gap: Space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: WW.border,
     overflow: 'hidden',
+    zIndex: 2,
   },
-  contentSection: {
-    flex: 1,
-    backgroundColor: WW.bg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginTop: -20,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.5, shadowRadius: 20 },
-      android: { elevation: 20 },
-    }),
-  },
-
-  // ── Header ──────────────────────────────────────────────────────────────────
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
-  wordmark: {
-    fontFamily: Fonts.extrabold,
-    fontSize: 22,
-    color: WW.text,
-    letterSpacing: -0.5,
-  },
-  wordmarkAccent: { color: WW.orange },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: WW.bgElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: WW.border,
-  },
-  avatarCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  brandRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  brandLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandRight:{ flexDirection: 'row', alignItems: 'center', gap: Space.xs },
+  brandMark: {
+    width: 28, height: 28, borderRadius: 8,
     backgroundColor: WW.orange,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontFamily: Fonts.bold, color: '#fff', fontSize: 14 },
-
-  // ── Search bar ──────────────────────────────────────────────────────────────
-  searchArea: { paddingHorizontal: 16, marginBottom: 16 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  searchPill: {
-    flex: 1,
-    height: 58,
-    backgroundColor: WW.bgElevated,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: WW.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 6,
-    paddingRight: 12,
-    gap: 10,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios:     { shadowColor: WW.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12 },
-      android: { elevation: 6 },
-    }),
+  brandGlyph: { fontFamily: Fonts.extrabold, fontSize: 16, color: WW.textOnOrange, marginTop: -1 },
+  wordmark:   { fontFamily: Fonts.bold, fontSize: Typography.lg, color: WW.text, letterSpacing: Tracking.tight / 2 },
+  livePill: {
+    height: HIT, minWidth: 44,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: Space.xs,
   },
-  searchIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: WW.orangeDim,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchPillText: {
-    fontFamily: Fonts.semibold,
-    fontSize: 15,
-    color: WW.text,
-  },
-  searchPillSub: {
-    fontFamily: Fonts.regular,
-    fontSize: 11,
-    color: WW.textMuted,
-    marginTop: 1,
-  },
-  // Danfo stripe on search bar right edge
-  searchStripe: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: WW.stripe,
-    borderTopRightRadius: 16,
-    borderBottomRightRadius: 16,
-  },
-  swapBtn: {
-    width: 48,
-    height: 58,
-    borderRadius: 16,
-    backgroundColor: WW.bgElevated,
-    borderWidth: 1,
-    borderColor: WW.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 8 },
-      android: { elevation: 4 },
-    }),
-  },
-  swapBtnActive: { backgroundColor: WW.orange, borderColor: WW.orange },
-
-  // ── Danfo stripe divider ────────────────────────────────────────────────────
-  stripeDivider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    gap: 10,
-  },
-  stripeDividerLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: WW.stripe,
-    borderRadius: 1,
-    opacity: 0.5,
-  },
-  stripeDividerLabel: {
-    fontFamily: Fonts.bold,
-    fontSize: 10,
-    color: WW.stripe,
-    letterSpacing: 1.4,
+  liveDot:  { width: 7, height: 7, borderRadius: Radius.pill, backgroundColor: WW.greenGlow },
+  liveText: { fontFamily: Fonts.semibold, fontSize: Typography.sm, color: WW.textSub },
+  bellBtn: {
+    width: HIT, height: HIT,
+    alignItems: 'center', justifyContent: 'center',
   },
 
-  // ── Route cards (horizontal scroll) ────────────────────────────────────────
-  routesScroll: { paddingLeft: 16, paddingRight: 8, gap: 10 },
-  routeCard: {
-    width: 250,
-    backgroundColor: WW.bgElevated,
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: WW.border,
-    gap: 10,
-    ...Platform.select({
-      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 },
-      android: { elevation: 8 },
-    }),
-  },
-  routeCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  routeCardRoute: {
-    fontFamily: Fonts.semibold,
-    fontSize: 14,
-    color: WW.text,
-    flex: 1,
-  },
-  routeCardFare: {
-    fontFamily: Fonts.extrabold,
-    fontSize: 22,
-    color: WW.orange,
-    letterSpacing: -0.5,
-    marginTop: 2,
-  },
-  routeCardTimePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
+  // ── Search field ────────────────────────────────────────────────────────────
+  searchField: {
+    height: 48,
+    borderRadius: Radius.lg,
     backgroundColor: WW.bgSurface,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: WW.border,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingLeft: 14, paddingRight: 6,
+    shadowColor: '#14161A', shadowOpacity: 0.06, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
-  routeCardTime: {
-    fontFamily: Fonts.medium,
-    fontSize: 11,
-    color: WW.textSub,
+  searchPlaceholder: { flex: 1, fontFamily: Fonts.regular, fontSize: Typography.lg, color: WW.textMuted },
+  swapBtn: {
+    width: 36, height: 36, borderRadius: Radius.pill,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: WW.bgElevated,
   },
-  routeCardModes: { flexDirection: 'row', gap: 5 },
-  modeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  modeChipText: { fontFamily: Fonts.bold, fontSize: 10 },
+  swapBtnActive: { backgroundColor: WW.orange },
 
-  // Journey timeline strip
-  strip: { flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden' },
-  stripSeg: { height: 6, borderRadius: 3 },
-  stripGap: { width: 2 },
+  // ── Mode chips ──────────────────────────────────────────────────────────────
+  chipRow: { flexDirection: 'row', gap: Space.sm, paddingRight: Space.lg },
+  chip: {
+    height: 34, paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    backgroundColor: WW.walk,
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+  },
+  chipActive:     { backgroundColor: WW.text },
+  chipDot:        { width: 8, height: 8, borderRadius: Radius.pill },
+  chipText:       { fontFamily: Fonts.semibold, fontSize: Typography.sm, color: WW.text },
+  chipTextActive: { color: WW.bg },
+
+  // ── Alert banner ────────────────────────────────────────────────────────────
+  alertBanner: {
+    position: 'absolute', left: Space.lg, right: Space.lg,
+    height: HIT,
+    borderRadius: Radius.md,
+    backgroundColor: WW.warning,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14,
+    shadowColor: WW.warning, shadowOpacity: 0.28, shadowRadius: 18, shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+    zIndex: 3,
+  },
+  alertDot:  { width: 6, height: 6, borderRadius: Radius.pill, backgroundColor: WW.textOnWarning },
+  alertText: { flex: 1, fontFamily: Fonts.bold, fontSize: Typography.md, color: WW.textOnWarning },
+
+  // ── Routes sheet ────────────────────────────────────────────────────────────
+  sheet: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    maxHeight: SCREEN_HEIGHT * SHEET_MAX_RATIO,
+    borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
+    paddingTop: 10, paddingHorizontal: Space.lg,
+    overflow: 'hidden',
+    shadowColor: '#14161A', shadowOpacity: 0.14, shadowRadius: 44, shadowOffset: { width: 0, height: -18 },
+    elevation: 12,
+    zIndex: 2,
+  },
+  sheetHandle: {
+    width: 36, height: 5, borderRadius: Radius.pill,
+    backgroundColor: WW.borderStrong,
+    alignSelf: 'center', marginBottom: Space.md,
+  },
+  sheetTitleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: Space.md, gap: Space.md },
+  sheetTitle: { flex: 1, fontFamily: Fonts.bold, fontSize: Typography.xl, color: WW.text, letterSpacing: Tracking.tight / 2 },
+  sheetCount: { fontFamily: Fonts.semibold, fontSize: Typography.sm, color: WW.textMuted },
+  sheetList:  { gap: Space.sm, paddingBottom: Space.md },
+
+  row: {
+    borderRadius: Radius.lg,
+    backgroundColor: WW.bgSurface,
+    padding: 14,
+    flexDirection: 'row', alignItems: 'center', gap: Space.md,
+  },
+  rowSelected: {
+    borderWidth: 2, borderColor: WW.text,
+    shadowColor: '#14161A', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  rowBadge: {
+    width: 40, height: 40, borderRadius: Radius.md,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  rowBadgeText: { fontFamily: Fonts.extrabold, fontSize: 11, letterSpacing: Tracking.tight / 2 },
+  rowTitle: { fontFamily: Fonts.bold, fontSize: Typography.lg, color: WW.text },
+  rowSub:   { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textMuted, marginTop: 2 },
 
   // ── Loading overlay ─────────────────────────────────────────────────────────
   loadingOverlay: {
@@ -1028,7 +969,7 @@ function makeStyles(WW: WW) {
     textAlign: 'center',
   },
 
-  // ── Search overlay (frosted dark) ───────────────────────────────────────────
+  // ── Search overlay — the canvas's Search screen, on the theme ground ──────
   searchOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 200,
@@ -1049,9 +990,9 @@ function makeStyles(WW: WW) {
     gap: 10,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: HIT,
+    height: HIT,
+    borderRadius: Radius.pill,
     backgroundColor: WW.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1062,9 +1003,9 @@ function makeStyles(WW: WW) {
   inputWrap: {
     flex: 1,
     height: 48,
-    backgroundColor: WW.bgElevated,
-    borderRadius: 14,
-    borderWidth: 1.5,
+    backgroundColor: WW.bgSurface,
+    borderRadius: Radius.lg,
+    borderWidth: 2,
     borderColor: WW.orange,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1074,25 +1015,26 @@ function makeStyles(WW: WW) {
   textInput: {
     flex: 1,
     fontFamily: Fonts.medium,
-    fontSize: 15,
+    fontSize: Typography.lg,
     color: WW.text,
     padding: 0,
   },
 
   // Results
   resultRow: {
+    minHeight: 68,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
+    paddingHorizontal: Space.lg,
+    paddingVertical: Space.md,
+    gap: Space.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: WW.divider,
   },
   resultIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
     backgroundColor: WW.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1100,23 +1042,23 @@ function makeStyles(WW: WW) {
   },
   resultName: {
     fontFamily: Fonts.semibold,
-    fontSize: 15,
+    fontSize: Typography.lg,
     color: WW.text,
   },
   resultAddress: {
     fontFamily: Fonts.regular,
-    fontSize: 12,
-    color: WW.textSub,
+    fontSize: Typography.sm,
+    color: WW.textMuted,
     marginTop: 2,
   },
   recentLabel: {
     fontFamily: Fonts.bold,
-    fontSize: 10,
-    color: WW.stripe,
-    letterSpacing: 1.2,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 8,
+    fontSize: Typography.xs,
+    color: WW.textMuted,
+    letterSpacing: Tracking.eyebrow,
+    paddingHorizontal: Space.lg,
+    paddingTop: Space.xl,
+    paddingBottom: Space.sm,
   },
   centerState: {
     alignItems: 'center',
@@ -1126,13 +1068,13 @@ function makeStyles(WW: WW) {
   },
   emptyTitle: {
     fontFamily: Fonts.bold,
-    fontSize: 18,
+    fontSize: Typography.lg,
     color: WW.text,
     marginTop: 16,
   },
   emptyHint: {
     fontFamily: Fonts.regular,
-    fontSize: 14,
+    fontSize: Typography.md,
     color: WW.textSub,
     marginTop: 6,
     textAlign: 'center',
@@ -1196,8 +1138,8 @@ function makeStyles(WW: WW) {
   },
   qpSectionLabel: {
     fontFamily: Fonts.bold,
-    fontSize: 10,
-    color: WW.stripe,
+    fontSize: Typography.xs,
+    color: WW.textMuted,
     letterSpacing: 1.3,
     marginBottom: 10,
   },

@@ -48,7 +48,7 @@ interface RouteGuideProps {
 // ============================================================
 
 const NudgeBanner: React.FC<{ nudge: ArrivalNudge }> = ({ nudge }) => {
-  const { theme } = useAppTheme();
+  const { WW } = useAppTheme();
   const animatedValue = useRef(new Animated.Value(0)).current;
   
   useEffect(() => {
@@ -116,7 +116,7 @@ const StepCard: React.FC<StepCardProps> = ({
   isCompleted,
   distanceToNext,
 }) => {
-  const { theme } = useAppTheme();
+  const { WW } = useAppTheme();
   
   const getModeColor = () => {
     switch (step.mode) {
@@ -126,7 +126,7 @@ const StepCard: React.FC<StepCardProps> = ({
       case 'danfo': return '#FFC107';
       case 'brt': return '#2196F3';
       case 'rail': return '#E91E63';
-      default: return theme.PRIMARY;
+      default: return WW.orange;
     }
   };
   
@@ -135,8 +135,8 @@ const StepCard: React.FC<StepCardProps> = ({
       style={[
         styles.stepCard,
         { 
-          backgroundColor: theme.SURFACE,
-          borderColor: isActive ? getModeColor() : theme.BORDER,
+          backgroundColor: WW.bgSurface,
+          borderColor: isActive ? getModeColor() : WW.border,
           borderWidth: isActive ? 2 : 1,
           opacity: isCompleted ? 0.6 : 1,
         },
@@ -157,10 +157,10 @@ const StepCard: React.FC<StepCardProps> = ({
         </View>
         
         <View style={styles.stepHeaderText}>
-          <Text style={[styles.stepTitle, { color: theme.TEXT }]}>
+          <Text style={[styles.stepTitle, { color: WW.text }]}>
             {step.title}
           </Text>
-          <Text style={[styles.stepDuration, { color: theme.TEXT_SECONDARY }]}>
+          <Text style={[styles.stepDuration, { color: WW.textSub }]}>
             {step.duration_text}
           </Text>
         </View>
@@ -171,7 +171,7 @@ const StepCard: React.FC<StepCardProps> = ({
       </View>
       
       {/* Description */}
-      <Text style={[styles.stepDescription, { color: theme.TEXT_SECONDARY }]}>
+      <Text style={[styles.stepDescription, { color: WW.textSub }]}>
         {step.description}
       </Text>
       
@@ -215,7 +215,7 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
   onStopNavigation,
   onClose,
 }) => {
-  const { theme } = useAppTheme();
+  const { WW } = useAppTheme();
   const scrollRef = useRef<ScrollView>(null);
   
   // Auto-scroll to active step
@@ -229,21 +229,21 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
   }, [currentLegIndex]);
   
   return (
-    <View style={[styles.container, { backgroundColor: theme.BACKGROUND }]}>
+    <View style={[styles.container, { backgroundColor: WW.bg }]}>
       {/* Nudge Banner */}
       {latestNudge && <NudgeBanner nudge={latestNudge} />}
       
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.BORDER }]}>
+      <View style={[styles.header, { borderBottomColor: WW.border }]}>
         <TouchableOpacity onPress={onClose}>
-          <Ionicons name="close" size={24} color={theme.TEXT} />
+          <Ionicons name="close" size={24} color={WW.text} />
         </TouchableOpacity>
         
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>
+          <Text style={[styles.headerTitle, { color: WW.text }]}>
             {formattedGuide.header.destination}
           </Text>
-          <Text style={[styles.headerSubtitle, { color: theme.TEXT_SECONDARY }]}>
+          <Text style={[styles.headerSubtitle, { color: WW.textSub }]}>
             {formattedGuide.header.duration} â€¢ {formattedGuide.header.price}
           </Text>
         </View>
@@ -259,18 +259,18 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
       {/* Progress Bar */}
       {isNavigating && (
         <View style={styles.progressContainer}>
-          <View style={[styles.progressBar, { backgroundColor: theme.BORDER }]}>
+          <View style={[styles.progressBar, { backgroundColor: WW.border }]}>
             <View 
               style={[
                 styles.progressFill, 
                 { 
-                  backgroundColor: theme.PRIMARY,
+                  backgroundColor: WW.orange,
                   width: `${progress}%`,
                 }
               ]} 
             />
           </View>
-          <Text style={[styles.progressText, { color: theme.TEXT_SECONDARY }]}>
+          <Text style={[styles.progressText, { color: WW.textSub }]}>
             {Math.round(progress)}% complete
           </Text>
         </View>
@@ -320,8 +320,8 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
                     styles.connectorDot,
                     { 
                       backgroundColor: index < currentLegIndex 
-                        ? theme.PRIMARY 
-                        : theme.BORDER 
+                        ? WW.orange 
+                        : WW.border 
                     }
                   ]} 
                 />
@@ -330,8 +330,8 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
                     styles.connectorBar,
                     { 
                       backgroundColor: index < currentLegIndex 
-                        ? theme.PRIMARY 
-                        : theme.BORDER 
+                        ? WW.orange 
+                        : WW.border 
                     }
                   ]} 
                 />
@@ -340,8 +340,8 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
                     styles.connectorDot,
                     { 
                       backgroundColor: index < currentLegIndex 
-                        ? theme.PRIMARY 
-                        : theme.BORDER 
+                        ? WW.orange 
+                        : WW.border 
                     }
                   ]} 
                 />
@@ -351,16 +351,16 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
         ))}
         
         {/* Arrival nudge reminder */}
-        <View style={[styles.arrivalReminder, { backgroundColor: theme.SURFACE }]}>
-          <Ionicons name="megaphone-outline" size={20} color={theme.PRIMARY} />
-          <Text style={[styles.arrivalReminderText, { color: theme.TEXT }]}>
+        <View style={[styles.arrivalReminder, { backgroundColor: WW.bgSurface }]}>
+          <Ionicons name="megaphone-outline" size={20} color={WW.orange} />
+          <Text style={[styles.arrivalReminderText, { color: WW.text }]}>
             {formattedGuide.arrivalNudge}
           </Text>
         </View>
       </ScrollView>
       
       {/* Navigation Button */}
-      <View style={[styles.footer, { borderTopColor: theme.BORDER }]}>
+      <View style={[styles.footer, { borderTopColor: WW.border }]}>
         {isNavigating ? (
           <TouchableOpacity
             style={[styles.navButton, { backgroundColor: '#F44336' }]}
@@ -371,7 +371,7 @@ export const RouteGuide: React.FC<RouteGuideProps> = ({
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.navButton, { backgroundColor: theme.PRIMARY }]}
+            style={[styles.navButton, { backgroundColor: WW.orange }]}
             onPress={onStartNavigation}
           >
             <Ionicons name="navigate" size={20} color="#FFFFFF" />

@@ -13,12 +13,13 @@ import {
 import { PanGestureHandler, State as GestureState } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { WakaWayMapView } from '../components/map/MapView';
 import { RouteStepCard } from '../components/RouteStepCard';
 import { FareEstimateCard } from '../components/FareEstimateCard';
 import { SmartRouteOptions } from '../components/SmartRouteOptions';
+import { Fonts, Typography } from '../theme/typography';
+import { Space, Radius, HIT } from '../theme/spacing';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
@@ -38,7 +39,7 @@ const SNAP_POINTS = {
 };
 
 export default function RouteDetailScreen({ route, navigation }: any) {
-    const { theme, isDark } = useAppTheme();
+    const { WW, isDark } = useAppTheme();
     const { user } = useAuth();
     const { routeId, routeData, smartRouteData } = route.params || {};
     const [activeRoute, setActiveRoute] = useState<any>(routeData || null);
@@ -258,29 +259,17 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                     }
                 />
 
-                {/* Header Gradient */}
-                <LinearGradient
-                    colors={['rgba(0,0,0,0.65)', 'rgba(0,0,0,0.15)', 'transparent']}
-                    style={styles.headerGradient}
-                />
-
-                {/* Back Button + Destination label */}
-                <SafeAreaView style={styles.safeAreaProps}>
+                {/* Back — 44pt frosted circle; the map is the header now */}
+                <SafeAreaView style={styles.safeAreaProps} edges={['top']}>
                     <View style={styles.mapHeaderRow}>
                         <TouchableOpacity
-                            style={styles.backButton}
+                            style={[styles.backButton, { backgroundColor: WW.frosted }]}
                             onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')}
+                            accessibilityRole="button"
+                            accessibilityLabel="Back"
                         >
-                            <Ionicons name="chevron-back" size={22} color="white" />
+                            <Ionicons name="chevron-back" size={22} color={WW.text} />
                         </TouchableOpacity>
-                        {(smartRoute?.destination.name || activeRoute?.destination) ? (
-                            <View style={styles.destinationPill}>
-                                <Ionicons name="location" size={13} color="#22C55E" />
-                                <Text style={styles.destinationPillText} numberOfLines={1}>
-                                    {smartRoute?.destination.name ?? activeRoute?.destination}
-                                </Text>
-                            </View>
-                        ) : null}
                     </View>
                 </SafeAreaView>
             </View>
@@ -289,8 +278,9 @@ export default function RouteDetailScreen({ route, navigation }: any) {
             <Animated.View 
                 style={[
                     styles.bottomSheet,
-                    { 
-                        backgroundColor: theme.CARD_BACKGROUND,
+                    {
+                        backgroundColor: WW.frosted,
+                        borderColor: WW.border,
                         height: sheetHeight,
                     }
                 ]}
@@ -309,7 +299,7 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                             activeOpacity={1}
                             style={styles.dragHandleTouchArea}
                         >
-                            <View style={[styles.dragHandle, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
+                            <View style={[styles.dragHandle, { backgroundColor: WW.borderStrong }]} />
                         </TouchableOpacity>
                     </Animated.View>
                 </PanGestureHandler>
@@ -350,25 +340,25 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                             <View style={styles.summaryContainer}>
                                 <View style={styles.routeHeader}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexWrap: 'wrap' }}>
-                                        <Text style={[styles.routeTitle, { color: theme.TEXT }]}>{activeRoute.origin || 'Origin'}</Text>
-                                        <Ionicons name="arrow-forward" size={16} color={theme.TEXT} style={{ marginHorizontal: 8 }} />
-                                        <Text style={[styles.routeTitle, { color: theme.TEXT }]}>{activeRoute.destination || 'Destination'}</Text>
+                                        <Text style={[styles.routeTitle, { color: WW.text }]}>{activeRoute.origin || 'Origin'}</Text>
+                                        <Ionicons name="arrow-forward" size={16} color={WW.text} style={{ marginHorizontal: 8 }} />
+                                        <Text style={[styles.routeTitle, { color: WW.text }]}>{activeRoute.destination || 'Destination'}</Text>
                                     </View>
                                     <View style={[styles.ratingContainer, { backgroundColor: 'rgba(245,158,11,0.15)' }]}>
                                         <Ionicons name="star" size={14} color="#F59E0B" />
-                                        <Text style={[styles.ratingText, { color: theme.TEXT }]}>{activeRoute.rating}</Text>
+                                        <Text style={[styles.ratingText, { color: WW.text }]}>{activeRoute.rating}</Text>
                                     </View>
                                 </View>
 
-                                <View style={[styles.statsRow, { backgroundColor: theme.SURFACE }]}>
+                                <View style={[styles.statsRow, { backgroundColor: WW.bgSurface }]}>
                                     <View style={styles.statItem}>
-                                        <Text style={[styles.statLabel, { color: theme.TEXT_SECONDARY }]}>Duration</Text>
-                                        <Text style={[styles.statValue, { color: theme.TEXT }]}>{activeRoute.total_duration_mins} min</Text>
+                                        <Text style={[styles.statLabel, { color: WW.textSub }]}>Duration</Text>
+                                        <Text style={[styles.statValue, { color: WW.text }]}>{activeRoute.total_duration_mins} min</Text>
                                     </View>
-                                    <View style={[styles.divider, { backgroundColor: theme.BORDER }]} />
+                                    <View style={[styles.divider, { backgroundColor: WW.border }]} />
                                     <View style={styles.statItem}>
-                                        <Text style={[styles.statLabel, { color: theme.TEXT_SECONDARY }]}>Distance</Text>
-                                        <Text style={[styles.statValue, { color: theme.TEXT }]}>{activeRoute.total_distance_km} km</Text>
+                                        <Text style={[styles.statLabel, { color: WW.textSub }]}>Distance</Text>
+                                        <Text style={[styles.statValue, { color: WW.text }]}>{activeRoute.total_distance_km} km</Text>
                                     </View>
                                 </View>
 
@@ -385,7 +375,7 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                                 <View style={styles.tagsRow}>
                                     {activeRoute.is_fastest && (
                                         <View style={[styles.tag, { backgroundColor: 'rgba(34,197,94,0.15)' }]}>
-                                            <Text style={[styles.tagText, { color: theme.SUCCESS }]}>Fastest</Text>
+                                            <Text style={[styles.tagText, { color: WW.green }]}>Fastest</Text>
                                         </View>
                                     )}
                                     {activeRoute.is_cheapest && (
@@ -396,11 +386,11 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                                 </View>
                             </View>
 
-                            <View style={[styles.sectionDivider, { backgroundColor: theme.BORDER }]} />
+                            <View style={[styles.sectionDivider, { backgroundColor: WW.border }]} />
 
                             {/* Steps List */}
                             <View style={styles.stepsContainer}>
-                                <Text style={[styles.stepsTitle, { color: theme.TEXT }]}>Directions</Text>
+                                <Text style={[styles.stepsTitle, { color: WW.text }]}>Directions</Text>
                                 {activeRoute.segments?.map((step: any, index: number) => (
                                     <RouteStepCard
                                         key={step.id}
@@ -419,36 +409,34 @@ export default function RouteDetailScreen({ route, navigation }: any) {
                 </PanGestureHandler>
             </Animated.View>
 
-            {/* Bottom action bar — always visible */}
-            <View style={[styles.fabContainer, { backgroundColor: theme.CARD_BACKGROUND, borderTopColor: theme.BORDER }]}>
-                {/* Save */}
+            {/* Bottom action bar — save · fare check · Start */}
+            <View style={[styles.fabContainer, { backgroundColor: WW.frosted, borderTopColor: WW.border }]}>
                 <TouchableOpacity
-                    style={[styles.iconFab, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: theme.BORDER }]}
+                    style={[styles.iconFab, { backgroundColor: WW.bgElevated }]}
                     onPress={saveJourney}
+                    accessibilityRole="button"
                     accessibilityLabel={isSaved ? 'Unsave route' : 'Save route'}
                 >
-                    <Ionicons name={isSaved ? 'heart' : 'heart-outline'} size={20} color={isSaved ? '#EF4444' : theme.TEXT_SECONDARY} />
+                    <Ionicons name={isSaved ? 'heart' : 'heart-outline'} size={20} color={isSaved ? WW.error : WW.textSub} />
                 </TouchableOpacity>
 
-                {/* Fare Dispute Shield */}
                 <TouchableOpacity
-                    style={[styles.iconFab, { backgroundColor: 'rgba(93,187,99,0.10)', borderColor: 'rgba(93,187,99,0.25)' }]}
+                    style={[styles.iconFab, { backgroundColor: WW.greenDim }]}
                     onPress={() => setDisputeVisible(true)}
+                    accessibilityRole="button"
                     accessibilityLabel="Check correct fare"
                 >
-                    <Ionicons name="shield-checkmark-outline" size={20} color="#5DBB63" />
+                    <Ionicons name="shield-checkmark-outline" size={20} color={WW.green} />
                 </TouchableOpacity>
 
-                {/* Start Journey — only when SmartRouteOptions isn't showing its own */}
-                {!(smartRoute && showSmartOptions) && (
-                    <TouchableOpacity
-                        style={[styles.fab, { backgroundColor: theme.PRIMARY }]}
-                        onPress={() => startJourney()}
-                    >
-                        <Ionicons name="navigate" size={18} color="#fff" />
-                        <Text style={styles.fabText}>Start Journey</Text>
-                    </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                    style={[styles.fab, { backgroundColor: WW.text }]}
+                    onPress={() => startJourney()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Start journey"
+                >
+                    <Text style={[styles.fabText, { color: WW.bg }]}>Start</Text>
+                </TouchableOpacity>
             </View>
         {/* Fare Dispute Modal */}
         <FareDisputeModal
@@ -504,14 +492,15 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     backButton: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
-        backgroundColor: 'rgba(0,0,0,0.45)',
+        width: HIT,
+        height: HIT,
+        borderRadius: Radius.pill,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.12)',
+        ...Platform.select({
+            ios: { shadowColor: '#14161A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 8 },
+            android: { elevation: 3 },
+        }),
     },
     destinationPill: {
         flexDirection: 'row',
@@ -683,8 +672,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
-        paddingHorizontal: 16,
-        paddingTop: 14,
+        paddingHorizontal: Space.lg,
+        paddingTop: Space.md,
         paddingBottom: Platform.OS === 'ios' ? 32 : 18,
         borderTopWidth: StyleSheet.hairlineWidth,
     },
@@ -698,49 +687,34 @@ const styles = StyleSheet.create({
         flexShrink: 0,
     },
     iconFab: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
+        width: 52,
+        height: 52,
+        borderRadius: Radius.lg,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
         flexShrink: 0,
     },
     fab: {
         flex: 1,
-        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
-        height: 50,
-        borderRadius: 25,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#22C55E',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.35,
-                shadowRadius: 10,
-            },
-            android: { elevation: 6 },
-        }),
+        height: 52,
+        borderRadius: Radius.lg,
     },
     fabText: {
-        fontWeight: '700',
-        fontSize: 16,
-        color: '#fff',
-        letterSpacing: -0.2,
+        fontFamily: Fonts.bold,
+        fontSize: Typography.lg,
     },
     bottomSheet: {
         position: 'absolute',
         left: 0,
         right: 0,
         bottom: 0,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
+        borderTopLeftRadius: Radius.xl,
+        borderTopRightRadius: Radius.xl,
         borderTopWidth: StyleSheet.hairlineWidth,
         borderLeftWidth: StyleSheet.hairlineWidth,
         borderRightWidth: StyleSheet.hairlineWidth,
-        borderColor: 'rgba(255,255,255,0.07)',
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
@@ -763,8 +737,8 @@ const styles = StyleSheet.create({
     },
     dragHandle: {
         width: 36,
-        height: 4,
-        borderRadius: 2,
+        height: 5,
+        borderRadius: Radius.pill,
     },
     sheetContent: {
         flex: 1,

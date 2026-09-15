@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { addReport } from '../services/reportService';
-import { WW } from '../theme/colors';
+import { useAppTheme } from '../context/ThemeContext';
+// Mode colours are identical in both palettes, so the module-level category table
+// can read them from either; everything that flips with the theme goes through WW.
+import { WW_LIGHT as MODE, type WWColors } from '../theme/colors';
 import { Fonts } from '../theme/typography';
 
 // ─── Report categories ────────────────────────────────────────────────────────
@@ -17,7 +20,7 @@ const CATEGORIES = [
     key: 'Traffic',
     emoji: '🚦',
     label: 'Go-slow',
-    color: WW.danfo,
+    color: MODE.danfo,
     bg: 'rgba(245,197,24,0.12)',
     description: 'Heavy traffic reported',
   },
@@ -33,7 +36,7 @@ const CATEGORIES = [
     key: 'Security',
     emoji: '🛡️',
     label: 'Security',
-    color: WW.okada,
+    color: MODE.okada,
     bg: 'rgba(239,68,68,0.10)',
     description: 'Security alert reported',
   },
@@ -52,6 +55,8 @@ type ReportType = 'Traffic' | 'Hazard' | 'Security';
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 const Toast = ({ message, color }: { message: string; color: string }) => {
+  const { WW } = useAppTheme();
+  const toast = useMemo(() => make_toast(WW), [WW]);
   const opAnim = useRef(new Animated.Value(0)).current;
   const yAnim  = useRef(new Animated.Value(8)).current;
 
@@ -80,7 +85,7 @@ const Toast = ({ message, color }: { message: string; color: string }) => {
   );
 };
 
-const toast = StyleSheet.create({
+const make_toast = (WW: WWColors) => StyleSheet.create({
   wrap: {
     position: 'absolute',
     top: -36,
@@ -112,6 +117,8 @@ const ReportTile = ({
   userCoords: { latitude: number; longitude: number };
   onReported: (msg: string, color: string) => void;
 }) => {
+  const { WW } = useAppTheme();
+  const tile = useMemo(() => make_tile(WW), [WW]);
   const [busy, setBusy] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -159,7 +166,7 @@ const ReportTile = ({
   );
 };
 
-const tile = StyleSheet.create({
+const make_tile = (WW: WWColors) => StyleSheet.create({
   wrap: {
     flex: 1,
     alignItems: 'center',
@@ -193,6 +200,8 @@ interface QuickReportBarProps {
 }
 
 export default function QuickReportBar({ userCoords }: QuickReportBarProps) {
+  const { WW } = useAppTheme();
+  const s = useMemo(() => make_s(WW), [WW]);
   const [toastMsg, setToastMsg] = useState<{ msg: string; color: string } | null>(null);
 
   const showToast = (msg: string, color: string) => {
@@ -226,7 +235,7 @@ export default function QuickReportBar({ userCoords }: QuickReportBarProps) {
   );
 }
 
-const s = StyleSheet.create({
+const make_s = (WW: WWColors) => StyleSheet.create({
   wrap: {
     paddingHorizontal: 14,
     paddingVertical: 8,

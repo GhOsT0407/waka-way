@@ -45,7 +45,7 @@ const CONTRIBUTION_TYPES = [
 ];
 
 export default function ContributionScreen({ navigation }: any) {
-  const { theme } = useAppTheme();
+  const { WW } = useAppTheme();
   const { user } = useAuth();
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [isAddingContribution, setIsAddingContribution] = useState(false);
@@ -216,25 +216,25 @@ export default function ContributionScreen({ navigation }: any) {
     const typeInfo = CONTRIBUTION_TYPES.find(t => t.id === item.type);
 
     return (
-      <View style={[styles.contributionItem, { backgroundColor: theme.SURFACE, borderColor: theme.BORDER }]}>
+      <View style={[styles.contributionItem, { backgroundColor: WW.bgSurface, borderColor: WW.border }]}>
         <View style={styles.contributionHeader}>
           <View style={styles.typeContainer}>
-            <Ionicons name={typeInfo?.icon as any} size={20} color={theme.PRIMARY} />
-            <Text style={[styles.typeLabel, { color: theme.PRIMARY }]}>{typeInfo?.label}</Text>
+            <Ionicons name={typeInfo?.icon as any} size={20} color={WW.orange} />
+            <Text style={[styles.typeLabel, { color: WW.orange }]}>{typeInfo?.label}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
             <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
           </View>
         </View>
 
-        <Text style={[styles.contributionTitle, { color: theme.TEXT }]}>{item.title}</Text>
-        <Text style={[styles.contributionDescription, { color: theme.TEXT_SECONDARY }]}>{item.description}</Text>
+        <Text style={[styles.contributionTitle, { color: WW.text }]}>{item.title}</Text>
+        <Text style={[styles.contributionDescription, { color: WW.textSub }]}>{item.description}</Text>
 
         <View style={styles.contributionMeta}>
-          <Text style={[styles.contributionAddress, { color: theme.TEXT_SECONDARY }]}>
+          <Text style={[styles.contributionAddress, { color: WW.textSub }]}>
             📍 {item.address}
           </Text>
-          <Text style={[styles.contributionDate, { color: theme.TEXT_SECONDARY }]}>
+          <Text style={[styles.contributionDate, { color: WW.textSub }]}>
             {new Date(item.timestamp).toLocaleDateString()}
           </Text>
         </View>
@@ -244,34 +244,34 @@ export default function ContributionScreen({ navigation }: any) {
 
   if (isAddingContribution) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.BACKGROUND }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: WW.bg }]}>
         <StatusBar style="auto" />
 
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setIsAddingContribution(false)}>
-            <Ionicons name="arrow-back" size={24} color={theme.TEXT} />
+            <Ionicons name="arrow-back" size={24} color={WW.text} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.TEXT }]}>Add Contribution</Text>
+          <Text style={[styles.headerTitle, { color: WW.text }]}>Add Contribution</Text>
           <View style={{ width: 24 }} />
         </View>
 
         <ScrollView style={styles.formContainer}>
-          <Text style={[styles.sectionTitle, { color: theme.TEXT }]}>What type of location is this?</Text>
+          <Text style={[styles.sectionTitle, { color: WW.text }]}>What type of location is this?</Text>
           <View style={styles.typeGrid}>
             {CONTRIBUTION_TYPES.map((type) => (
               <TouchableOpacity
                 key={type.id}
                 style={[
                   styles.typeOption,
-                  { borderColor: theme.BORDER },
-                  selectedType === type.id && { borderColor: theme.PRIMARY, backgroundColor: theme.CHIP_BACKGROUND }
+                  { borderColor: WW.border },
+                  selectedType === type.id && { borderColor: WW.orange, backgroundColor: WW.orangeDim }
                 ]}
                 onPress={() => setSelectedType(type.id)}
               >
-                <Ionicons name={type.icon as any} size={24} color={selectedType === type.id ? theme.PRIMARY : theme.TEXT_SECONDARY} />
+                <Ionicons name={type.icon as any} size={24} color={selectedType === type.id ? WW.orange : WW.textSub} />
                 <Text style={[
                   styles.typeOptionText,
-                  { color: selectedType === type.id ? theme.PRIMARY : theme.TEXT_SECONDARY }
+                  { color: selectedType === type.id ? WW.orange : WW.textSub }
                 ]}>
                   {type.label}
                 </Text>
@@ -279,20 +279,20 @@ export default function ContributionScreen({ navigation }: any) {
             ))}
           </View>
 
-          <Text style={[styles.sectionTitle, { color: theme.TEXT }]}>Title</Text>
+          <Text style={[styles.sectionTitle, { color: WW.text }]}>Title</Text>
           <TextInput
-            style={[styles.input, { color: theme.TEXT, borderColor: theme.BORDER }]}
+            style={[styles.input, { color: WW.text, borderColor: WW.border }]}
             placeholder="Brief title for this location"
-            placeholderTextColor={theme.TEXT_SECONDARY}
+            placeholderTextColor={WW.textSub}
             value={title}
             onChangeText={setTitle}
           />
 
-          <Text style={[styles.sectionTitle, { color: theme.TEXT }]}>Description</Text>
+          <Text style={[styles.sectionTitle, { color: WW.text }]}>Description</Text>
           <TextInput
-            style={[styles.textArea, { color: theme.TEXT, borderColor: theme.BORDER }]}
+            style={[styles.textArea, { color: WW.text, borderColor: WW.border }]}
             placeholder="Describe this location in detail..."
-            placeholderTextColor={theme.TEXT_SECONDARY}
+            placeholderTextColor={WW.textSub}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -300,7 +300,7 @@ export default function ContributionScreen({ navigation }: any) {
           />
 
           <TouchableOpacity
-            style={[styles.submitButton, { backgroundColor: theme.PRIMARY }]}
+            style={[styles.submitButton, { backgroundColor: WW.orange }]}
             onPress={submitContribution}
           >
             <Text style={styles.submitButtonText}>Submit Contribution</Text>
@@ -311,19 +311,19 @@ export default function ContributionScreen({ navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.BACKGROUND }]}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: WW.bg }]}>
       <StatusBar style="auto" />
 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Close" accessibilityRole="button">
-          <Ionicons name="chevron-down" size={22} color={theme.TEXT} />
+          <Ionicons name="chevron-down" size={22} color={WW.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.TEXT, flex: 1, textAlign: 'center' }]}>Community</Text>
+        <Text style={[styles.headerTitle, { color: WW.text, flex: 1, textAlign: 'center' }]}>Community</Text>
         <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: theme.PRIMARY }]}
+          style={[styles.addButton, { backgroundColor: WW.orange }]}
           onPress={() => setIsAddingContribution(true)}
         >
-          <Ionicons name="add" size={20} color={theme.WHITE} />
+          <Ionicons name="add" size={20} color={WW.textOnOrange} />
         </TouchableOpacity>
       </View>
 
@@ -332,18 +332,18 @@ export default function ContributionScreen({ navigation }: any) {
         <TouchableOpacity
           style={[
             styles.viewToggleButton,
-            viewMode === 'map' && { backgroundColor: theme.PRIMARY },
+            viewMode === 'map' && { backgroundColor: WW.orange },
           ]}
           onPress={() => setViewMode('map')}
         >
           <Ionicons 
             name="map" 
             size={18} 
-            color={viewMode === 'map' ? '#FFFFFF' : theme.TEXT_SECONDARY} 
+            color={viewMode === 'map' ? '#FFFFFF' : WW.textSub} 
           />
           <Text style={[
             styles.viewToggleText,
-            { color: viewMode === 'map' ? '#FFFFFF' : theme.TEXT_SECONDARY }
+            { color: viewMode === 'map' ? '#FFFFFF' : WW.textSub }
           ]}>
             Community Map
           </Text>
@@ -351,18 +351,18 @@ export default function ContributionScreen({ navigation }: any) {
         <TouchableOpacity
           style={[
             styles.viewToggleButton,
-            viewMode === 'list' && { backgroundColor: theme.PRIMARY },
+            viewMode === 'list' && { backgroundColor: WW.orange },
           ]}
           onPress={() => setViewMode('list')}
         >
           <Ionicons 
             name="list" 
             size={18} 
-            color={viewMode === 'list' ? '#FFFFFF' : theme.TEXT_SECONDARY} 
+            color={viewMode === 'list' ? '#FFFFFF' : WW.textSub} 
           />
           <Text style={[
             styles.viewToggleText,
-            { color: viewMode === 'list' ? '#FFFFFF' : theme.TEXT_SECONDARY }
+            { color: viewMode === 'list' ? '#FFFFFF' : WW.textSub }
           ]}>
             My Contributions
           </Text>
@@ -382,7 +382,7 @@ export default function ContributionScreen({ navigation }: any) {
       {viewMode === 'list' && (
         <>
           <View style={styles.infoContainer}>
-            <Text style={[styles.infoText, { color: theme.TEXT }]}>
+            <Text style={[styles.infoText, { color: WW.text }]}>
               Help other commuters by tagging important locations like bus stops, taxi stands, or areas that need attention.
             </Text>
           </View>
@@ -393,13 +393,13 @@ export default function ContributionScreen({ navigation }: any) {
             renderItem={renderContributionItem}
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <Ionicons name="heart-outline" size={48} color={theme.TEXT_SECONDARY} />
-                <Text style={[styles.emptyTitle, { color: theme.TEXT }]}>No contributions yet</Text>
-                <Text style={[styles.emptySubtitle, { color: theme.TEXT_SECONDARY }]}>
+                <Ionicons name="heart-outline" size={48} color={WW.textSub} />
+                <Text style={[styles.emptyTitle, { color: WW.text }]}>No contributions yet</Text>
+                <Text style={[styles.emptySubtitle, { color: WW.textSub }]}>
                   Your contributions to improve the app will appear here
                 </Text>
                 <TouchableOpacity
-                  style={[styles.emptyButton, { backgroundColor: theme.PRIMARY }]}
+                  style={[styles.emptyButton, { backgroundColor: WW.orange }]}
                   onPress={() => setIsAddingContribution(true)}
                 >
                   <Text style={styles.emptyButtonText}>Add Your First Contribution</Text>

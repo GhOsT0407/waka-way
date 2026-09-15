@@ -70,7 +70,7 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
   onVote,
   distance,
 }) => {
-  const { theme } = useAppTheme();
+  const { WW } = useAppTheme();
   const translateY = useRef(new Animated.Value(BOTTOM_SHEET_MAX_HEIGHT)).current;
   const [isVoting, setIsVoting] = useState(false);
   const [currentVote, setCurrentVote] = useState<'CONFIRM' | 'DISMISS' | null>(null);
@@ -155,12 +155,12 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
       {/* Handle */}
       <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange}>
         <Animated.View style={styles.handleContainer}>
-          <View style={[styles.handle, { backgroundColor: theme.BORDER }]} />
+          <View style={[styles.handle, { backgroundColor: WW.border }]} />
         </Animated.View>
       </PanGestureHandler>
 
       {/* Content */}
-      <View style={[styles.content, { backgroundColor: theme.SURFACE }]}>
+      <View style={[styles.content, { backgroundColor: WW.bgSurface }]}>
         {/* Header */}
         <View style={styles.header}>
           <View style={[styles.typeIcon, { backgroundColor: `${config.color}20` }]}>
@@ -178,18 +178,18 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
                 </View>
               )}
             </View>
-            <Text style={[styles.title, { color: theme.TEXT }]} numberOfLines={2}>
+            <Text style={[styles.title, { color: WW.text }]} numberOfLines={2}>
               {contribution.title}
             </Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color={theme.TEXT_SECONDARY} />
+            <Ionicons name="close" size={24} color={WW.textSub} />
           </TouchableOpacity>
         </View>
 
         {/* Description */}
         {contribution.description && (
-          <Text style={[styles.description, { color: theme.TEXT_SECONDARY }]}>
+          <Text style={[styles.description, { color: WW.textSub }]}>
             {contribution.description}
           </Text>
         )}
@@ -206,23 +206,23 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
         {/* Meta Info */}
         <View style={styles.metaContainer}>
           <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={16} color={theme.TEXT_SECONDARY} />
-            <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]}>
+            <Ionicons name="time-outline" size={16} color={WW.textSub} />
+            <Text style={[styles.metaText, { color: WW.textSub }]}>
               {formatRelativeTime(contribution.created_at)}
             </Text>
           </View>
           {distance !== undefined && (
             <View style={styles.metaItem}>
-              <Ionicons name="location-outline" size={16} color={theme.TEXT_SECONDARY} />
-              <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]}>
+              <Ionicons name="location-outline" size={16} color={WW.textSub} />
+              <Text style={[styles.metaText, { color: WW.textSub }]}>
                 {distance < 1 ? `${Math.round(distance * 1000)}m` : `${distance.toFixed(1)}km`} away
               </Text>
             </View>
           )}
           {contribution.address && (
             <View style={styles.metaItem}>
-              <Ionicons name="navigate-outline" size={16} color={theme.TEXT_SECONDARY} />
-              <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]} numberOfLines={1}>
+              <Ionicons name="navigate-outline" size={16} color={WW.textSub} />
+              <Text style={[styles.metaText, { color: WW.textSub }]} numberOfLines={1}>
                 {contribution.address}
               </Text>
             </View>
@@ -230,23 +230,23 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
         </View>
 
         {/* Vote Stats */}
-        <View style={[styles.statsContainer, { backgroundColor: theme.CHIP_BACKGROUND }]}>
+        <View style={[styles.statsContainer, { backgroundColor: WW.orangeDim }]}>
           <View style={styles.statItem}>
             <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
-            <Text style={[styles.statNumber, { color: theme.TEXT }]}>
+            <Text style={[styles.statNumber, { color: WW.text }]}>
               {contribution.confirm_count || contribution.confirms || 0}
             </Text>
-            <Text style={[styles.statLabel, { color: theme.TEXT_SECONDARY }]}>
+            <Text style={[styles.statLabel, { color: WW.textSub }]}>
               Confirms
             </Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Ionicons name="close-circle" size={20} color="#F44336" />
-            <Text style={[styles.statNumber, { color: theme.TEXT }]}>
+            <Text style={[styles.statNumber, { color: WW.text }]}>
               {contribution.dismiss_count || contribution.dismisses || 0}
             </Text>
-            <Text style={[styles.statLabel, { color: theme.TEXT_SECONDARY }]}>
+            <Text style={[styles.statLabel, { color: WW.textSub }]}>
               Dismisses
             </Text>
           </View>
@@ -257,10 +257,10 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
               size={20} 
               color={trustLevel === 'high' ? '#FFD700' : trustLevel === 'medium' ? '#FFA500' : '#999'}
             />
-            <Text style={[styles.statNumber, { color: theme.TEXT }]}>
+            <Text style={[styles.statNumber, { color: WW.text }]}>
               {(contribution.reporter_trust_score || 1).toFixed(1)}
             </Text>
-            <Text style={[styles.statLabel, { color: theme.TEXT_SECONDARY }]}>
+            <Text style={[styles.statLabel, { color: WW.textSub }]}>
               Trust
             </Text>
           </View>
@@ -268,7 +268,7 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
 
         {/* Voting Buttons */}
         <View style={styles.votingContainer}>
-          <Text style={[styles.votingPrompt, { color: theme.TEXT }]}>
+          <Text style={[styles.votingPrompt, { color: WW.text }]}>
             Is this issue still there?
           </Text>
           <View style={styles.votingButtons}>
@@ -333,7 +333,7 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
             </TouchableOpacity>
           </View>
           {currentVote && (
-            <Text style={[styles.votedHint, { color: theme.TEXT_SECONDARY }]}>
+            <Text style={[styles.votedHint, { color: WW.textSub }]}>
               Tap again to remove your vote
             </Text>
           )}

@@ -30,7 +30,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   onLocationPress,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
-  const { theme } = useAppTheme();
+  const { WW } = useAppTheme();
 
   const handleFocus = () => {
     setIsFocused(true);
@@ -42,15 +42,15 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   };
 
   return (
-    <View style={[styles.container, isFocused && styles.containerFocused, { backgroundColor: theme.WHITE, borderColor: isFocused ? theme.PRIMARY : theme.BORDER }]}>
+    <View style={[styles.container, isFocused && styles.containerFocused, { backgroundColor: WW.bgSurface, borderColor: isFocused ? WW.orange : WW.border }]}>
       <View style={styles.searchIcon}>
         <Text style={styles.searchIconText}>🔍</Text>
       </View>
 
       <TextInput
-        style={[styles.input, { color: theme.TEXT }]}
+        style={[styles.input, { color: WW.text }]}
         placeholder={placeholder}
-        placeholderTextColor={theme.TEXT_SECONDARY}
+        placeholderTextColor={WW.textSub}
         value={value}
         onChangeText={onChangeText}
         onFocus={handleFocus}

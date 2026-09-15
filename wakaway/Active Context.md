@@ -1,7 +1,30 @@
 
 # Active Context
 
-Session memory for ongoing development. Read this first when resuming work — it's the fastest way back into where things stand. Updated 2026-07-02.
+Session memory for ongoing development. Read this first when resuming work — it's the fastest way back into where things stand. Updated 2026-09-03.
+
+## Latest session (2026-09-03) — auth was broken end to end; fixed
+
+Started as a plan to migrate off Supabase onto the Django backend. **That migration was scrapped** — investigation showed the case for it was weak (data is plain Postgres, auth was never Supabase Auth, free tier covers current usage) and the biggest phase would have meant re-implementing RLS by hand in view code. Decided to stay on Supabase for both this and soko, and fix what's actually broken instead.
+
+**The real bug:** the app authenticated with Firebase while every RLS policy expected Supabase Auth, so `auth.uid()` was NULL on every request and *every* protected write was being rejected — silently, since the data layer swallows errors into `console.warn`. Confirmed against the live database: every table empty, `auth.users` included. Nothing has ever successfully saved.
+
+Fixed by dropping Firebase for Supabase Auth — see [[0009-supabase-auth-over-firebase]]. Zero schema change needed, and it removes the `GoogleService-Info.plist` launch blocker.
+
+Also fixed a vote path that queried `contribution_votes`, **a table that doesn't exist in the live database** — see [[0010-route-votes-through-the-rpc]].
+
+Both Supabase projects had also been **paused** (free tier pauses after ~7 days idle) — restored.
+
+### Next, in order
+1. **Sign up on a real device.** The one thing not yet verified — confirm a `profiles` row is created and a favorite/route saves. Everything else typechecks but is unproven against a live signup.
+2. **Re-test what "works" now.** Features assumed broken for other reasons may just have been auth. Re-check before debugging anything else.
+3. Retire `useRealtimeContributions.ts` (the third vote path, still bypassing the RPC — [[0010-route-votes-through-the-rpc]]).
+4. Delete the stale `.sql` files — three drifted `contributions` definitions and two votes-table designs, none matching the live schema. The live DB is the source of truth now.
+5. Remaining credentials: `GOOGLE_MAPS_API_KEY`, `GEMINI_API_KEY`, `EXPO_PUBLIC_SENTRY_DSN`. (`GoogleService-Info.plist` no longer needed.)
+
+---
+
+## Previous session (2026-07-02)
 
 ## What we were working on
 

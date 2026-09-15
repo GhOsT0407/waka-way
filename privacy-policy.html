@@ -19,7 +19,7 @@
   h2 { font-size: 19px; margin-top: 36px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
   ul { padding-left: 22px; }
   li { margin-bottom: 6px; }
-  a { color: #1a7a3c; }
+  a { color: #E8541A; }
   table { width: 100%; border-collapse: collapse; margin: 16px 0; }
   th, td { text-align: left; padding: 8px 10px; border: 1px solid #e0e0e0; font-size: 14px; }
   th { background: #f7f7f7; }
@@ -29,7 +29,7 @@
 <body>
 
 <h1>WakaWay Privacy Policy</h1>
-<p class="updated">Last updated: jun 21 2026</p>
+<p class="updated">Last updated: 10 September 2026</p>
 
 <p>
   WakaWay ("we", "our", "the app") helps you find transit routes, fares, and
@@ -44,7 +44,7 @@
   <tr>
     <td>Email address &amp; account ID</td>
     <td>To create and sign you into your account, and let you save routes</td>
-    <td>Firebase Authentication (Google)</td>
+    <td>Supabase (our authentication and database provider)</td>
   </tr>
   <tr>
     <td>Device location (GPS)</td>
@@ -75,8 +75,7 @@
 <h2>3. Third-Party Services We Use</h2>
 <p>WakaWay relies on the following service providers to function. Each only receives the minimum data needed to do its job:</p>
 <ul>
-  <li><strong>Firebase Authentication</strong> (Google) — manages sign-in and account credentials.</li>
-  <li><strong>Supabase</strong> — stores community reports, saved routes, and account-linked data.</li>
+  <li><strong>Supabase</strong> — handles sign-in and account credentials, and stores community reports, saved routes, and account-linked data.</li>
   <li><strong>MapTiler</strong> — provides map tiles and place search/geocoding.</li>
   <li><strong>OpenRouteService</strong> — calculates walking/road-following directions.</li>
 </ul>
@@ -93,29 +92,57 @@
 <h2>5. Data Retention</h2>
 <ul>
   <li>Community reports automatically expire and are removed after a set time depending on report type (typically 1–6 hours), since road conditions change quickly.</li>
-  <li>Account data is kept until you delete your account or request removal (see Section 7).</li>
+  <li>Account data is kept until you delete your account, which you can do at any time from inside the app (see Section 7).</li>
   <li>Locally stored data (recent searches, preferences) stays on your device and is cleared if you uninstall the app.</li>
 </ul>
 
 <h2>6. Children's Privacy</h2>
 <p>WakaWay is not directed at children under 13, and we do not knowingly collect personal information from children.</p>
 
-<h2>7. Your Rights</h2>
-<p>You can:</p>
+<h2>7. Deleting Your Account</h2>
+<p>
+  You can delete your WakaWay account at any time, from inside the app:
+  <strong>You → Preferences → Account → Delete Account</strong>. The account is
+  removed immediately and cannot be recovered.
+</p>
+<p>
+  If you have uninstalled the app or cannot sign in, you can request deletion at
+  <a href="delete-account.html">our account deletion page</a> or by emailing us
+  from your registered address.
+</p>
+<p>Deleting your account permanently removes:</p>
+<ul>
+  <li>your account and sign-in credentials;</li>
+  <li>your profile (email address and display name);</li>
+  <li>your saved places, saved routes, and trip history.</li>
+</ul>
+<p>
+  Community reports and votes you submitted are <strong>unlinked from your account
+  but remain visible until they expire on their own</strong> (typically 1–6 hours).
+  We keep them because other travellers may be relying on a live hazard or security
+  alert at the moment you delete your account. Once unlinked, they no longer identify
+  you. If you want your past reports deleted too, tell us and we will remove them.
+</p>
+<p>
+  Full details are on our <a href="delete-account.html">account deletion page</a>.
+</p>
+
+<h2>8. Your Other Rights</h2>
+<p>You can also:</p>
 <ul>
   <li>Request a copy of the personal data we hold about you.</li>
-  <li>Request correction or deletion of your account and associated data.</li>
+  <li>Request correction of inaccurate personal data.</li>
   <li>Withdraw consent to location access at any time via your device settings — note that route search and nearby-stop features will not work without it.</li>
 </ul>
 <p>To exercise any of these rights, contact us using the details below.</p>
 
-<h2>8. Changes to This Policy</h2>
+<h2>9. Changes to This Policy</h2>
 <p>We may update this policy as the app evolves. Material changes will be reflected by updating the "Last updated" date above.</p>
 
-<h2>9. Contact Us</h2>
+<h2>10. Contact Us</h2>
 <div class="contact">
   <p>Questions about this policy or your data?</p>
-  <p>Email: <strong>davidokafor0407@gmail.com</strong></p>
+  <p>Email: <strong>wakawaytechnologies@gmail.com</strong></p>
 </div>
 
 </body>

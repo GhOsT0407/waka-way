@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,9 @@ import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../theme/colors';
-import { Typography } from '../theme/typography';
+import { WW_DARK, type WWColors } from '../theme/colors';
+import { Fonts, Typography, Tracking } from '../theme/typography';
+import { Space, Radius, HIT } from '../theme/spacing';
 import type { RouteOption, RouteLeg } from '../services/smartRoutingService';
 import { fetchAllLegGeometries, LatLng } from '../services/directionsService';
 import { GOOGLE_MAPS_DARK_STYLE } from '../utils/constants';
@@ -26,17 +27,30 @@ const NAV_PITCH  = 50;
 
 const SPRING = { tension: 100, friction: 20, useNativeDriver: true } as const;
 
-const LEG_COLORS: Record<string, string> = {
-  walk:  '#29B6F6',
-  keke:  '#FFA726',
-  okada: '#FF7043',
-  danfo: '#FFCA28',
-  brt:   '#26A69A',
-  ferry: '#1E88E5',
-  rail:  '#AB47BC',
-  uber:  '#1C1C1C',
-  bolt:  '#34C759',
-};
+// Polyline / badge colour per leg, from the mode tokens. Walk is drawn in the
+// light ink so it reads as "you, on foot" against the dark map.
+function legColor(WW: WWColors, mode: string): string {
+  switch (mode) {
+    case 'danfo': return WW.danfo;
+    case 'brt':   return WW.brt;
+    case 'keke':  return WW.keke;
+    case 'okada': return WW.okada;
+    case 'ferry': return WW.ferry;
+    case 'walk':  return WW.textSub;
+    default:      return WW.orange;
+  }
+}
+function legTextColor(WW: WWColors, mode: string): string {
+  switch (mode) {
+    case 'danfo': return WW.danfoText;
+    case 'brt':   return WW.brtText;
+    case 'keke':  return WW.kekeText;
+    case 'okada': return WW.okadaText;
+    case 'ferry': return WW.ferryText;
+    case 'walk':  return WW.bg;
+    default:      return WW.textOnOrange;
+  }
+}
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
@@ -95,6 +109,10 @@ function formatETA(remainingMins: number): string {
 type Coord = { latitude: number; longitude: number };
 
 export default function NavigationScreen({ route, navigation }: any) {
+  // Navigation is dark in both themes -- one loud colour, the route, on a dark
+  // canvas (see the redesign canvas). It reads the dark palette directly.
+  const WW = WW_DARK;
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const insets = useSafeAreaInsets();
   const { option, destinationName } = route.params as {
     option: RouteOption;
@@ -162,6 +180,10 @@ export default function NavigationScreen({ route, navigation }: any) {
   const remainingMins = legs
     .slice(currentLegIndex)
     .reduce((sum, l) => sum + l.durationMins, 0);
+  const remainingKm = legs
+    .slice(currentLegIndex)
+    .reduce((sum, l) => sum + (l.distanceKm ?? 0), 0);
+  const progressPct = legs.length ? Math.round((currentLegIndex / legs.length) * 100) : 0;
 
   useEffect(() => {
     const anim = Animated.loop(
@@ -256,17 +278,14 @@ export default function NavigationScreen({ route, navigation }: any) {
 
   const endJourney = () => {
     locationSubRef.current?.remove();
+    // Ending a journey returns to the tabs, not to the route-options sheet
+    // that was underneath -- after arriving there is nothing to pick from.
     if (navigation.canGoBack()) {
-      navigation.goBack();
+      navigation.popToTop();
     } else {
-      navigation.navigate('Home' as never);
+      navigation.navigate('Main' as never);
     }
   };
-
-  const legColor = (i: number) =>
-    i < currentLegIndex
-      ? '#bbb'
-      : `${LEG_COLORS[legs[i].mode] ?? Colors.blue}${i === currentLegIndex ? '' : '88'}`;
 
   return (
     <View style={styles.container}>
@@ -291,7 +310,7 @@ export default function NavigationScreen({ route, navigation }: any) {
           if (!coords || coords.length < 2) return null;
           const isCurrent = i === currentLegIndex;
           const isPast    = i < currentLegIndex;
-          const color     = isPast ? '#555555' : (LEG_COLORS[leg.mode] ?? Colors.blue);
+          const color     = isPast ? '#555555' : (legColor(WW, leg.mode));
 
           return (
             <React.Fragment key={`route-${i}`}>
@@ -357,19 +376,28 @@ export default function NavigationScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* Top: back button + instruction card */}
-      <View style={[styles.topArea, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={endJourney}>
-          <Ionicons name="arrow-back" size={20} color="#fff" />
+      {/* Top: back · maneuver banner · next-step strip */}
+      <View style={[styles.topArea, { paddingTop: insets.top + Space.xs }]}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={endJourney}
+          accessibilityRole="button"
+          accessibilityLabel="End navigation"
+        >
+          <Ionicons name="arrow-back" size={20} color={WW.text} />
         </TouchableOpacity>
 
         {!arrived && currentLeg && (
-          <View style={styles.instructionCard}>
-            <View style={styles.instructionTop}>
-              <View style={[styles.turnArrow, { backgroundColor: LEG_COLORS[currentLeg.mode] ?? Colors.blue }]}>
-                <Ionicons name={turnIcon(currentLeg.instruction).name as any} size={26} color="#fff" />
+          <View style={styles.bannerWrap}>
+            <View style={styles.banner}>
+              <View style={[styles.turnArrow, { backgroundColor: legColor(WW, currentLeg.mode) }]}>
+                <Ionicons
+                  name={turnIcon(currentLeg.instruction).name as any}
+                  size={26}
+                  color={legTextColor(WW, currentLeg.mode)}
+                />
               </View>
-              <View style={styles.distBlock}>
+              <View style={{ flex: 1, minWidth: 0 }}>
                 {distanceToNext != null && (
                   <Text style={styles.distText}>{formatDist(distanceToNext)}</Text>
                 )}
@@ -380,14 +408,10 @@ export default function NavigationScreen({ route, navigation }: any) {
             </View>
 
             {nextLeg && (
-              <View style={styles.nextRow}>
-                <Ionicons name={turnIcon(nextLeg.instruction).name as any} size={13} color="rgba(255,255,255,0.6)" />
-                <Text style={styles.nextText} numberOfLines={1}>
-                  Then: {nextLeg.instruction}
-                </Text>
-                <Text style={styles.nextStep}>
-                  Step {currentLegIndex + 2}/{legs.length}
-                </Text>
+              <View style={styles.nextStrip}>
+                <Text style={styles.nextEyebrow}>Then</Text>
+                <Text style={styles.nextText} numberOfLines={1}>{nextLeg.instruction}</Text>
+                <Text style={styles.nextStep}>{currentLegIndex + 2}/{legs.length}</Text>
               </View>
             )}
           </View>
@@ -398,7 +422,7 @@ export default function NavigationScreen({ route, navigation }: any) {
       {arrived && (
         <View style={styles.arrivedOverlay}>
           <View style={styles.arrivedCard}>
-            <Ionicons name="checkmark-circle" size={64} color={Colors.blue} />
+            <Ionicons name="checkmark-circle" size={64} color={WW.orange} />
             <Text style={styles.arrivedTitle}>You've arrived!</Text>
             <Text style={styles.arrivedSub}>{destinationName}</Text>
             <TouchableOpacity style={styles.doneBtn} onPress={endJourney}>
@@ -425,30 +449,39 @@ export default function NavigationScreen({ route, navigation }: any) {
           </View>
 
           <View style={styles.bottomContent}>
-            <View style={styles.speedPill}>
-              <Text style={styles.speedNum}>{speedKmh}</Text>
-              <Text style={styles.speedUnit}>km/h</Text>
-            </View>
+            <View style={styles.tripRow}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.etaText}>{formatETA(remainingMins)}</Text>
+                <Text style={styles.tripSub} numberOfLines={1}>
+                  {remainingMins} min · {remainingKm.toFixed(1)} km left{speedKmh > 0 ? ` · ${speedKmh} km/h` : ''}
+                </Text>
+              </View>
 
-            <View style={styles.bottomLeft}>
-              <Text style={styles.bottomDest} numberOfLines={1}>{destinationName}</Text>
-              <Text style={styles.bottomTime}>
-                {remainingMins} min · ETA {formatETA(remainingMins)}
-              </Text>
-            </View>
-
-            <View style={styles.bottomActions}>
-              {(!isTracking || navMode === 'overview') && (
+              <View style={styles.bottomActions}>
                 <TouchableOpacity
-                  style={styles.recenterBtn}
+                  style={[styles.recenterBtn, isTracking && navMode === 'tracking' && styles.recenterIdle]}
                   onPress={() => { setIsTracking(true); setNavMode('tracking'); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Recenter on my location"
                 >
-                  <Ionicons name="navigate" size={18} color="#fff" />
+                  <Ionicons name="navigate" size={20} color={WW.text} />
                 </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.endBtn} onPress={endJourney}>
-                <Text style={styles.endBtnText}>End</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.endBtn}
+                  onPress={endJourney}
+                  accessibilityRole="button"
+                  accessibilityLabel="End journey"
+                >
+                  <Text style={styles.endBtnText}>End</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.progressTrack}>
+              <View style={[
+                styles.progressFill,
+                { width: `${Math.max(progressPct, 3)}%`, backgroundColor: legColor(WW, currentLeg?.mode ?? 'walk') },
+              ]} />
             </View>
           </View>
         </Animated.View>
@@ -457,8 +490,9 @@ export default function NavigationScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.mapBackground },
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: WW.bg },
   topArea: {
     position: 'absolute',
     top: 0, left: 0, right: 0,
@@ -466,41 +500,49 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center', alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderWidth: 1, borderColor: Colors.border,
+    width: HIT, height: HIT, borderRadius: Radius.pill,
+    backgroundColor: WW.frosted,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: WW.borderStrong,
+    alignItems: 'center', justifyContent: 'center',
   },
-  instructionCard: {
-    borderRadius: 20,
-    backgroundColor: 'rgba(15,17,23,0.96)',
-    padding: 16,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.45, shadowRadius: 14 },
-      android: { elevation: 12 },
-    }),
+  bannerWrap: { marginTop: Space.sm },
+  banner: {
+    borderRadius: Radius.xl,
+    backgroundColor: WW.frosted,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: WW.borderStrong,
+    padding: Space.lg,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 40, shadowOffset: { width: 0, height: 16 },
+    elevation: 10,
   },
-  instructionTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  instructionTop: { display: 'none' },
   turnArrow: {
-    width: 56, height: 56, borderRadius: 16,
-    justifyContent: 'center', alignItems: 'center',
-    flexShrink: 0,
+    width: HIT, height: HIT, borderRadius: Radius.md,
+    alignItems: 'center', justifyContent: 'center',
   },
-  distBlock: { flex: 1, gap: 2 },
-  distText: { color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  instructionText: { color: 'rgba(255,255,255,0.85)', fontSize: Typography.md, fontWeight: '500', flex: 1 },
-  nextRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+  distBlock: { flex: 1 },
+  distText: {
+    fontFamily: Fonts.extrabold, fontSize: Typography.hero, lineHeight: Typography.hero,
+    color: WW.text, letterSpacing: Tracking.tight,
   },
-  nextText: { color: 'rgba(255,255,255,0.55)', fontSize: Typography.sm, flex: 1 },
-  nextStep: { color: 'rgba(255,255,255,0.3)', fontSize: 11 },
+  instructionText: {
+    fontFamily: Fonts.regular, fontSize: Typography.lg, lineHeight: Typography.lg * 1.3,
+    color: WW.textSub, marginTop: 4,
+  },
+  nextStrip: {
+    marginHorizontal: Space.md,
+    borderBottomLeftRadius: Radius.lg, borderBottomRightRadius: Radius.lg,
+    // A step down from the banner's material -- dark-only screen, so a literal is fine.
+    backgroundColor: 'rgba(20,22,26,0.62)',
+    paddingHorizontal: Space.lg, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  nextEyebrow: {
+    fontFamily: Fonts.bold, fontSize: Typography.xs, letterSpacing: Tracking.eyebrow,
+    textTransform: 'uppercase', color: WW.textMuted,
+  },
+  nextText: { flex: 1, fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textSub },
+  nextStep: { fontFamily: Fonts.medium, fontSize: Typography.sm, color: WW.textMuted },
 
   waypointDot: {
     width: 12, height: 12, borderRadius: 6,
@@ -512,77 +554,77 @@ const styles = StyleSheet.create({
   userOuter: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
   userPulseStatic: {
     position: 'absolute', width: 28, height: 28, borderRadius: 14,
-    backgroundColor: Colors.blueLight, opacity: 0.45,
+    backgroundColor: WW.orangeDim, opacity: 0.45,
   },
   userDot: {
     width: 14, height: 14, borderRadius: 7,
-    backgroundColor: Colors.blue, borderWidth: 3, borderColor: '#fff',
+    backgroundColor: WW.orange, borderWidth: 3, borderColor: '#fff',
   },
 
   bottomBar: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: Colors.sheetBg,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    borderTopWidth: 1, borderColor: Colors.border,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.3, shadowRadius: 12 },
-      android: { elevation: 14 },
-    }),
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
+    backgroundColor: WW.frosted,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: WW.borderStrong,
   },
   dragHandleArea: {
     width: '100%', paddingVertical: 10,
     alignItems: 'center', justifyContent: 'center',
   },
-  dragPill: { width: 36, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.15)' },
-  bottomContent: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 4, gap: 12,
+  dragPill: { width: 36, height: 5, borderRadius: Radius.pill, backgroundColor: WW.borderStrong },
+  bottomContent: { paddingHorizontal: Space.lg, paddingTop: Space.xs, paddingBottom: Space.sm },
+  tripRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: Space.md },
+  etaText: {
+    fontFamily: Fonts.extrabold, fontSize: Typography.hero, lineHeight: Typography.hero,
+    color: WW.greenGlow, letterSpacing: Tracking.tight,
   },
-  speedPill: {
-    width: 60, height: 60, borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center', alignItems: 'center',
-    flexShrink: 0,
+  tripSub: { fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textSub, marginTop: 6 },
+  progressTrack: {
+    marginTop: 14, height: 6, borderRadius: Radius.pill, overflow: 'hidden',
+    backgroundColor: 'rgba(242,241,237,0.14)',
   },
+  progressFill: { height: 6, borderRadius: Radius.pill },
+  speedPill: { display: 'none' },
   speedNum: { color: '#fff', fontSize: 20, fontWeight: '800', lineHeight: 22 },
   speedUnit: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '600' },
   bottomLeft: { flex: 1 },
-  bottomDest: { fontSize: Typography.lg, fontWeight: Typography.bold, color: Colors.textPrimary },
-  bottomTime: { fontSize: Typography.sm, marginTop: 2, color: Colors.textSecondary },
-  bottomActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bottomDest: { fontSize: Typography.lg, fontWeight: Typography.bold, color: WW.text },
+  bottomTime: { fontSize: Typography.sm, marginTop: 2, color: WW.textSub },
+  bottomActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   recenterBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Colors.blue,
-    justifyContent: 'center', alignItems: 'center',
+    width: 52, height: 52, borderRadius: Radius.lg,
+    backgroundColor: 'rgba(242,241,237,0.10)',
+    alignItems: 'center', justifyContent: 'center',
   },
+  recenterIdle: { opacity: 0.45 },
   endBtn: {
-    borderWidth: 1.5, borderRadius: 10, borderColor: '#EF4444',
-    paddingHorizontal: 14, paddingVertical: 8,
+    height: 52, paddingHorizontal: 22, borderRadius: Radius.lg,
+    backgroundColor: WW.text,
+    alignItems: 'center', justifyContent: 'center',
   },
-  endBtnText: { fontWeight: Typography.bold, fontSize: Typography.md, color: '#EF4444' },
+  endBtnText: { fontFamily: Fonts.bold, fontSize: Typography.lg, color: WW.bg },
 
   arrivedOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.scrim,
+    backgroundColor: WW.scrim,
     justifyContent: 'center', alignItems: 'center',
     padding: 24,
   },
   arrivedCard: {
     width: '100%', borderRadius: 20,
-    backgroundColor: Colors.sheetBg,
-    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: WW.bgSurface,
+    borderWidth: 1, borderColor: WW.border,
     padding: 32, alignItems: 'center', gap: 16,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 20 },
       android: { elevation: 12 },
     }),
   },
-  arrivedTitle: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: Colors.textPrimary },
-  arrivedSub: { fontSize: Typography.lg, textAlign: 'center', color: Colors.textSecondary },
+  arrivedTitle: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: WW.text },
+  arrivedSub: { fontSize: Typography.lg, textAlign: 'center', color: WW.textSub },
   doneBtn: {
     paddingHorizontal: 40, paddingVertical: 14,
-    borderRadius: 30, marginTop: 8, backgroundColor: Colors.blue,
+    borderRadius: 30, marginTop: 8, backgroundColor: WW.orange,
   },
   doneBtnText: { color: '#fff', fontWeight: Typography.bold, fontSize: Typography.lg },
 
@@ -596,3 +638,4 @@ const styles = StyleSheet.create({
   },
   routeLoadingText: { color: '#fff', fontSize: 13, fontWeight: '500' },
 });
+}

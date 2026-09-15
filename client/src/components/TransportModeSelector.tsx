@@ -47,7 +47,7 @@ export default function TransportModeSelector({
   onSelect,
   onDismiss,
 }: TransportModeSelectorProps) {
-  const { theme } = useAppTheme();
+  const { WW } = useAppTheme();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   useEffect(() => {
@@ -88,15 +88,15 @@ export default function TransportModeSelector({
       <Animated.View
         style={[
           styles.sheet,
-          { backgroundColor: theme.CARD_BACKGROUND, transform: [{ translateY: slideAnim }] },
+          { backgroundColor: WW.bgSurface, transform: [{ translateY: slideAnim }] },
         ]}
       >
-        <View style={[styles.handle, { backgroundColor: theme.BORDER }]} />
+        <View style={[styles.handle, { backgroundColor: WW.border }]} />
 
-        <Text style={[styles.title, { color: theme.TEXT }]}>
+        <Text style={[styles.title, { color: WW.text }]}>
           What transport dey near you?
         </Text>
-        <Text style={[styles.subtitle, { color: theme.TEXT_SECONDARY }]}>
+        <Text style={[styles.subtitle, { color: WW.textSub }]}>
           Select what's available at your starting point
         </Text>
 
@@ -108,7 +108,7 @@ export default function TransportModeSelector({
                 key={opt.mode}
                 style={[
                   styles.option,
-                  { backgroundColor: theme.SURFACE, borderColor: isSaved ? opt.color : theme.BORDER },
+                  { backgroundColor: WW.bgSurface, borderColor: isSaved ? opt.color : WW.border },
                   isSaved && styles.optionSaved,
                 ]}
                 onPress={() => handleSelect(opt.mode)}
@@ -117,8 +117,8 @@ export default function TransportModeSelector({
                 <View style={[styles.iconCircle, { backgroundColor: opt.color + '22' }]}>
                   <Ionicons name={opt.icon as any} size={28} color={opt.color} />
                 </View>
-                <Text style={[styles.optionLabel, { color: theme.TEXT }]}>{opt.label}</Text>
-                <Text style={[styles.optionPidgin, { color: theme.TEXT_SECONDARY }]}>{opt.pidgin}</Text>
+                <Text style={[styles.optionLabel, { color: WW.text }]}>{opt.label}</Text>
+                <Text style={[styles.optionPidgin, { color: WW.textSub }]}>{opt.pidgin}</Text>
                 {isSaved && (
                   <View style={[styles.savedBadge, { backgroundColor: opt.color }]}>
                     <Text style={styles.savedBadgeText}>Last used</Text>
@@ -130,7 +130,7 @@ export default function TransportModeSelector({
         </View>
 
         <TouchableOpacity style={styles.cancelBtn} onPress={onDismiss}>
-          <Text style={[styles.cancelText, { color: theme.TEXT_SECONDARY }]}>Cancel</Text>
+          <Text style={[styles.cancelText, { color: WW.textSub }]}>Cancel</Text>
         </TouchableOpacity>
       </Animated.View>
     </Modal>

@@ -46,7 +46,7 @@ function timeAgo(iso: string): string {
 }
 
 export default function NotificationsScreen({ navigation }: any) {
-  const { theme, isDark } = useAppTheme();
+  const { WW, isDark } = useAppTheme();
   const { user } = useAuth();
 
   const [items, setItems]           = useState<any[]>([]);
@@ -96,7 +96,7 @@ export default function NotificationsScreen({ navigation }: any) {
   const handleVote = async (id: string, vote: 'confirm' | 'dismiss') => {
     if (!user || votedIds.has(id)) return;
     setVotedIds((p) => new Set([...p, id]));
-    await voteOnContribution(id, user.id, vote);
+    await voteOnContribution(id, vote);
     setItems((p) =>
       p.map((i) =>
         i.id === id
@@ -118,7 +118,7 @@ export default function NotificationsScreen({ navigation }: any) {
     const isHigh = item.status === 'high-priority' || (item.confirms ?? 0) >= 5;
 
     return (
-      <View style={[styles.card, { backgroundColor: theme.CARD_BACKGROUND, borderColor: theme.BORDER }]}>
+      <View style={[styles.card, { backgroundColor: WW.bgSurface, borderColor: WW.border }]}>
         {isHigh && (
           <View style={styles.priorityBanner}>
             <Text style={styles.priorityText}>🔥 High Priority</Text>
@@ -130,29 +130,29 @@ export default function NotificationsScreen({ navigation }: any) {
           </View>
           <View style={{ flex: 1 }}>
             <View style={styles.titleRow}>
-              <Text style={[styles.title, { color: theme.TEXT }]} numberOfLines={2}>{item.title}</Text>
+              <Text style={[styles.title, { color: WW.text }]} numberOfLines={2}>{item.title}</Text>
               <View style={[styles.typeBadge, { backgroundColor: cfg.bg }]}>
                 <Text style={[styles.typeBadgeText, { color: cfg.color }]}>{cfg.label}</Text>
               </View>
             </View>
             {!!item.description && (
-              <Text style={[styles.description, { color: theme.TEXT_SECONDARY }]} numberOfLines={3}>
+              <Text style={[styles.description, { color: WW.textSub }]} numberOfLines={3}>
                 {item.description}
               </Text>
             )}
             <View style={styles.meta}>
               {!!item.address && (
                 <View style={styles.metaRow}>
-                  <Ionicons name="location-outline" size={12} color={theme.TEXT_SECONDARY} />
-                  <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]} numberOfLines={1}>{item.address}</Text>
+                  <Ionicons name="location-outline" size={12} color={WW.textSub} />
+                  <Text style={[styles.metaText, { color: WW.textSub }]} numberOfLines={1}>{item.address}</Text>
                 </View>
               )}
-              <Text style={[styles.time, { color: theme.TEXT_SECONDARY }]}>{timeAgo(item.created_at)}</Text>
+              <Text style={[styles.time, { color: WW.textSub }]}>{timeAgo(item.created_at)}</Text>
             </View>
           </View>
         </View>
 
-        <View style={[styles.voteRow, { borderTopColor: theme.BORDER }]}>
+        <View style={[styles.voteRow, { borderTopColor: WW.border }]}>
           <TouchableOpacity
             style={[styles.voteBtn, voted && { opacity: 0.45 }]}
             onPress={() => handleVote(item.id, 'confirm')}
@@ -163,14 +163,14 @@ export default function NotificationsScreen({ navigation }: any) {
               Still there {(item.confirms ?? 0) > 0 ? `(${item.confirms})` : ''}
             </Text>
           </TouchableOpacity>
-          <View style={[styles.voteDivider, { backgroundColor: theme.BORDER }]} />
+          <View style={[styles.voteDivider, { backgroundColor: WW.border }]} />
           <TouchableOpacity
             style={[styles.voteBtn, voted && { opacity: 0.45 }]}
             onPress={() => handleVote(item.id, 'dismiss')}
             disabled={voted || !user}
           >
-            <Ionicons name="close-circle-outline" size={16} color={theme.TEXT_SECONDARY} />
-            <Text style={[styles.voteBtnText, { color: theme.TEXT_SECONDARY }]}>
+            <Ionicons name="close-circle-outline" size={16} color={WW.textSub} />
+            <Text style={[styles.voteBtnText, { color: WW.textSub }]}>
               Not there {(item.dismisses ?? 0) > 0 ? `(${item.dismisses})` : ''}
             </Text>
           </TouchableOpacity>
@@ -180,20 +180,20 @@ export default function NotificationsScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.BACKGROUND }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: WW.bg }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      <View style={[styles.header, { borderBottomColor: theme.BORDER }]}>
+      <View style={[styles.header, { borderBottomColor: WW.border }]}>
         <TouchableOpacity onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="arrow-back" size={24} color={theme.TEXT} />
+          <Ionicons name="arrow-back" size={24} color={WW.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.TEXT }]}>Community Alerts</Text>
+        <Text style={[styles.headerTitle, { color: WW.text }]}>Community Alerts</Text>
         <TouchableOpacity onPress={onRefresh}>
-          <Ionicons name="refresh-outline" size={22} color={theme.PRIMARY} />
+          <Ionicons name="refresh-outline" size={22} color={WW.orange} />
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.filterWrap, { borderBottomColor: theme.BORDER }]}>
+      <View style={[styles.filterWrap, { borderBottomColor: WW.border }]}>
         <FlatList
           data={filters}
           horizontal
@@ -204,12 +204,12 @@ export default function NotificationsScreen({ navigation }: any) {
             <TouchableOpacity
               style={[
                 styles.filterChip,
-                { backgroundColor: filter === f ? theme.PRIMARY : theme.SURFACE, borderColor: filter === f ? theme.PRIMARY : theme.BORDER },
+                { backgroundColor: filter === f ? WW.orange : WW.bgSurface, borderColor: filter === f ? WW.orange : WW.border },
               ]}
               onPress={() => setFilter(f)}
             >
               {f !== 'all' && <Text style={{ fontSize: 12, marginRight: 4 }}>{getTypeConfig(f).icon}</Text>}
-              <Text style={[styles.filterText, { color: filter === f ? '#fff' : theme.TEXT }]}>
+              <Text style={[styles.filterText, { color: filter === f ? '#fff' : WW.text }]}>
                 {f === 'all' ? 'All' : getTypeConfig(f).label}
               </Text>
             </TouchableOpacity>
@@ -219,7 +219,7 @@ export default function NotificationsScreen({ navigation }: any) {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={theme.PRIMARY} />
+          <ActivityIndicator size="large" color={WW.orange} />
         </View>
       ) : (
         <FlatList
@@ -227,12 +227,12 @@ export default function NotificationsScreen({ navigation }: any) {
           keyExtractor={(i) => i.id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.PRIMARY} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={WW.orange} />}
           ListEmptyComponent={
             <View style={styles.center}>
-              <Ionicons name="notifications-off-outline" size={48} color={theme.TEXT_SECONDARY} />
-              <Text style={[styles.emptyTitle, { color: theme.TEXT }]}>No alerts</Text>
-              <Text style={[styles.emptySub, { color: theme.TEXT_SECONDARY }]}>
+              <Ionicons name="notifications-off-outline" size={48} color={WW.textSub} />
+              <Text style={[styles.emptyTitle, { color: WW.text }]}>No alerts</Text>
+              <Text style={[styles.emptySub, { color: WW.textSub }]}>
                 {filter === 'all' ? 'No community reports yet. Be the first to report!' : `No ${getTypeConfig(filter).label} reports`}
               </Text>
             </View>
