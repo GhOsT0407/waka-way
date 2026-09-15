@@ -9,6 +9,7 @@ import { RouteStep } from '../../types/route.types';
 import { formatTime, formatDistance, formatFare, formatInstruction, getTransportEmoji } from '../../utils/formatters';
 
 import { useAppTheme } from '../../context/ThemeContext';
+import type { WWColors } from '../../theme/colors';
 import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../../utils/constants';
 
 interface RouteStepCardProps {
@@ -20,7 +21,7 @@ export const RouteStepCard: React.FC<RouteStepCardProps> = ({
   step,
   onShowOnMap,
 }) => {
-  const { theme } = useAppTheme();
+  const { WW } = useAppTheme();
   const {
     sequence,
     transport_mode,
@@ -39,7 +40,7 @@ export const RouteStepCard: React.FC<RouteStepCardProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.stepHeader}>
-        <View style={[styles.stepNumber, { backgroundColor: getStepColor(transport_mode, theme) }]}>
+        <View style={[styles.stepNumber, { backgroundColor: getStepColor(transport_mode, WW) }]}>
           <Text style={styles.stepNumberText}>{sequence}</Text>
         </View>
         <View style={styles.stepContent}>
@@ -79,16 +80,16 @@ export const RouteStepCard: React.FC<RouteStepCardProps> = ({
   );
 };
 
-const getStepColor = (transportMode: string, theme: any): string => {
+const getStepColor = (transportMode: string, WW: WWColors): string => {
   const colorMap: Record<string, string> = {
-    bus: '#3498DB',
-    keke: '#FFA726',
-    okada: '#E67E22',
-    walk: '#95A5A6',
-    // fallback using theme if needed, or just let call site handle it.
-    // However, the original code used theme.PRIMARY as default.
+    bus:   WW.brt,
+    brt:   WW.brt,
+    danfo: WW.danfo,
+    keke:  WW.keke,
+    okada: WW.okada,
+    walk:  WW.walk,
   };
-  return colorMap[transportMode] || theme.PRIMARY;
+  return colorMap[transportMode] || WW.orange;
 };
 
 const styles = StyleSheet.create({

@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAppTheme } from '../../context/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../../utils/constants';
 
 const { width } = Dimensions.get('window');
@@ -49,7 +48,6 @@ const TOAST_CONFIG: Record<ToastType, { icon: keyof typeof Ionicons.glyphMap; co
 };
 
 export const Toast: React.FC<ToastProps> = ({ toast, onDismiss }) => {
-  const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;

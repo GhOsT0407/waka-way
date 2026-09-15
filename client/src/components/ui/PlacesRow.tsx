@@ -1,7 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { Animated, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../theme/colors';
+import { useAppTheme } from '../../context/ThemeContext';
+import type { WWColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
 
 interface PlaceItem {
@@ -12,14 +13,16 @@ interface PlaceItem {
   bgColor: string;
 }
 
-const PLACES: PlaceItem[] = [
-  { id: 'home',  label: 'Home',   icon: 'home',      iconColor: '#fff', bgColor: Colors.homeGreen },
-  { id: 'work',  label: 'Work',   icon: 'briefcase', iconColor: '#fff', bgColor: Colors.workBlue  },
-  { id: 'saved', label: 'Nearby', icon: 'bus',        iconColor: '#fff', bgColor: Colors.savedGray },
-  { id: 'add',   label: 'Add',    icon: 'add',        iconColor: Colors.blue, bgColor: Colors.addDark },
+const makePlaces = (WW: WWColors): PlaceItem[] => [
+  { id: 'home',  label: 'Home',   icon: 'home',      iconColor: '#fff', bgColor: WW.keke },
+  { id: 'work',  label: 'Work',   icon: 'briefcase', iconColor: '#fff', bgColor: WW.brt  },
+  { id: 'saved', label: 'Nearby', icon: 'bus',        iconColor: '#fff', bgColor: WW.textSub },
+  { id: 'add',   label: 'Add',    icon: 'add',        iconColor: WW.orange, bgColor: WW.bgElevated },
 ];
 
 function PlaceButton({ item, onPress }: { item: PlaceItem; onPress?: () => void }) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const scale = useRef(new Animated.Value(1)).current;
   const cfg   = { damping: 22, stiffness: 420, useNativeDriver: true };
 
@@ -48,6 +51,9 @@ interface Props {
 }
 
 export default function PlacesRow({ onItemPress }: Props) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
+  const PLACES = useMemo(() => makePlaces(WW), [WW]);
   return (
     <View style={styles.section}>
       <ScrollView
@@ -63,7 +69,8 @@ export default function PlacesRow({ onItemPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
   section: { marginBottom: 12 },
   row:     { gap: 10, paddingHorizontal: 16, paddingRight: 16 },
   itemWrapper: { alignItems: 'center', width: 64 },
@@ -81,10 +88,11 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   label: {
-    color: Colors.textPrimary,
+    color: WW.text,
     fontSize: Typography.sm,
     fontWeight: Typography.medium,
     textAlign: 'center',
     letterSpacing: -0.1,
   },
 });
+}

@@ -1,7 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../theme/colors';
+import { useAppTheme } from '../../context/ThemeContext';
+import type { WWColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
 }
 
 export default function ShareLocationButton({ onPress }: Props) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const scale = useRef(new Animated.Value(1)).current;
   const cfg   = { damping: 20, stiffness: 400, useNativeDriver: true };
 
@@ -23,25 +26,27 @@ export default function ShareLocationButton({ onPress }: Props) {
         accessibilityLabel="Share My Location"
         accessibilityRole="button"
       >
-        <Ionicons name="share-outline" size={20} color={Colors.blue} />
+        <Ionicons name="share-outline" size={20} color={WW.orange} />
         <Text style={styles.label}>Share My Location</Text>
       </TouchableOpacity>
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
   wrapper: { marginHorizontal: 16, marginBottom: 8 },
   button: {
     height: 52,
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: WW.bgElevated,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  label: { color: Colors.blue, fontSize: Typography.lg, fontWeight: Typography.semibold },
+  label: { color: WW.orange, fontSize: Typography.lg, fontWeight: Typography.semibold },
 });
+}

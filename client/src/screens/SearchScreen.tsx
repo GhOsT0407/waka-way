@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,8 @@ import { searchPlaces, getPlaceDetails, isWithinLagos } from '../services/places
 import { getFavoritePlaces, FavoritePlace } from '../services/supabaseDataService';
 import type { TransportMode } from '../services/smartRoutingService';
 import TransportModeSelector from '../components/TransportModeSelector';
-import { Colors } from '../theme/colors';
+import { useAppTheme } from '../context/ThemeContext';
+import type { WWColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 
 const TRANSPORT_PREF_KEY  = 'preferredFirstLegTransportMode';
@@ -53,6 +54,8 @@ interface SearchItem {
 }
 
 export default function SearchScreen({ navigation }: any) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const { user } = useAuth();
   const [query, setQuery]                 = useState('');
   const [loading, setLoading]             = useState(false);
@@ -243,7 +246,7 @@ export default function SearchScreen({ navigation }: any) {
         <Ionicons
           name={item.isRecent ? 'time-outline' : 'business-outline'}
           size={17}
-          color={Colors.textSecondary}
+          color={WW.textSub}
         />
       </View>
       <View style={styles.itemText}>
@@ -254,7 +257,7 @@ export default function SearchScreen({ navigation }: any) {
       </View>
       {item.isRecent && (
         <TouchableOpacity onPress={() => removeRecentSearch(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
+          <Ionicons name="close-circle" size={18} color={WW.textSub} />
         </TouchableOpacity>
       )}
     </TouchableOpacity>
@@ -280,16 +283,16 @@ export default function SearchScreen({ navigation }: any) {
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityLabel="Back"
           >
-            <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+            <Ionicons name="chevron-back" size={22} color={WW.text} />
           </TouchableOpacity>
 
           <View style={styles.inputWrap}>
-            <Ionicons name="search" size={15} color={Colors.textSecondary} />
+            <Ionicons name="search" size={15} color={WW.textSub} />
             <TextInput
               ref={inputRef}
               style={styles.input}
               placeholder="Search places in Lagos…"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={WW.textSub}
               value={query}
               onChangeText={setQuery}
               autoFocus
@@ -300,7 +303,7 @@ export default function SearchScreen({ navigation }: any) {
             />
             {query.length > 0 && (
               <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close-circle" size={16} color={Colors.textSecondary} />
+                <Ionicons name="close-circle" size={16} color={WW.textSub} />
               </TouchableOpacity>
             )}
           </View>
@@ -322,7 +325,7 @@ export default function SearchScreen({ navigation }: any) {
               }
             }}
           >
-            <View style={[styles.chipIcon, { backgroundColor: Colors.homeGreen }]}>
+            <View style={[styles.chipIcon, { backgroundColor: WW.keke }]}>
               <Ionicons name="home" size={12} color="#fff" />
             </View>
             <Text style={styles.chipText}>Home</Text>
@@ -341,7 +344,7 @@ export default function SearchScreen({ navigation }: any) {
               }
             }}
           >
-            <View style={[styles.chipIcon, { backgroundColor: Colors.workBlue }]}>
+            <View style={[styles.chipIcon, { backgroundColor: WW.brt }]}>
               <Ionicons name="briefcase" size={12} color="#fff" />
             </View>
             <Text style={styles.chipText}>Work</Text>
@@ -352,7 +355,7 @@ export default function SearchScreen({ navigation }: any) {
       {/* Content */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={Colors.blue} />
+          <ActivityIndicator size="large" color={WW.orange} />
           <Text style={styles.loadingText}>
             Finding public transport routes...
           </Text>
@@ -361,12 +364,12 @@ export default function SearchScreen({ navigation }: any) {
         <View style={{ flex: 1 }}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{sectionTitle}</Text>
-            {searching && <ActivityIndicator size="small" color={Colors.blue} />}
+            {searching && <ActivityIndicator size="small" color={WW.orange} />}
           </View>
 
           {listData.length === 0 && query.trim() && !searching ? (
             <View style={styles.center}>
-              <Ionicons name="search-outline" size={40} color={Colors.textSecondary} />
+              <Ionicons name="search-outline" size={40} color={WW.textSub} />
               <Text style={styles.emptyText}>No places found</Text>
               <Text style={styles.emptyHint}>Try a different search term</Text>
             </View>
@@ -397,15 +400,16 @@ export default function SearchScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.mapBackground },
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: WW.bg },
 
   header: {
     paddingHorizontal: 16,
     paddingBottom: 14,
-    backgroundColor: Colors.sheetBg,
+    backgroundColor: WW.bgSurface,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
+    borderBottomColor: WW.border,
     zIndex: 1,
     ...Platform.select({
       ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 12 },
@@ -424,9 +428,9 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: WW.bgElevated,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     flexShrink: 0,
   },
   inputWrap: {
@@ -437,15 +441,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: Platform.OS === 'ios' ? 12 : 10,
     borderRadius: 14,
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: WW.bgElevated,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
   },
   input: {
     flex: 1,
     fontSize: Typography.lg,
     letterSpacing: -0.2,
-    color: Colors.textPrimary,
+    color: WW.text,
   },
 
   chips: {
@@ -460,9 +464,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 22,
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: WW.bgElevated,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
   },
   chipIcon: {
     width: 22,
@@ -475,7 +479,7 @@ const styles = StyleSheet.create({
     fontSize: Typography.md,
     fontWeight: Typography.medium,
     letterSpacing: -0.1,
-    color: Colors.textPrimary,
+    color: WW.text,
   },
 
   sectionHeader: {
@@ -491,7 +495,7 @@ const styles = StyleSheet.create({
     fontWeight: Typography.bold,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    color: Colors.textSecondary,
+    color: WW.textSub,
   },
 
   listItem: {
@@ -507,9 +511,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: WW.bgElevated,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     flexShrink: 0,
   },
   itemText: { flex: 1 },
@@ -517,12 +521,12 @@ const styles = StyleSheet.create({
     fontSize: Typography.lg,
     fontWeight: Typography.medium,
     letterSpacing: -0.2,
-    color: Colors.textPrimary,
+    color: WW.text,
   },
   itemAddress: {
     fontSize: Typography.sm,
     marginTop: 2,
-    color: Colors.textSecondary,
+    color: WW.textSub,
     lineHeight: 18,
   },
 
@@ -536,18 +540,19 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: Typography.lg,
     textAlign: 'center',
-    color: Colors.textSecondary,
+    color: WW.textSub,
   },
   emptyText: {
     fontSize: Typography.xl,
     fontWeight: Typography.semibold,
     marginTop: 16,
     letterSpacing: -0.4,
-    color: Colors.textPrimary,
+    color: WW.text,
   },
   emptyHint: {
     fontSize: Typography.md,
     marginTop: 8,
-    color: Colors.textSecondary,
+    color: WW.textSub,
   },
 });
+}

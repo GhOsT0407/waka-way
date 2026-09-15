@@ -1,8 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { Colors } from '../../theme/colors';
+import { useAppTheme } from '../../context/ThemeContext';
+import type { WWColors } from '../../theme/colors';
 
 export default function LocationDot() {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -23,7 +26,8 @@ export default function LocationDot() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
   wrapper: { alignItems: 'center', justifyContent: 'center', width: 36, height: 36 },
   ring: {
     width: 26,
@@ -42,6 +46,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: Colors.blue,
+    backgroundColor: WW.orange,
   },
 });
+}

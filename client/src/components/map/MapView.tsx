@@ -4,15 +4,13 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  Animated,
 } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrentLocation, LocationData } from '../../services/locationService';
 import reportService, { Report as ReportItem, ReportType } from '../../services/reportService';
 import { useAppTheme } from '../../context/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES, MAPTILER_DARK_STYLE } from '../../utils/constants';
-import { WW } from '../../theme/colors';
+import { SPACING, FONT_SIZES, GOOGLE_MAPS_DARK_STYLE, GOOGLE_MAPS_LIGHT_STYLE } from '../../utils/constants';
 import { WakaWaySpinner } from '../WakaWaySpinner';
 
 export interface Region {
@@ -39,8 +37,12 @@ interface WakaWayMapViewProps {
   style?: any;
 }
 
-const LAGOS_CENTER: [number, number] = [3.3792, 6.5244]; // [lng, lat]
-const LAGOS_ZOOM = 13;
+const LAGOS_REGION: Region = {
+  latitude: 6.5244,
+  longitude: 3.3792,
+  latitudeDelta: 0.12,
+  longitudeDelta: 0.12,
+};
 
 export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
   initialRegion,
@@ -52,26 +54,15 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
   hideCenterButton = false,
   style,
 }) => {
-  useAppTheme();
-  const cameraRef = useRef<MapLibreGL.Camera>(null);
+  const { WW, isDark } = useAppTheme();
+  const mapRef = useRef<MapView>(null);
 
   const [userLocation, setUserLocation] = useState<LocationData | null>(null);
   const [loading, setLoading]           = useState(true);
-  const [mapError, setMapError]         = useState(false);
   const [reports, setReports]           = useState<ReportItem[]>([]);
   const [showReportMenu, setShowReportMenu] = useState(false);
   const [submitting, setSubmitting]     = useState(false);
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
-
-  const pulseAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1600, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0, duration: 0,    useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
 
   useEffect(() => {
     (async () => {
@@ -89,15 +80,11 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
 
   // Fit camera to route polyline when it changes
   useEffect(() => {
-    if (!routePolyline || routePolyline.length < 2 || !cameraRef.current) return;
-    const lngs = routePolyline.map(c => c.longitude);
-    const lats  = routePolyline.map(c => c.latitude);
-    cameraRef.current.fitBounds(
-      [Math.max(...lngs), Math.max(...lats)],
-      [Math.min(...lngs), Math.min(...lats)],
-      [60, 60, 320, 60],
-      500,
-    );
+    if (!routePolyline || routePolyline.length < 2 || !mapRef.current) return;
+    mapRef.current.fitToCoordinates(routePolyline, {
+      edgePadding: { top: 60, right: 60, bottom: 320, left: 60 },
+      animated: true,
+    });
   }, [routePolyline]);
 
   const loadUserLocation = async () => {
@@ -105,12 +92,12 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
       const loc = await getCurrentLocation();
       if (loc) {
         setUserLocation(loc);
-        cameraRef.current?.setCamera({
-          centerCoordinate: [loc.coords.longitude, loc.coords.latitude],
-          zoomLevel: 15,
-          animationDuration: 800,
-          animationMode: 'easeTo',
-        });
+        mapRef.current?.animateToRegion({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        }, 800);
       }
     } catch {}
   };
@@ -121,12 +108,12 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
 
   const handleCenterUserLocation = () => {
     if (userLocation) {
-      cameraRef.current?.setCamera({
-        centerCoordinate: [userLocation.coords.longitude, userLocation.coords.latitude],
-        zoomLevel: 15,
-        animationDuration: 800,
-        animationMode: 'easeTo',
-      });
+      mapRef.current?.animateToRegion({
+        latitude: userLocation.coords.latitude,
+        longitude: userLocation.coords.longitude,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      }, 800);
     } else {
       loadUserLocation();
     }
@@ -149,22 +136,7 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
     await reportService.dismissReport(id); loadReports(); setSelectedReport(null);
   };
 
-  const initialCenter: [number, number] = initialRegion
-    ? [initialRegion.longitude, initialRegion.latitude]
-    : LAGOS_CENTER;
-
-  // Build GeoJSON for route polyline
-  const routeGeoJson: GeoJSON.Feature<GeoJSON.LineString> | null =
-    routePolyline && routePolyline.length >= 2
-      ? {
-          type:     'Feature',
-          properties: {},
-          geometry: {
-            type:        'LineString',
-            coordinates: routePolyline.map(c => [c.longitude, c.latitude]),
-          },
-        }
-      : null;
+  const region: Region = initialRegion ?? LAGOS_REGION;
 
   if (loading) {
     return (
@@ -174,59 +146,43 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
     );
   }
 
-  if (mapError) {
-    return (
-      <View style={[styles.container, { backgroundColor: WW.bg }, style]}>
-        <Ionicons name="map-outline" size={40} color={WW.textMuted} />
-        <Text style={[styles.loadingText, { color: WW.textMuted, marginTop: 12 }]}>
-          Map unavailable
-        </Text>
-        <Text style={{ color: WW.textMuted, fontSize: 12, textAlign: 'center', paddingHorizontal: 32, marginTop: 4 }}>
-          Check EXPO_PUBLIC_MAPTILER_KEY in your .env file
-        </Text>
-      </View>
-    );
-  }
-
   return (
     <View style={[styles.container, style]}>
-      <MapLibreGL.MapView
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
-        styleURL={MAPTILER_DARK_STYLE}
-        onDidFailLoadingMap={() => setMapError(true)}
-        logoEnabled={false}
-        attributionEnabled={false}
-        compassEnabled={false}
+        initialRegion={region}
+        onRegionChangeComplete={onRegionChange}
+        customMapStyle={isDark ? GOOGLE_MAPS_DARK_STYLE as any : GOOGLE_MAPS_LIGHT_STYLE as any}
+        showsUserLocation={showUserLocation}
+        showsMyLocationButton={false}
+        showsCompass={false}
       >
-        <MapLibreGL.Camera
-          ref={cameraRef}
-          defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: LAGOS_ZOOM }}
-        />
-
-        {showUserLocation && <MapLibreGL.UserLocation visible />}
-
         {/* Route polyline */}
-        {routeGeoJson && (
-          <MapLibreGL.ShapeSource id="route-source" shape={routeGeoJson}>
-            <MapLibreGL.LineLayer
-              id="route-line"
-              style={{ lineColor: WW.green, lineWidth: 5, lineCap: 'round', lineJoin: 'round' }}
-            />
-          </MapLibreGL.ShapeSource>
+        {routePolyline && routePolyline.length >= 2 && (
+          <Polyline
+            coordinates={routePolyline}
+            strokeColor={WW.green}
+            strokeWidth={5}
+            lineCap="round"
+            lineJoin="round"
+          />
         )}
 
         {/* Custom markers */}
         {markers.map(m => (
-          <MapLibreGL.PointAnnotation
+          <Marker
             key={m.id}
-            id={`marker-${m.id}`}
-            coordinate={[m.coordinate.longitude, m.coordinate.latitude]}
-            onSelected={() => onMarkerPress?.(m)}
+            coordinate={m.coordinate}
+            title={m.title}
+            description={m.description}
+            onPress={() => onMarkerPress?.(m)}
           >
             <View style={[styles.customMarker, { backgroundColor: WW.orange }]}>
               <Ionicons name="location" size={16} color={WW.danfoText} />
             </View>
-          </MapLibreGL.PointAnnotation>
+          </Marker>
         ))}
 
         {/* Report markers */}
@@ -234,23 +190,22 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
           const markerColor = r.type === 'Security' ? WW.error : r.type === 'Traffic' ? WW.warning : WW.stripe;
           const markerIcon  = r.type === 'Security' ? 'shield-half-outline' : r.type === 'Traffic' ? 'car-outline' : 'warning-outline';
           return (
-            <MapLibreGL.PointAnnotation
+            <Marker
               key={r.id}
-              id={`report-${r.id}`}
-              coordinate={[r.longitude, r.latitude]}
-              onSelected={() => setSelectedReport(selectedReport?.id === r.id ? null : r)}
+              coordinate={{ latitude: r.latitude, longitude: r.longitude }}
+              onPress={() => setSelectedReport(selectedReport?.id === r.id ? null : r)}
             >
               <View style={[styles.reportMarker, { backgroundColor: markerColor }]}>
                 <Ionicons name={markerIcon as any} size={14} color="#fff" />
               </View>
-            </MapLibreGL.PointAnnotation>
+            </Marker>
           );
         })}
-      </MapLibreGL.MapView>
+      </MapView>
 
       {/* Report callout */}
       {selectedReport && (
-        <View style={[styles.callout, { backgroundColor: WW.bgElevated }]}>
+        <View style={[styles.callout, { backgroundColor: WW.bgElevated, borderColor: WW.border }]}>
           <Text style={[styles.calloutTitle, { color: WW.text }]}>{selectedReport.type} Alert</Text>
           <Text style={[styles.calloutMeta, { color: WW.textSub }]}>
             {new Date(selectedReport.createdAt).toLocaleString()}
@@ -271,7 +226,7 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
 
       {/* Center button */}
       {showUserLocation && !hideCenterButton && (
-        <TouchableOpacity style={[styles.centerButton, { backgroundColor: WW.bgElevated }]} onPress={handleCenterUserLocation}>
+        <TouchableOpacity style={[styles.centerButton, { backgroundColor: WW.bgElevated, borderColor: WW.border }]} onPress={handleCenterUserLocation}>
           <Ionicons name="locate" size={20} color={WW.orange} />
         </TouchableOpacity>
       )}
@@ -279,7 +234,7 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
       {/* Report FAB */}
       <View style={styles.reportContainer} pointerEvents="box-none">
         {showReportMenu ? (
-          <View style={[styles.reportMenu, { backgroundColor: WW.bgElevated }]}>
+          <View style={[styles.reportMenu, { backgroundColor: WW.bgElevated, borderColor: WW.border }]}>
             {([
               { type: 'Traffic',  icon: 'car-outline',         color: WW.warning },
               { type: 'Hazard',   icon: 'warning-outline',     color: WW.stripe  },
@@ -290,7 +245,7 @@ export const WakaWayMapView: React.FC<WakaWayMapViewProps> = ({
                 <Text style={[styles.reportItemText, { color: WW.text }]}>{item.type}</Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={[styles.reportItem, styles.reportCancelItem]} onPress={() => setShowReportMenu(false)}>
+            <TouchableOpacity style={[styles.reportItem, styles.reportCancelItem, { borderTopColor: WW.divider }]} onPress={() => setShowReportMenu(false)}>
               <Ionicons name="close" size={16} color={WW.textSub} />
               <Text style={[styles.reportItemText, { color: WW.textSub }]}>Cancel</Text>
             </TouchableOpacity>
@@ -324,7 +279,7 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: 140,
     left: SPACING.MD, right: SPACING.MD,
     borderRadius: 14, padding: SPACING.MD,
-    borderWidth: 1, borderColor: WW.border,
+    borderWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3, shadowRadius: 12, elevation: 10,
   },
@@ -338,7 +293,7 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: SPACING.LG, right: SPACING.MD,
     width: 44, height: 44, borderRadius: 22,
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: WW.border,
+    borderWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2, shadowRadius: 6, elevation: 5,
   },
@@ -353,13 +308,13 @@ const styles = StyleSheet.create({
   reportMenu: {
     paddingVertical: 4, paddingHorizontal: 4,
     borderRadius: 14, minWidth: 160,
-    borderWidth: 1, borderColor: WW.border,
+    borderWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18, shadowRadius: 12, elevation: 8,
   },
   reportItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14, borderRadius: 10 },
   reportItemText: { fontSize: 15, fontWeight: '500' },
-  reportCancelItem: { marginTop: 2, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: WW.divider },
+  reportCancelItem: { marginTop: 2, borderTopWidth: StyleSheet.hairlineWidth },
 });
 
 export default WakaWayMapView;

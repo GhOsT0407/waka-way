@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../theme/colors';
+import { useAppTheme } from '../../context/ThemeContext';
+import type { WWColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
 
 export interface RecentItem {
@@ -16,13 +17,15 @@ interface Props {
 }
 
 export default function RecentsList({ items, onItemPress }: Props) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   if (items.length === 0) return null;
 
   return (
     <View style={styles.section}>
       <TouchableOpacity style={styles.header} activeOpacity={0.7} accessibilityRole="button">
         <Text style={styles.sectionTitle}>Recents</Text>
-        <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
+        <Ionicons name="chevron-forward" size={16} color={WW.textSub} />
       </TouchableOpacity>
 
       <View style={styles.card}>
@@ -36,14 +39,14 @@ export default function RecentsList({ items, onItemPress }: Props) {
               accessibilityRole="button"
             >
               <View style={styles.iconCircle}>
-                <Ionicons name="time-outline" size={20} color={Colors.textSecondary} />
+                <Ionicons name="time-outline" size={20} color={WW.textSub} />
               </View>
               <View style={styles.textGroup}>
                 <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.location} numberOfLines={1}>{item.location}</Text>
               </View>
               <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button">
-                <Ionicons name="ellipsis-horizontal" size={20} color={Colors.textSecondary} />
+                <Ionicons name="ellipsis-horizontal" size={20} color={WW.textSub} />
               </TouchableOpacity>
             </TouchableOpacity>
             {index < items.length - 1 && <View style={styles.divider} />}
@@ -54,15 +57,16 @@ export default function RecentsList({ items, onItemPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
   section:      { paddingHorizontal: 16, marginBottom: 8 },
   header:       { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { color: Colors.textPrimary, fontSize: Typography.xl, fontWeight: Typography.bold, marginRight: 4 },
+  sectionTitle: { color: WW.text, fontSize: Typography.xl, fontWeight: Typography.bold, marginRight: 4 },
   card: {
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: WW.bgElevated,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     overflow: 'hidden',
   },
   row: {
@@ -72,11 +76,12 @@ const styles = StyleSheet.create({
   },
   iconCircle: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Colors.surface,
+    backgroundColor: WW.bgSurface,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   textGroup: { flex: 1 },
-  name:      { color: Colors.textPrimary, fontSize: Typography.lg, fontWeight: Typography.medium },
-  location:  { color: Colors.textSecondary, fontSize: Typography.md, marginTop: 2 },
-  divider:   { height: 1, backgroundColor: Colors.divider, marginLeft: 66 },
+  name:      { color: WW.text, fontSize: Typography.lg, fontWeight: Typography.medium },
+  location:  { color: WW.textSub, fontSize: Typography.md, marginTop: 2 },
+  divider:   { height: 1, backgroundColor: WW.divider, marginLeft: 66 },
 });
+}

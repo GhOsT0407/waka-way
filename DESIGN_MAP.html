@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>WakaWay Design Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+:root{
+  --ground:#F5F7F5;
+  --surface:#FFFFFF;
+  --surface-2:#EFF2EF;
+  --ink:#0A0F0C;
+  --ink-sub:rgba(10,15,12,0.62);
+  --ink-mute:rgba(10,15,12,0.38);
+  --line:rgba(10,15,12,0.12);
+  --line-soft:rgba(10,15,12,0.07);
+  --danfo:#F5C518;
+  --green:#5DBB63;
+  --flag:#EF4444;
+  --brt:#2563EB;
+  --swatch-ring:rgba(10,15,12,0.14);
+  --display:"Bricolage Grotesque","Plus Jakarta Sans",system-ui,sans-serif;
+  --body:"Plus Jakarta Sans",system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#080D0B;
+    --surface:#0F1610;
+    --surface-2:#162019;
+    --ink:#F0F5F2;
+    --ink-sub:rgba(240,245,242,0.62);
+    --ink-mute:rgba(240,245,242,0.36);
+    --line:rgba(240,245,242,0.13);
+    --line-soft:rgba(240,245,242,0.07);
+    --swatch-ring:rgba(240,245,242,0.18);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#080D0B;
+  --surface:#0F1610;
+  --surface-2:#162019;
+  --ink:#F0F5F2;
+  --ink-sub:rgba(240,245,242,0.62);
+  --ink-mute:rgba(240,245,242,0.36);
+  --line:rgba(240,245,242,0.13);
+  --line-soft:rgba(240,245,242,0.07);
+  --swatch-ring:rgba(240,245,242,0.18);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--body);
+  font-size:15px;
+  line-height:1.6;
+  margin:0;
+}
+.stripe{height:6px;background:var(--danfo);width:100%}
+.wrap{max-width:1140px;margin:0 auto;padding:0 24px 96px}
+
+/* ── Masthead ─────────────────────────────────────────────── */
+header.top{padding:56px 0 36px;border-bottom:1px solid var(--line)}
+.eyebrow{
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-mute);margin:0 0 14px
+}
+h1{
+  font-family:var(--display);font-weight:800;font-size:clamp(38px,6vw,64px);
+  line-height:1.02;margin:0 0 16px;text-wrap:balance;letter-spacing:-.02em
+}
+.lede{font-size:17px;color:var(--ink-sub);max-width:62ch;margin:0}
+.meta{
+  display:flex;flex-wrap:wrap;gap:8px 28px;margin-top:24px;
+  font-family:var(--mono);font-size:12px;color:var(--ink-mute)
+}
+
+/* ── Layout ───────────────────────────────────────────────── */
+.cols{display:grid;grid-template-columns:184px 1fr;gap:52px;align-items:start;margin-top:44px}
+nav.rail{position:sticky;top:28px;display:flex;flex-direction:column;gap:2px}
+nav.rail a{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--ink-mute);text-decoration:none;padding:6px 0 6px 12px;
+  border-left:2px solid var(--line-soft)
+}
+nav.rail a:hover{color:var(--ink);border-left-color:var(--danfo)}
+nav.rail a:focus-visible{outline:2px solid var(--danfo);outline-offset:2px}
+main{min-width:0}
+section{margin-bottom:64px;scroll-margin-top:24px}
+h2{
+  font-family:var(--display);font-weight:600;font-size:29px;letter-spacing:-.015em;
+  margin:0 0 6px;text-wrap:balance
+}
+h2 .num{font-family:var(--mono);font-size:13px;color:var(--danfo);margin-right:12px;font-weight:600}
+.sub{color:var(--ink-sub);margin:0 0 26px;max-width:64ch}
+h3{font-family:var(--display);font-weight:600;font-size:18px;margin:34px 0 12px}
+p{max-width:66ch}
+
+/* ── Findings ─────────────────────────────────────────────── */
+.findings{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.finding{background:var(--surface);padding:22px 20px}
+.finding .tag{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--flag);display:block;margin-bottom:9px;font-weight:600
+}
+.finding h4{font-family:var(--display);font-size:17px;font-weight:600;margin:0 0 8px;line-height:1.3}
+.finding p{font-size:13.5px;color:var(--ink-sub);margin:0;line-height:1.55}
+
+/* ── Swatches ─────────────────────────────────────────────── */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.sw{border:1px solid var(--line);background:var(--surface)}
+.sw .chip{height:62px;border-bottom:1px solid var(--swatch-ring)}
+.sw .info{padding:9px 11px}
+.sw .name{font-size:12.5px;font-weight:600;display:block;line-height:1.35}
+.sw .hex{font-family:var(--mono);font-size:10.5px;color:var(--ink-mute);display:block;margin-top:2px}
+.sw .use{font-size:11px;color:var(--ink-sub);display:block;margin-top:5px;line-height:1.4}
+
+/* ── Mode table ───────────────────────────────────────────── */
+.modes{width:100%;border-collapse:collapse;font-size:13.5px}
+.modes th{
+  text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-mute);font-weight:600;
+  padding:0 12px 9px;border-bottom:1px solid var(--line)
+}
+.modes td{padding:11px 12px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+.modes tr td:first-child{width:132px}
+.pill{
+  display:inline-block;padding:4px 13px;border-radius:999px;
+  font-size:12px;font-weight:700;letter-spacing:.01em
+}
+.modes .hexcell{font-family:var(--mono);font-size:11.5px;color:var(--ink-sub)}
+
+/* ── Type scale ───────────────────────────────────────────── */
+.typerow{
+  display:grid;grid-template-columns:96px 1fr;gap:20px;align-items:baseline;
+  padding:11px 0;border-bottom:1px solid var(--line-soft)
+}
+.typerow .k{font-family:var(--mono);font-size:11px;color:var(--ink-mute)}
+.typerow .spec{color:var(--ink)}
+
+/* ── Radius audit ─────────────────────────────────────────── */
+.radii{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 18px}
+.rad{
+  width:58px;height:58px;border:2px solid var(--ink-mute);
+  display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;
+  font-family:var(--mono);font-size:10.5px;color:var(--ink-sub)
+}
+.rad.keep{border-color:var(--green);color:var(--green)}
+
+/* ── Wireframes ───────────────────────────────────────────── */
+.screens{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:20px}
+.screen{border:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column}
+.screen .hd{padding:15px 16px 13px;border-bottom:1px solid var(--line-soft)}
+.screen .rt{
+  font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--danfo);font-weight:600
+}
+.screen h4{font-family:var(--display);font-size:16.5px;font-weight:600;margin:5px 0 0}
+.screen .file{font-family:var(--mono);font-size:10.5px;color:var(--ink-mute);margin-top:4px;display:block}
+.wf{padding:14px 16px 16px;display:flex;flex-direction:column;gap:5px;flex:1}
+.b{
+  border:1px solid var(--line);background:var(--surface-2);
+  font-family:var(--mono);font-size:9.5px;color:var(--ink-sub);
+  padding:7px 8px;display:flex;align-items:center;line-height:1.25
+}
+.b.map{background:linear-gradient(135deg,var(--surface-2) 25%,transparent 25%,transparent 50%,var(--surface-2) 50%,var(--surface-2) 75%,transparent 75%);background-size:9px 9px;min-height:56px}
+.b.accent{border-color:var(--danfo);background:rgba(245,197,24,.14);color:var(--ink)}
+.b.tall{min-height:44px}
+.b.row{gap:5px}
+.b.row span{flex:1;border:1px solid var(--line);padding:4px 5px;text-align:center;background:var(--surface)}
+.frozen{
+  font-family:var(--mono);font-size:9.5px;padding:4px 9px;margin:0 16px 14px;
+  border:1px solid var(--flag);color:var(--flag);text-align:center
+}
+.themed{
+  font-family:var(--mono);font-size:9.5px;padding:4px 9px;margin:0 16px 14px;
+  border:1px solid var(--green);color:var(--green);text-align:center
+}
+
+/* ── Inventory ────────────────────────────────────────────── */
+.inv{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:22px}
+.inv h4{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-mute);margin:0 0 10px;padding-bottom:7px;border-bottom:1px solid var(--line)
+}
+.inv ul{list-style:none;margin:0;padding:0;font-size:13px}
+.inv li{padding:3.5px 0;color:var(--ink-sub)}
+.inv li b{color:var(--ink);font-weight:500}
+.dupe{color:var(--flag)}
+
+/* ── Fix list ─────────────────────────────────────────────── */
+.fixes{border-top:1px solid var(--line)}
+.fix{display:grid;grid-template-columns:34px 1fr 96px;gap:18px;padding:17px 0;border-bottom:1px solid var(--line-soft);align-items:start}
+.fix .n{font-family:var(--mono);font-size:12px;color:var(--ink-mute);padding-top:2px}
+.fix h4{font-family:var(--display);font-size:16px;font-weight:600;margin:0 0 5px}
+.fix p{font-size:13.5px;color:var(--ink-sub);margin:0;line-height:1.5}
+.fix .eff{
+  font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink-mute);text-align:right;padding-top:3px
+}
+code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:1.5px 5px;border:1px solid var(--line-soft)}
+
+figure{margin:0 0 8px}
+figcaption{font-size:12.5px;color:var(--ink-mute);margin-top:10px;max-width:62ch}
+.scroller{overflow-x:auto}
+svg{max-width:100%;height:auto}
+
+@media (max-width:820px){
+  .cols{grid-template-columns:1fr;gap:30px}
+  nav.rail{position:static;flex-direction:row;flex-wrap:wrap;gap:4px 14px}
+  nav.rail a{border-left:none;padding:3px 0}
+  .fix{grid-template-columns:26px 1fr;gap:12px}
+  .fix .eff{grid-column:2;text-align:left;padding-top:6px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+<style>
+  img{max-width:100%}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="stripe"></div>
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">Design reference · as built, September 2026</p>
+  <h1>WakaWay Design Map</h1>
+  <p class="lede">Every token, screen and component in the app as the code actually defines them today — not as the README describes them. Built as the starting point for a redesign, so the parts that have drifted are marked rather than tidied away.</p>
+  <div class="meta">
+    <span>12 screens</span>
+    <span>26 components</span>
+    <span>Expo SDK 54 · RN 0.81.5</span>
+    <span>Plus Jakarta Sans</span>
+  </div>
+</header>
+
+<div class="cols">
+<nav class="rail" aria-label="Sections">
+  <a href="#status">Status</a>
+  <a href="#drift">Drift</a>
+  <a href="#color">Color</a>
+  <a href="#modes">Transport</a>
+  <a href="#type">Type</a>
+  <a href="#space">Space</a>
+  <a href="#nav">Navigation</a>
+  <a href="#screens">Screens</a>
+  <a href="#components">Components</a>
+  <a href="#fixes">Where to start</a>
+</nav>
+
+<main>
+
+<section id="status" style="margin-bottom:48px">
+  <h2><span class="num">00</span>Status — 11 September 2026</h2>
+  <p class="sub">The audit below is the <em>before</em> state. This is what has changed since.</p>
+  <div class="findings">
+    <div class="finding">
+      <span class="tag" style="color:var(--green)">Resolved</span>
+      <h4>One palette</h4>
+      <p>There were four, not two — the old orange <code>COLORS</code> was still rendering in eleven "theme-aware" files. All collapsed into <code>WW_LIGHT</code> / <code>WW_DARK</code>; 31 files on <code>useAppTheme()</code>; the other three palettes deleted. Login/Signup were frozen <em>light</em>, not dark as first reported.</p>
+    </div>
+    <div class="finding">
+      <span class="tag" style="color:var(--green)">Resolved</span>
+      <h4>Tokens</h4>
+      <p><code>theme/spacing.ts</code> (Space, Radius, HIT) and a rescaled <code>Typography</code>. <code>constants.ts</code> already had <code>SPACING</code> / <code>FONT_SIZES</code> — now aliases onto the theme so 315 call sites resolve to one set of values. Canvas palette applied with the contrast corrections from the critique.</p>
+    </div>
+    <div class="finding">
+      <span class="tag" style="color:var(--green)">Resolved</span>
+      <h4>Tab bar · four screens</h4>
+      <p>Bottom tabs live (Home · Search · Contribute · You). Home, Route detail, Navigation and Splash rebuilt to the canvas. Still to do: You, Preferences, Contribution, Notifications, Login, Signup, Onboarding — all now theme-aware, none yet redesigned.</p>
+    </div>
+  </div>
+</section>
+
+<section id="drift">
+  <h2><span class="num">01</span>Three things to know first</h2>
+  <p class="sub">Each of these will shape a redesign more than any individual screen will, and none of them is visible from the documentation.</p>
+  <div class="findings">
+    <div class="finding">
+      <span class="tag">Docs are wrong</span>
+      <h4>The README describes a different app</h4>
+      <p>It documents danfo <em>orange</em> <code>#E8541A</code>, a warm-white ground and DM Sans. The code ships danfo <em>yellow</em> <code>#F5C518</code>, a near-black forest ground and Plus Jakarta Sans. Trust <code>theme/colors.ts</code>, not the docs.</p>
+    </div>
+    <div class="finding">
+      <span class="tag">Half-migrated</span>
+      <h4>Dark mode only reaches half the app</h4>
+      <p>17 files read the live theme through <code>useAppTheme()</code>. 13 files — including six screens — import the static <code>Colors</code>, which is hardwired to the dark palette. Those screens stay dark whatever the user picks.</p>
+    </div>
+    <div class="finding">
+      <span class="tag">No scale</span>
+      <h4>Spacing and radius are ad hoc</h4>
+      <p>There is a color file and a type file, but no spacing or radius tokens. Twelve distinct corner radii are in use, including 19, 9, 3 and 2. Nothing enforces a rhythm.</p>
+    </div>
+  </div>
+</section>
+
+<div class="stripe" style="height:3px;margin-bottom:52px"></div>
+
+<section id="color">
+  <h2><span class="num">02</span>Color</h2>
+  <p class="sub">Defined in <code>src/theme/colors.ts</code> as two complete sets, <code>WW_LIGHT</code> and <code>WW_DARK</code>. The brand accents are deliberately identical in both — only the neutral canvas flips. That's a sound decision worth keeping.</p>
+
+  <h3>Brand</h3>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:#F5C518"></div><div class="info"><span class="name">orange</span><span class="hex">#F5C518</span><span class="use">Primary action. Named "orange", is actually danfo yellow.</span></div></div>
+    <div class="sw"><div class="chip" style="background:#F7D44A"></div><div class="info"><span class="name">orangeGlow</span><span class="hex">#F7D44A</span><span class="use">Lighter / pressed state</span></div></div>
+    <div class="sw"><div class="chip" style="background:#5DBB63"></div><div class="info"><span class="name">green</span><span class="hex">#5DBB63</span><span class="use">Arrival, success, safe</span></div></div>
+    <div class="sw"><div class="chip" style="background:#7DCF81"></div><div class="info"><span class="name">greenGlow</span><span class="hex">#7DCF81</span><span class="use">Lighter green state</span></div></div>
+    <div class="sw"><div class="chip" style="background:#F5C518"></div><div class="info"><span class="name">stripe</span><span class="hex">#F5C518</span><span class="use">The danfo stripe motif — same value as primary</span></div></div>
+  </div>
+
+  <h3>Neutral canvas — the only thing that flips</h3>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:#F5F7F5"></div><div class="info"><span class="name">bg · light</span><span class="hex">#F5F7F5</span><span class="use">Green-biased off-white</span></div></div>
+    <div class="sw"><div class="chip" style="background:#FFFFFF"></div><div class="info"><span class="name">bgSurface · light</span><span class="hex">#FFFFFF</span><span class="use">Card surface</span></div></div>
+    <div class="sw"><div class="chip" style="background:#EFF2EF"></div><div class="info"><span class="name">bgElevated · light</span><span class="hex">#EFF2EF</span><span class="use">Raised card</span></div></div>
+    <div class="sw"><div class="chip" style="background:#080D0B"></div><div class="info"><span class="name">bg · dark</span><span class="hex">#080D0B</span><span class="use">Near-black forest</span></div></div>
+    <div class="sw"><div class="chip" style="background:#0F1610"></div><div class="info"><span class="name">bgSurface · dark</span><span class="hex">#0F1610</span><span class="use">Card surface</span></div></div>
+    <div class="sw"><div class="chip" style="background:#162019"></div><div class="info"><span class="name">bgElevated · dark</span><span class="hex">#162019</span><span class="use">Raised card</span></div></div>
+  </div>
+
+  <h3>Semantic</h3>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:#FF4444"></div><div class="info"><span class="name">error</span><span class="hex">#FF4444</span><span class="use">Destructive, failure</span></div></div>
+    <div class="sw"><div class="chip" style="background:#F5C518"></div><div class="info"><span class="name">warning</span><span class="hex">#F5C518</span><span class="use">Collides with primary — see fix 04</span></div></div>
+  </div>
+</section>
+
+<section id="modes">
+  <h2><span class="num">03</span>Transport mode colors</h2>
+  <p class="sub">The most distinctive thing in the system: each mode of Lagos transport carries its own colour and its own text colour, so a route leg is legible at a glance before any label is read. Identical across light and dark.</p>
+  <div class="scroller">
+  <table class="modes">
+    <thead><tr><th>Mode</th><th>Swatch</th><th>Fill</th><th>On-fill text</th></tr></thead>
+    <tbody>
+      <tr><td>Danfo</td><td><span class="pill" style="background:#F5C518;color:#111111">Danfo</span></td><td class="hexcell">#F5C518</td><td class="hexcell">#111111</td></tr>
+      <tr><td>BRT / LAGBUS</td><td><span class="pill" style="background:#2563EB;color:#FFFFFF">BRT</span></td><td class="hexcell">#2563EB</td><td class="hexcell">#FFFFFF</td></tr>
+      <tr><td>Keke</td><td><span class="pill" style="background:#5DBB63;color:#FFFFFF">Keke</span></td><td class="hexcell">#5DBB63</td><td class="hexcell">#FFFFFF</td></tr>
+      <tr><td>Okada</td><td><span class="pill" style="background:#EF4444;color:#FFFFFF">Okada</span></td><td class="hexcell">#EF4444</td><td class="hexcell">#FFFFFF</td></tr>
+      <tr><td>Walk</td><td><span class="pill" style="background:rgba(10,15,12,0.10);color:#0A0F0C">Walk</span></td><td class="hexcell">10% ink</td><td class="hexcell">theme ink</td></tr>
+      <tr><td>Ferry</td><td><span class="pill" style="background:#0EA5E9;color:#FFFFFF">Ferry</span></td><td class="hexcell">#0EA5E9</td><td class="hexcell">#FFFFFF</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="font-size:13.5px;color:var(--ink-sub);margin-top:16px">Ferry tokens are still defined, but ferry routes were removed from the routing engine in commit <code>76ca3e7</code>. Dead tokens — decide whether ferry is coming back before designing around them.</p>
+  <p style="font-size:13.5px;color:var(--ink-sub)">Keke green and the brand success green are the same value, so a keke leg and an "arrived" state read identically. Worth separating in a redesign.</p>
+</section>
+
+<section id="type">
+  <h2><span class="num">04</span>Type</h2>
+  <p class="sub"><strong>Plus Jakarta Sans</strong> across the whole app, six weights loaded. The scale is defined in <code>src/theme/typography.ts</code> as raw numbers with no line-height or letter-spacing paired to them — every screen sets those by hand.</p>
+
+  <div class="typerow"><span class="k">hero · 36</span><span class="spec" style="font-size:36px;font-weight:700;line-height:1.05">Move Smart</span></div>
+  <div class="typerow"><span class="k">xxl · 26</span><span class="spec" style="font-size:26px;font-weight:700">Route to Yaba</span></div>
+  <div class="typerow"><span class="k">xl · 20</span><span class="spec" style="font-size:20px;font-weight:600">Screen titles</span></div>
+  <div class="typerow"><span class="k">lg · 16</span><span class="spec" style="font-size:16px;font-weight:500">Body large, list rows</span></div>
+  <div class="typerow"><span class="k">md · 14</span><span class="spec" style="font-size:14px">Default body text</span></div>
+  <div class="typerow"><span class="k">sm · 12</span><span class="spec" style="font-size:12px">Captions, subtitles</span></div>
+  <div class="typerow"><span class="k">xs · 10</span><span class="spec" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase">Section labels</span></div>
+
+  <p style="margin-top:22px;font-size:13.5px;color:var(--ink-sub)">Weights available: 300 Light · 400 Regular · 500 Medium · 600 SemiBold · 700 Bold · 800 ExtraBold. The <code>Typography</code> object only exposes 400–700, so the loaded 300 and 800 faces are shipped but unreachable through tokens.</p>
+</section>
+
+<section id="space">
+  <h2><span class="num">05</span>Space and radius</h2>
+  <p class="sub">Neither has a token file. These are the values the screens actually use, counted across <code>src/screens</code>.</p>
+
+  <h3>Padding — a 16 rhythm with a 14 fighting it</h3>
+  <p style="font-size:13.5px;color:var(--ink-sub)"><code>16</code> appears 26 times, <code>14</code> appears 21 times, then <code>8</code> (13), <code>20</code> (9), <code>12</code> (8), and a scatter of <code>3</code>, <code>4</code>, <code>10</code>, <code>24</code>, <code>32</code>. A 4-point scale of 4 / 8 / 12 / 16 / 24 / 32 would absorb almost all of it; the 14s are the single biggest source of misalignment.</p>
+
+  <h3>Corner radius — twelve values in use</h3>
+  <div class="radii">
+    <div class="rad" style="border-radius:2px">2</div>
+    <div class="rad" style="border-radius:3px">3</div>
+    <div class="rad" style="border-radius:9px">9</div>
+    <div class="rad keep" style="border-radius:10px">10</div>
+    <div class="rad keep" style="border-radius:12px">12</div>
+    <div class="rad" style="border-radius:14px">14</div>
+    <div class="rad keep" style="border-radius:16px">16</div>
+    <div class="rad" style="border-radius:18px">18</div>
+    <div class="rad" style="border-radius:19px">19</div>
+    <div class="rad keep" style="border-radius:20px">20</div>
+    <div class="rad" style="border-radius:22px">22</div>
+    <div class="rad keep" style="border-radius:999px">999</div>
+  </div>
+  <p style="font-size:13.5px;color:var(--ink-sub)">Green marks a plausible keeper set — <code>10 / 12 / 16 / 20 / 999</code>. The 19 and 9 are almost certainly meant to be 20 and 10 minus a border width, which is the kind of thing a token would have prevented.</p>
+</section>
+
+<section id="nav">
+  <h2><span class="num">06</span>Navigation</h2>
+  <p class="sub">One native stack, gated on auth. There is no tab bar — every destination is pushed onto the stack from Home, which is why Home carries so much of the interface.</p>
+
+  <figure>
+  <svg viewBox="0 0 720 250" role="img" aria-label="Navigation graph: an auth gate leads to Home, which pushes Search, Route Detail, You, Notifications and Contribution; Search leads to Route Detail, which leads to Navigation; You leads to Preferences.">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+      </marker>
+    </defs>
+    <g fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)" opacity="0.55">
+      <line x1="118" y1="70" x2="168" y2="70"/>
+      <line x1="292" y1="60" x2="362" y2="38"/>
+      <line x1="292" y1="70" x2="362" y2="94"/>
+      <line x1="292" y1="82" x2="362" y2="150"/>
+      <line x1="292" y1="88" x2="362" y2="206"/>
+      <path d="M470 38 C 510 38, 510 94, 546 94"/>
+      <path d="M470 150 C 508 150, 508 96, 546 96" stroke-dasharray="4 3"/>
+    </g>
+    <g fill="none" stroke="#F5C518" stroke-width="1.6" marker-end="url(#ar)">
+      <line x1="640" y1="94" x2="640" y2="140"/>
+    </g>
+
+    <g font-family="JetBrains Mono, monospace" font-size="11.5" fill="currentColor">
+      <rect x="12" y="52" width="106" height="36" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.8"/>
+      <text x="65" y="74" text-anchor="middle">Auth gate</text>
+
+      <rect x="168" y="50" width="124" height="40" fill="none" stroke="#F5C518" stroke-width="2"/>
+      <text x="230" y="74" text-anchor="middle">Home</text>
+
+      <rect x="362" y="20" width="108" height="34" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.8"/>
+      <text x="416" y="41" text-anchor="middle">Search</text>
+
+      <rect x="362" y="132" width="108" height="34" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.8"/>
+      <text x="416" y="153" text-anchor="middle">You</text>
+
+      <rect x="362" y="188" width="108" height="34" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.8"/>
+      <text x="416" y="209" text-anchor="middle">Notifications</text>
+
+      <rect x="362" y="76" width="108" height="34" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.8"/>
+      <text x="416" y="97" text-anchor="middle">Contribution</text>
+
+      <rect x="546" y="78" width="108" height="36" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.8"/>
+      <text x="600" y="101" text-anchor="middle">RouteDetail</text>
+
+      <rect x="586" y="140" width="108" height="36" fill="none" stroke="#F5C518" stroke-width="2"/>
+      <text x="640" y="163" text-anchor="middle">Navigation</text>
+    </g>
+    <text x="600" y="200" font-family="Plus Jakarta Sans, sans-serif" font-size="11" fill="currentColor" opacity="0.55" text-anchor="middle">the paid-off screen</text>
+  </svg>
+  <figcaption>Routes as declared in <code>src/App.tsx</code>. Dashed edge: You → Preferences. Everything funnels toward Navigation, the turn-by-turn screen — but it sits four pushes deep from launch.</figcaption>
+  </figure>
+</section>
+
+<section id="screens">
+  <h2><span class="num">07</span>Screen layouts</h2>
+  <p class="sub">Region-by-region structure of each screen, taken from the JSX. The badge on each says whether that screen responds to the theme or is frozen to the dark palette.</p>
+
+  <div class="screens">
+
+    <div class="screen">
+      <div class="hd"><span class="rt">Home</span><h4>Home</h4><span class="file">HomeScreen.tsx · 1245 lines</span></div>
+      <div class="themed">theme-aware</div>
+      <div class="wf">
+        <div class="b map">Map — top 50%, locpulse ring on user</div>
+        <div class="b row"><span>brand</span><span>notif ·</span></div>
+        <div class="b accent tall">Search bar — breathes when idle</div>
+        <div class="b" style="background:var(--danfo);border-color:var(--danfo);height:8px;padding:0"></div>
+        <div class="b tall">Live community alerts</div>
+        <div class="b" style="background:var(--danfo);border-color:var(--danfo);height:8px;padding:0"></div>
+        <div class="b tall">Popular routes — horizontal scroll</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="hd"><span class="rt">Search</span><h4>Search</h4><span class="file">SearchScreen.tsx · 553 lines</span></div>
+      <div class="themed">theme-aware</div>
+      <div class="wf">
+        <div class="b">Header</div>
+        <div class="b accent tall">Search row — autocomplete</div>
+        <div class="b row"><span>Home</span><span>Work</span><span>+</span></div>
+        <div class="b tall">Results / recent searches</div>
+        <div class="b">Transport mode selector</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="hd"><span class="rt">RouteDetail</span><h4>Route Detail</h4><span class="file">RouteDetailScreen.tsx · 775 lines</span></div>
+      <div class="themed">theme-aware</div>
+      <div class="wf">
+        <div class="b map">Full-screen map + header gradient</div>
+        <div class="b">◠ drag handle — draggable sheet</div>
+        <div class="b accent tall">Smart route options — fare dominant</div>
+        <div class="b">Fare estimates · tags</div>
+        <div class="b tall">Steps list — leg timeline</div>
+        <div class="b accent">Bottom action bar — always visible</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="hd"><span class="rt">Navigation</span><h4>Navigation</h4><span class="file">NavigationScreen.tsx · 598 lines</span></div>
+      <div class="themed">dark by design</div>
+      <div class="wf">
+        <div class="b accent">Back + instruction card</div>
+        <div class="b map" style="min-height:80px">Google map · polylines, waypoint dots, user dot</div>
+        <div class="b">Arrived overlay (conditional)</div>
+        <div class="b tall">Bottom sheet — leg progress</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="hd"><span class="rt">You</span><h4>You</h4><span class="file">YouScreen.tsx · 757 lines</span></div>
+      <div class="themed">theme-aware</div>
+      <div class="wf">
+        <div class="b row"><span>← back</span><span>⚙</span><span>⏻</span></div>
+        <div class="b tall accent">Profile hero</div>
+        <div class="b row"><span>trips</span><span>saved</span><span>score</span></div>
+        <div class="b row"><span>History</span><span>Routes</span><span>Places</span></div>
+        <div class="b tall">Tab content — list</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="hd"><span class="rt">Preferences</span><h4>Preferences</h4><span class="file">PreferencesScreen.tsx · 569 lines</span></div>
+      <div class="themed">theme-aware</div>
+      <div class="wf">
+        <div class="b">Header</div>
+        <div class="b">TRANSPORT — default mode</div>
+        <div class="b">PRIVACY &amp; DATA — clear history</div>
+        <div class="b tall">ACCOUNT — name, email, delete</div>
+        <div class="b">ABOUT — version, coverage, policy</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="hd"><span class="rt">Contribution</span><h4>Contribution</h4><span class="file">ContributionScreen.tsx · 616 lines</span></div>
+      <div class="themed">theme-aware</div>
+      <div class="wf">
+        <div class="b row"><span>Map</span><span>Mine</span></div>
+        <div class="b map" style="min-height:72px">Community map — alert markers</div>
+        <div class="b tall">My contributions list</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="hd"><span class="rt">Notifications</span><h4>Notifications</h4><span class="file">NotificationsScreen.tsx · 301 lines</span></div>
+      <div class="themed">theme-aware</div>
+      <div class="wf">
+        <div class="b">Header</div>
+        <div class="b tall">Alert feed — flat list</div>
+        <div class="b tall">Empty state</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="hd"><span class="rt">Auth</span><h4>Login &amp; Signup</h4><span class="file">LoginScreen · SignupScreen</span></div>
+      <div class="themed">theme-aware</div>
+      <div class="wf">
+        <div class="b accent tall">Brand mark — orange-accented</div>
+        <div class="b tall">Form card — animated focus fields</div>
+        <div class="b accent">Primary CTA</div>
+        <div class="b">Switch to signup / sign in</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="hd"><span class="rt">—</span><h4>Splash &amp; Onboarding</h4><span class="file">WakaWaySplash · OnboardingScreen</span></div>
+      <div class="themed">dark by design</div>
+      <div class="wf">
+        <div class="b" style="background:var(--danfo);border-color:var(--danfo);height:8px;padding:0"></div>
+        <div class="b tall accent">Emblem — yellow tile, W letterform, sheen</div>
+        <div class="b">Wordmark + tagline</div>
+        <div class="b">Vehicle loader</div>
+        <div class="b tall">3-slide carousel, per-slide accent</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="components">
+  <h2><span class="num">08</span>Component inventory</h2>
+  <p class="sub">26 components in four groups. Bold entries are the ones carrying real design weight — redesigning those changes the app more than any screen file does.</p>
+  <div class="inv">
+    <div>
+      <h4>Route &amp; fare</h4>
+      <ul>
+        <li><b>SmartRouteOptions</b> — route cards</li>
+        <li><b>FareEstimateCard</b> — dominant fare</li>
+        <li>TransportModeSelector</li>
+        <li>RouteStepCard <span class="dupe">· duplicated</span></li>
+        <li>route/RouteCard</li>
+        <li>route/RouteStepCard <span class="dupe">· duplicate</span></li>
+        <li>routing/RouteGuide — turn-by-turn</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Map</h4>
+      <ul>
+        <li><b>map/MapView</b> — PROVIDER_GOOGLE</li>
+        <li>map/CommunityMapView</li>
+        <li>map/AlertMarkers</li>
+        <li>map/AlertBottomSheet</li>
+        <li>ui/MapControls</li>
+        <li>ui/LocationDot</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Community</h4>
+      <ul>
+        <li><b>LiveAlertsFeed</b></li>
+        <li>QuickReportBar</li>
+        <li>FareDisputeModal</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Shell &amp; utility</h4>
+      <ul>
+        <li>search/SearchBar</li>
+        <li>ui/PlacesRow · RecentsList</li>
+        <li>ui/Toast · OfflineBanner</li>
+        <li>ui/ErrorBoundary</li>
+        <li>ui/WeatherWidget · GuidesSection</li>
+        <li>ui/ShareLocationButton</li>
+        <li>WakaWaySpinner</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="fixes" style="margin-bottom:24px">
+  <h2><span class="num">09</span>Where a redesign should start</h2>
+  <p class="sub">Ordered by how much each one unblocks the rest. The first two are structural — doing them first means the later visual work only has to be done once.</p>
+  <div class="fixes">
+    <div class="fix">
+      <span class="n">01</span>
+      <div>
+        <h4>Finish the theme migration</h4>
+        <p>Move the 13 files still importing static <code>Colors</code> onto <code>useAppTheme()</code>. Until this is done, any palette change only lands on half the app, and the dark mode toggle stays broken for six screens.</p>
+      </div>
+      <span class="eff">structural</span>
+    </div>
+    <div class="fix">
+      <span class="n">02</span>
+      <div>
+        <h4>Add spacing and radius tokens</h4>
+        <p>A <code>theme/spacing.ts</code> with a 4-point scale and a radius set of 10 / 12 / 16 / 20 / 999. Do it before restyling, so the restyle applies tokens rather than baking in new one-off numbers.</p>
+      </div>
+      <span class="eff">structural</span>
+    </div>
+    <div class="fix">
+      <span class="n">03</span>
+      <div>
+        <h4>Split keke green from success green</h4>
+        <p>Both are <code>#5DBB63</code>, so a keke leg and an arrival state are indistinguishable. Give the transport modes their own ramp, separate from semantic state.</p>
+      </div>
+      <span class="eff">palette</span>
+    </div>
+    <div class="fix">
+      <span class="n">04</span>
+      <div>
+        <h4>Give warning its own value</h4>
+        <p><code>warning</code> is currently the same yellow as the primary action, so a caution and a call-to-action look alike. Also decide whether ferry stays — its tokens outlived its routes.</p>
+      </div>
+      <span class="eff">palette</span>
+    </div>
+    <div class="fix">
+      <span class="n">05</span>
+      <div>
+        <h4>Rename the token that isn't orange</h4>
+        <p><code>orange</code>, <code>orangeGlow</code> and <code>orangeDim</code> all hold yellows. Every future reader will trip on it, and it is the reason the README documents the wrong brand colour.</p>
+      </div>
+      <span class="eff">naming</span>
+    </div>
+    <div class="fix">
+      <span class="n">06</span>
+      <div>
+        <h4>Resolve the duplicate RouteStepCard</h4>
+        <p>Two files, both live, one theme-aware and one not. Pick the survivor before restyling either.</p>
+      </div>
+      <span class="eff">cleanup</span>
+    </div>
+    <div class="fix">
+      <span class="n">07</span>
+      <div>
+        <h4>Reconsider Home's load</h4>
+        <p>At 1245 lines it holds a map, a search overlay, an alerts feed and a routes rail, and it is the only entry point to every other screen. With no tab bar, Navigation sits four pushes from launch. A bottom tab bar is the obvious structural question a redesign should answer.</p>
+      </div>
+      <span class="eff">structure</span>
+    </div>
+  </div>
+</section>
+
+</main>
+</div>
+</div>
+<div class="stripe"></div>
+</body>
+</html>

@@ -1,435 +1,282 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Pressable,
-} from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { RouteOption, RouteLeg, SmartRouteResult } from '../services/smartRoutingService';
+import { RouteOption, RouteLeg, SmartRouteResult, TransportMode } from '../services/smartRoutingService';
 import { useAppTheme } from '../context/ThemeContext';
+import type { WWColors } from '../theme/colors';
+import { Fonts, Typography, Tracking } from '../theme/typography';
+import { Space, Radius } from '../theme/spacing';
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// Route options for one search, as the redesign canvas draws them:
+//
+//   header card   the selected option -- lead-mode badge, the minutes figure
+//                 at 28/800, fare + arrival under it, state + distance right
+//   other ways    the remaining options as compact rows (only when >1)
+//   timeline      the selected option's legs on a 44pt rail; mode colour
+//                 carries the rail, state colour stays semantic
+//
+// The Start action lives in the screen's bottom bar, not here.
+// Each leg keeps the engine's pidgin localInstruction as its caption -- the
+// canvas dropped it, but it is the app's own voice and it costs one line.
+
 interface SmartRouteOptionsProps {
   routeResult: SmartRouteResult;
   onSelectOption: (option: RouteOption) => void;
-  onStartJourney: (option: RouteOption) => void;
+  /** Kept for API compatibility; the screen's bottom bar owns Start now. */
+  onStartJourney?: (option: RouteOption) => void;
 }
 
-// ─── Mode config ──────────────────────────────────────────────────────────────
-const MODE_CONFIG: Record<string, { bg: string; text: string; label: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  danfo: { bg: '#F5C518', text: '#111111', label: 'Danfo',  icon: 'bus-outline'      },
-  brt:   { bg: '#1A5BDB', text: '#FFFFFF', label: 'BRT',    icon: 'train-outline'    },
-  keke:  { bg: '#2D7A4F', text: '#FFFFFF', label: 'Keke',   icon: 'bicycle-outline'  },
-  okada: { bg: '#D93025', text: '#FFFFFF', label: 'Okada',  icon: 'bicycle-outline'  },
-  ferry: { bg: '#0A7EA4', text: '#FFFFFF', label: 'Ferry',  icon: 'boat-outline'     },
-  rail:  { bg: '#7C3AED', text: '#FFFFFF', label: 'Train',  icon: 'train-outline'    },
-  walk:  { bg: '#E5E5E5', text: '#6B6B6B', label: 'Walk',   icon: 'walk-outline'     },
-};
+// ─── Mode presentation ────────────────────────────────────────────────────────
+type ModeCfg = { bg: string; text: string; label: string; short: string };
 
-function getModeConfig(mode: string) {
-  return MODE_CONFIG[mode] ?? { bg: '#E5E5E5', text: '#6B6B6B', label: mode, icon: 'navigate-outline' as const };
+function modeCfg(WW: WWColors, mode: TransportMode | string): ModeCfg {
+  switch (mode) {
+    case 'danfo': return { bg: WW.danfo, text: WW.danfoText, label: 'Danfo', short: 'DNF' };
+    case 'brt':   return { bg: WW.brt,   text: WW.brtText,   label: 'BRT',   short: 'BRT' };
+    case 'keke':  return { bg: WW.keke,  text: WW.kekeText,  label: 'Keke',  short: 'KK' };
+    case 'okada': return { bg: WW.okada, text: WW.okadaText, label: 'Okada', short: 'OKD' };
+    case 'ferry': return { bg: WW.ferry, text: WW.ferryText, label: 'Ferry', short: 'FRY' };
+    case 'walk':  return { bg: WW.walk,  text: WW.walkText,  label: 'Walk',  short: '' };
+    default:      return { bg: WW.bgElevated, text: WW.text, label: String(mode), short: String(mode).slice(0, 3).toUpperCase() };
+  }
 }
 
-// ─── Difficulty derivation ────────────────────────────────────────────────────
-type Difficulty = 'EASY' | 'MODERATE' | 'COMPLEX';
-
-function getDifficulty(legs: RouteLeg[]): Difficulty {
-  const transfers = legs.filter((l) => l.mode !== 'walk').length;
-  if (transfers <= 2) return 'EASY';
-  if (transfers === 3) return 'MODERATE';
-  return 'COMPLEX';
+// The mode that names an option: its first non-walk leg.
+function leadMode(option: RouteOption): TransportMode | 'walk' {
+  return option.legs.find((l) => l.mode !== 'walk')?.mode ?? 'walk';
 }
 
-const DIFFICULTY_STYLE: Record<Difficulty, { bg: string; text: string; dot: string }> = {
-  EASY:     { bg: '#EBF8F1', text: '#2D7A4F', dot: '#2D7A4F' },
-  MODERATE: { bg: '#FEF5E7', text: '#C8790A', dot: '#C8790A' },
-  COMPLEX:  { bg: '#FDEDEC', text: '#C0392B', dot: '#C0392B' },
-};
+function formatArrival(minsFromNow: number): string {
+  const t = new Date(Date.now() + minsFromNow * 60_000);
+  const h = t.getHours();
+  const m = t.getMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
 
-// ─── TransportChain ──────────────────────────────────────────────────────────
-const TransportChain: React.FC<{ legs: RouteLeg[]; isDark: boolean }> = ({ legs, isDark }) => {
-  const transit = legs.filter((l) => l.mode !== 'walk');
-  const sep = isDark ? '#2A2A2A' : '#E5E5E5';
-  return (
-    <View style={tc.row}>
-      {transit.map((leg, i) => {
-        const cfg = getModeConfig(leg.mode);
-        return (
-          <React.Fragment key={i}>
-            <View style={[tc.badge, { backgroundColor: cfg.bg }]}>
-              <Ionicons name={cfg.icon} size={12} color={cfg.text} />
-              <Text style={[tc.label, { color: cfg.text }]}>{cfg.label}</Text>
-            </View>
-            {i < transit.length - 1 && (
-              <View style={[tc.connector, { backgroundColor: sep }]} />
-            )}
-          </React.Fragment>
-        );
-      })}
-    </View>
+function formatKm(km: number): string {
+  return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+}
+
+// One label per option, semantic colour: state green for the good news,
+// muted for the neutral fact.
+function statusFor(option: RouteOption, WW: WWColors): { text: string; color: string } | null {
+  if (option.isRecommended) return { text: 'Recommended', color: WW.green };
+  if (option.isFastest)     return { text: 'Fastest',     color: WW.green };
+  if (option.isCheapest)    return { text: 'Cheapest',    color: WW.textMuted };
+  return null;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+export const SmartRouteOptions: React.FC<SmartRouteOptionsProps> = ({ routeResult, onSelectOption }) => {
+  const { WW } = useAppTheme();
+  const s = useMemo(() => makeStyles(WW), [WW]);
+
+  const { options, recommendedOptionId, destination } = routeResult;
+  const [selectedId, setSelectedId] = useState<string>(
+    options.find((o) => o.id === recommendedOptionId)?.id ?? options[0]?.id,
   );
-};
-const tc = StyleSheet.create({
-  row:       { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginBottom: 14 },
-  badge:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
-  label:     { fontSize: 11, fontWeight: '600' },
-  connector: { width: 16, height: 1.5 },
-});
+  const selected = options.find((o) => o.id === selectedId) ?? options[0];
+  const others = options.filter((o) => o.id !== selected?.id);
 
-// ─── LegItem ─────────────────────────────────────────────────────────────────
-const LegItem: React.FC<{ leg: RouteLeg; isLast: boolean; tokens: any }> = ({ leg, isLast, tokens }) => {
-  const cfg = getModeConfig(leg.mode);
-  const price = leg.priceMin === 0
-    ? 'Free'
-    : leg.priceMin === leg.priceMax
-      ? `₦${leg.priceMin.toLocaleString()}`
-      : `₦${leg.priceMin.toLocaleString()}–₦${leg.priceMax.toLocaleString()}`;
+  if (!selected) return null;
 
-  return (
-    <View style={li.row}>
-      {/* Timeline */}
-      <View style={li.timeline}>
-        <View style={[li.dot, { backgroundColor: cfg.bg }]}>
-          <Ionicons name={cfg.icon} size={11} color={cfg.text} />
-        </View>
-        {!isLast && <View style={[li.line, { backgroundColor: tokens.divider }]} />}
-      </View>
-
-      {/* Content */}
-      <View style={li.content}>
-        <View style={li.headerRow}>
-          <View style={[li.modePill, { backgroundColor: cfg.bg }]}>
-            <Text style={[li.modeText, { color: cfg.text }]}>{cfg.label}</Text>
-          </View>
-          {leg.priceMax > 0 && (
-            <Text style={[li.price, { color: tokens.accent }]}>{price}</Text>
-          )}
-        </View>
-
-        <Text style={[li.instruction, { color: tokens.textPrimary }]}>
-          {leg.instruction}
-        </Text>
-
-        {!!leg.localInstruction && (
-          <Text style={[li.local, { color: tokens.accent }]}>
-            {leg.localInstruction}
-          </Text>
-        )}
-
-        <View style={li.metaRow}>
-          <Ionicons name="time-outline" size={11} color={tokens.textSecondary} />
-          <Text style={[li.meta, { color: tokens.textSecondary }]}>{leg.durationMins} min</Text>
-          <Ionicons name="navigate-outline" size={11} color={tokens.textSecondary} style={{ marginLeft: 8 }} />
-          <Text style={[li.meta, { color: tokens.textSecondary }]}>{leg.distanceKm.toFixed(1)} km</Text>
-        </View>
-      </View>
-    </View>
-  );
-};
-const li = StyleSheet.create({
-  row:         { flexDirection: 'row', marginBottom: 16 },
-  timeline:    { width: 28, alignItems: 'center', marginRight: 10 },
-  dot:         { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  line:        { width: 1.5, flex: 1, marginTop: 3, marginBottom: -16 },
-  content:     { flex: 1, paddingBottom: 4 },
-  headerRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
-  modePill:    { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
-  modeText:    { fontSize: 11, fontWeight: '600' },
-  price:       { fontSize: 13, fontWeight: '700' },
-  instruction: { fontSize: 14, fontWeight: '400', lineHeight: 20, marginBottom: 4 },
-  local:       { fontSize: 13, fontStyle: 'italic', marginBottom: 4 },
-  metaRow:     { flexDirection: 'row', alignItems: 'center' },
-  meta:        { fontSize: 11, marginLeft: 3 },
-});
-
-// ─── RouteOptionCard ─────────────────────────────────────────────────────────
-const RouteOptionCard: React.FC<{
-  option: RouteOption;
-  isSelected: boolean;
-  tokens: any;
-  isDark: boolean;
-  onSelect: () => void;
-  onStartJourney: () => void;
-}> = ({ option, isSelected, tokens, isDark, onSelect, onStartJourney }) => {
-  const [expanded, setExpanded] = useState(false);
-
-  const difficulty     = getDifficulty(option.legs);
-  const diffStyle      = DIFFICULTY_STYLE[difficulty];
-  const transfers      = option.legs.filter((l) => l.mode !== 'walk').length - 1;
-  const transitLegs    = option.legs.filter((l) => l.mode !== 'walk');
-  const boardingLeg    = transitLegs[0];
-  const boardingNote   = boardingLeg ? boardingLeg.instruction : '';
-  const primaryColor   = boardingLeg ? getModeConfig(boardingLeg.mode).bg : tokens.accent;
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        card.wrap,
-        { backgroundColor: tokens.surface, borderColor: isSelected ? tokens.accent : tokens.divider },
-        isSelected && card.wrapSelected,
-        pressed && card.wrapPressed,
-      ]}
-      onPress={() => { onSelect(); setExpanded(!expanded); }}
-      accessibilityRole="button"
-      accessibilityLabel={`${option.name}, fare ${option.priceFormatted}`}
-    >
-      {/* Left accent stripe — primary mode color */}
-      <View style={[card.leftAccent, { backgroundColor: primaryColor }]} />
-
-      {/* ── Top row: fare box + meta + difficulty ─────────────────────── */}
-      <View style={card.topRow}>
-        {/* Fare box */}
-        <View style={[card.fareBox, { backgroundColor: tokens.accentSubtle }]}>
-          <Text style={[card.fareMain, { color: tokens.accent }]}>
-            {option.priceFormatted.split('–')[0].trim()}
-          </Text>
-          {option.priceFormatted.includes('–') && (
-            <Text style={[card.fareRange, { color: tokens.accent }]}>
-              {'–' + option.priceFormatted.split('–')[1]}
-            </Text>
-          )}
-        </View>
-
-        {/* Name + meta */}
-        <View style={card.metaBlock}>
-          <View style={card.nameRow}>
-            <Text style={[card.optionName, { color: tokens.textPrimary }]} numberOfLines={1}>
-              {option.name}
-            </Text>
-            {option.isRecommended && (
-              <View style={card.bestBadge}>
-                <Text style={card.bestText}>BEST VALUE</Text>
-              </View>
-            )}
-          </View>
-          <Text style={[card.metaLine, { color: tokens.textSecondary }]}>
-            {transfers > 0 ? `${transfers} transfer${transfers > 1 ? 's' : ''}` : 'Direct'} · {option.totalDurationMins} min
-          </Text>
-        </View>
-
-        {/* Difficulty chip */}
-        <View style={[card.diffChip, { backgroundColor: diffStyle.bg }]}>
-          <View style={[card.diffDot, { backgroundColor: diffStyle.dot }]} />
-          <Text style={[card.diffText, { color: diffStyle.text }]}>{difficulty}</Text>
-        </View>
-      </View>
-
-      {/* ── Transport chain ───────────────────────────────────────────── */}
-      <TransportChain legs={option.legs} isDark={isDark} />
-
-      {/* ── Divider + footer ──────────────────────────────────────────── */}
-      <View style={[card.footerDivider, { backgroundColor: tokens.divider }]} />
-      <View style={card.footer}>
-        <Text style={[card.boardingNote, { color: tokens.textSecondary }]} numberOfLines={1}>
-          {boardingNote}
-        </Text>
-        <TouchableOpacity
-          style={card.seeRouteBtn}
-          onPress={(e) => { e.stopPropagation?.(); onSelect(); setExpanded(!expanded); }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={[card.seeRouteText, { color: tokens.accent }]}>
-            {expanded ? 'Hide' : 'See route'}
-          </Text>
-          <Ionicons
-            name={expanded ? 'chevron-up' : 'chevron-forward'}
-            size={13}
-            color={tokens.accent}
-          />
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Expanded legs ────────────────────────────────────────────────*/}
-      {expanded && (
-        <View style={[card.legsWrap, { borderTopColor: tokens.divider }]}>
-          {option.legs.map((leg, i) => (
-            <LegItem
-              key={leg.id}
-              leg={leg}
-              isLast={i === option.legs.length - 1}
-              tokens={tokens}
-            />
-          ))}
-        </View>
-      )}
-
-      {/* ── Start Journey CTA (only on selected card) ────────────────── */}
-      {isSelected && (
-        <TouchableOpacity
-          style={[card.startBtn, { backgroundColor: tokens.accent }]}
-          onPress={onStartJourney}
-          accessibilityLabel="Start journey"
-          activeOpacity={0.88}
-        >
-          <Ionicons name="navigate" size={16} color="#FFFFFF" />
-          <Text style={card.startText}>START JOURNEY</Text>
-        </TouchableOpacity>
-      )}
-    </Pressable>
-  );
-};
-
-const card = StyleSheet.create({
-  wrap: {
-    borderRadius: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
-    paddingLeft: 20,
-    paddingRight: 16,
-    marginBottom: 10,
-    borderWidth: 1.5,
-    overflow: 'hidden',
-  },
-  wrapSelected: { borderWidth: 2 },
-  wrapPressed:  { opacity: 0.92 },
-
-  // Left mode accent stripe
-  leftAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-  },
-
-  // Top row
-  topRow:    { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
-  fareBox:   { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'flex-start', flexShrink: 0 },
-  fareMain:  { fontSize: 22, fontWeight: '700', letterSpacing: -0.5 },
-  fareRange: { fontSize: 13, fontWeight: '500', marginTop: 1 },
-
-  metaBlock: { flex: 1 },
-  nameRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  optionName:{ fontSize: 15, fontWeight: '600', letterSpacing: -0.2, flex: 1 },
-  bestBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: '#22C55E' },
-  bestText:  { color: '#FFFFFF', fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
-  metaLine:  { fontSize: 13, fontWeight: '400' },
-
-  diffChip:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, flexShrink: 0 },
-  diffDot:   { width: 6, height: 6, borderRadius: 3 },
-  diffText:  { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
-
-  // Footer
-  footerDivider: { height: 1, marginBottom: 10 },
-  footer:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  boardingNote:  { fontSize: 12, fontWeight: '400', flex: 1, marginRight: 8 },
-  seeRouteBtn:   { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 0 },
-  seeRouteText:  { fontSize: 13, fontWeight: '600' },
-
-  // Legs expansion
-  legsWrap: { marginTop: 16, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth },
-
-  // Start CTA
-  startBtn:  {
-    marginTop: 14,
-    height: 50,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  startText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
-});
-
-// ─── Main component ───────────────────────────────────────────────────────────
-export const SmartRouteOptions: React.FC<SmartRouteOptionsProps> = ({
-  routeResult,
-  onSelectOption,
-  onStartJourney,
-}) => {
-  const { tokens, isDark } = useAppTheme();
-  const [selectedId, setSelectedId] = useState<string>(routeResult.recommendedOptionId);
-
-  const handleSelect = (option: RouteOption) => {
-    setSelectedId(option.id);
-    onSelectOption(option);
+  const select = (o: RouteOption) => {
+    setSelectedId(o.id);
+    onSelectOption(o);
   };
 
+  const lead = modeCfg(WW, leadMode(selected));
+  const status = statusFor(selected, WW);
+
   return (
-    <View>
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <View style={header.wrap}>
-        <Text style={[header.label, { color: tokens.textSecondary }]}>ROUTE OPTIONS</Text>
-        <View style={header.destinationRow}>
-          <Text style={[header.place, { color: tokens.textPrimary }]} numberOfLines={1}>
-            {routeResult.origin.name}
+    <View style={s.wrap}>
+      {/* ── Header card — the selected option ─────────────────────────────── */}
+      <View style={s.headerCard} accessibilityRole="summary">
+        <View style={[s.badgeLg, { backgroundColor: lead.bg }]}>
+          <Text style={[s.badgeLgText, { color: lead.text }]}>{lead.label.toUpperCase()}</Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={s.headerMins}>{selected.totalDurationMins} min</Text>
+          <Text style={s.headerSub} numberOfLines={1}>
+            {selected.priceFormatted} · arrive {formatArrival(selected.totalDurationMins)}
           </Text>
-          <Ionicons name="arrow-forward" size={14} color={tokens.textSecondary} />
-          <Text style={[header.place, { color: tokens.textPrimary }]} numberOfLines={1}>
-            {routeResult.destination.name}
-          </Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          {status && <Text style={[s.status, { color: status.color }]}>{status.text}</Text>}
+          <Text style={s.headerKm}>{formatKm(selected.totalDistanceKm)}</Text>
         </View>
       </View>
 
-      {/* ── Nearest stop banner ─────────────────────────────────────────── */}
-      {routeResult.originNearestStop && (
-        <View style={[stop.wrap, { backgroundColor: tokens.surface, borderColor: tokens.divider }]}>
-          <Ionicons name="location" size={16} color={tokens.success} />
-          <View style={{ flex: 1 }}>
-            <Text style={[stop.label, { color: tokens.textSecondary }]}>
-              Nearest stop from you
-            </Text>
-            <Text style={[stop.name, { color: tokens.textPrimary }]}>
-              {routeResult.originNearestStop.name}
-              <Text style={[stop.meta, { color: tokens.textSecondary }]}>
-                {'  ·  '}{routeResult.originNearestStop.walkMins} min walk
-              </Text>
-            </Text>
+      {/* ── Other ways ────────────────────────────────────────────────────── */}
+      {others.length > 0 && (
+        <View style={s.othersWrap}>
+          <Text style={s.eyebrow}>Other ways · {others.length}</Text>
+          <View style={{ gap: Space.sm }}>
+            {others.map((o) => {
+              const cfg = modeCfg(WW, leadMode(o));
+              const st = statusFor(o, WW);
+              return (
+                <Pressable
+                  key={o.id}
+                  onPress={() => select(o)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${o.totalDurationMins} minutes, ${o.priceFormatted}, ${o.description}`}
+                  style={({ pressed }) => [s.row, pressed && s.rowPressed]}
+                >
+                  <View style={[s.badgeSm, { backgroundColor: cfg.bg }]}>
+                    <Text style={[s.badgeSmText, { color: cfg.text }]}>{cfg.label.toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={s.rowTitle}>{o.totalDurationMins} min · {o.priceFormatted}</Text>
+                    <Text style={s.rowSub} numberOfLines={1}>{o.description}</Text>
+                  </View>
+                  {st && <Text style={[s.status, { color: st.color }]}>{st.text}</Text>}
+                </Pressable>
+              );
+            })}
           </View>
         </View>
       )}
 
-      {/* ── Comparison banner ───────────────────────────────────────────── */}
-      {routeResult.comparison.comparisonText && (
-        <View style={[comp.wrap, { backgroundColor: tokens.accentSubtle }]}>
-          <Ionicons name="bulb-outline" size={16} color={tokens.accent} />
-          <Text style={[comp.text, { color: tokens.accent }]}>
-            {routeResult.comparison.comparisonText}
-          </Text>
-        </View>
-      )}
-
-      {/* ── Option cards ────────────────────────────────────────────────── */}
-      <View style={list.wrap}>
-        {routeResult.options.map((option) => (
-          <RouteOptionCard
-            key={option.id}
-            option={option}
-            isSelected={selectedId === option.id}
-            tokens={tokens}
-            isDark={isDark}
-            onSelect={() => handleSelect(option)}
-            onStartJourney={() => onStartJourney(option)}
-          />
+      {/* ── Timeline — the selected option's legs on a rail ───────────────── */}
+      <View style={s.timeline}>
+        {selected.legs.map((leg, i) => (
+          <LegRow key={leg.id ?? i} leg={leg} index={i} WW={WW} s={s} />
         ))}
-        <View style={{ height: 80 }} />
+        {/* destination node */}
+        <View style={s.legRow}>
+          <View style={s.rail}>
+            <View style={s.nodeEnd} />
+          </View>
+          <View style={[s.legBody, { paddingBottom: 0 }]}>
+            <Text style={s.legTitle} numberOfLines={2}>{destination.name}</Text>
+          </View>
+        </View>
       </View>
     </View>
   );
 };
 
-const header = StyleSheet.create({
-  wrap:           { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
-  label:          { fontSize: 11, fontWeight: '600', letterSpacing: 0.9, marginBottom: 6 },
-  destinationRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  place:          { fontSize: 16, fontWeight: '700', letterSpacing: -0.2, flexShrink: 1 },
-});
+// ─── Leg row ──────────────────────────────────────────────────────────────────
+const LegRow: React.FC<{
+  leg: RouteLeg;
+  index: number;
+  WW: WWColors;
+  s: ReturnType<typeof makeStyles>;
+}> = ({ leg, index, WW, s }) => {
+  const cfg = modeCfg(WW, leg.mode);
+  const isWalk = leg.mode === 'walk';
+  const price = leg.priceMax > 0
+    ? (leg.priceMin === leg.priceMax ? `₦${leg.priceMax}` : `₦${leg.priceMin}–₦${leg.priceMax}`)
+    : null;
+  const sub = [
+    `${leg.durationMins} min`,
+    formatKm(leg.distanceKm),
+    price,
+  ].filter(Boolean).join(' · ');
 
-const stop = StyleSheet.create({
-  wrap:  { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginHorizontal: 16, marginBottom: 10, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
-  label: { fontSize: 11, marginBottom: 2 },
-  name:  { fontSize: 14, fontWeight: '600' },
-  meta:  { fontSize: 12, fontWeight: '400' },
-});
+  return (
+    <View style={s.legRow}>
+      <View style={s.rail}>
+        {index === 0 || isWalk ? (
+          <View style={s.nodeRing} />
+        ) : (
+          <View style={[s.nodeMode, { backgroundColor: cfg.bg }]}>
+            <Text style={[s.nodeModeText, { color: cfg.text }]}>{cfg.short}</Text>
+          </View>
+        )}
+        {isWalk
+          ? <View style={s.railDashed} />
+          : <View style={[s.railSolid, { backgroundColor: cfg.bg }]} />}
+      </View>
+      <View style={s.legBody}>
+        <Text style={s.legTitle} numberOfLines={2}>
+          {isWalk ? `Walk to ${leg.to.name}` : `${cfg.label} · ${leg.from.name} → ${leg.to.name}`}
+        </Text>
+        <Text style={s.legSub} numberOfLines={1}>{sub}</Text>
+        {!!leg.localInstruction && (
+          <Text style={s.legLocal} numberOfLines={2}>{leg.localInstruction}</Text>
+        )}
+      </View>
+    </View>
+  );
+};
 
-const comp = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
-  text: { fontSize: 13, fontWeight: '500', flex: 1 },
-});
+// ─── Styles ───────────────────────────────────────────────────────────────────
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+    wrap: { paddingHorizontal: Space.lg, paddingTop: Space.md },
 
-const list = StyleSheet.create({
-  wrap: { paddingHorizontal: 16 },
-});
+    // header card
+    headerCard: {
+      borderRadius: Radius.lg,
+      backgroundColor: WW.bgSurface,
+      padding: Space.lg,
+      flexDirection: 'row', alignItems: 'center', gap: Space.md,
+      shadowColor: '#14161A', shadowOpacity: 0.06, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
+      elevation: 1,
+    },
+    badgeLg: {
+      width: 44, height: 44, borderRadius: Radius.md,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    badgeLgText: { fontFamily: Fonts.extrabold, fontSize: 11, letterSpacing: Tracking.tight / 2 },
+    headerMins: {
+      fontFamily: Fonts.extrabold, fontSize: Typography.xxl, lineHeight: Typography.xxl * 1.1,
+      color: WW.text, letterSpacing: Tracking.tight,
+    },
+    headerSub: { fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textSub, marginTop: 2 },
+    headerKm:  { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textMuted, marginTop: 2 },
+    status:    { fontFamily: Fonts.bold, fontSize: Typography.sm },
+
+    // other ways
+    othersWrap: { marginTop: Space.lg },
+    eyebrow: {
+      fontFamily: Fonts.bold, fontSize: Typography.xs, letterSpacing: Tracking.eyebrow,
+      textTransform: 'uppercase', color: WW.textMuted, marginBottom: Space.sm,
+    },
+    row: {
+      minHeight: 68,
+      borderRadius: Radius.lg,
+      backgroundColor: WW.bgSurface,
+      paddingHorizontal: 14, paddingVertical: Space.md,
+      flexDirection: 'row', alignItems: 'center', gap: Space.md,
+    },
+    rowPressed: { opacity: 0.8 },
+    badgeSm: {
+      width: 40, height: 40, borderRadius: Radius.md,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    badgeSmText: { fontFamily: Fonts.extrabold, fontSize: 10, letterSpacing: Tracking.tight / 2 },
+    rowTitle: { fontFamily: Fonts.bold, fontSize: Typography.lg, color: WW.text },
+    rowSub:   { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textMuted, marginTop: 2 },
+
+    // timeline
+    timeline: { paddingTop: Space.lg + 2 },
+    legRow:   { flexDirection: 'row', gap: 14 },
+    rail:     { width: 44, alignItems: 'center' },
+    legBody:  { flex: 1, paddingBottom: Space.xl - 4, minWidth: 0 },
+    legTitle: { fontFamily: Fonts.bold, fontSize: Typography.lg, color: WW.text, lineHeight: Typography.lg * 1.35 },
+    legSub:   { fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textMuted, marginTop: 3 },
+    legLocal: { fontFamily: Fonts.medium, fontSize: Typography.sm, color: WW.textSub, marginTop: 6, lineHeight: Typography.sm * 1.4 },
+
+    nodeRing: {
+      width: 12, height: 12, borderRadius: Radius.pill,
+      borderWidth: 3, borderColor: WW.text, backgroundColor: WW.bgSurface,
+      marginTop: 4,
+    },
+    nodeMode: {
+      width: 26, height: 26, borderRadius: 8,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    nodeModeText: { fontFamily: Fonts.extrabold, fontSize: 9 },
+    nodeEnd: { width: 14, height: 14, borderRadius: Radius.pill, backgroundColor: WW.text, marginTop: 4 },
+    railSolid: { flex: 1, width: 4, borderRadius: Radius.pill, minHeight: 34, marginTop: 4 },
+    railDashed: {
+      flex: 1, width: 0, minHeight: 34, marginTop: 4,
+      borderWidth: 1.5, borderStyle: 'dashed', borderColor: WW.text, borderRadius: 1,
+    },
+  });
+}
+
+export default SmartRouteOptions;

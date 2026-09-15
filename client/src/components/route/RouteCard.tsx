@@ -22,7 +22,7 @@ export const RouteCard: React.FC<RouteCardProps> = ({
   onPress,
   isSelected = false,
 }) => {
-  const { theme } = useAppTheme();
+  const { WW } = useAppTheme();
   const { total_time_minutes, total_distance_km, total_fare_ngn, transport_modes, steps } = suggestion;
 
   // Create transport modes display
@@ -34,39 +34,39 @@ export const RouteCard: React.FC<RouteCardProps> = ({
     <TouchableOpacity
       style={[
         styles.card,
-        { backgroundColor: theme.CARD_BACKGROUND },
+        { backgroundColor: WW.bgSurface },
         isSelected && [
           styles.cardSelected,
-          { borderColor: theme.PRIMARY, shadowColor: theme.PRIMARY }
+          { borderColor: WW.orange, shadowColor: WW.orange }
         ]
       ]}
       onPress={onPress}
       activeOpacity={0.7}
     >
       <View style={styles.header}>
-        <Text style={[styles.transportModes, { color: theme.TEXT }]}>{transportDisplay}</Text>
+        <Text style={[styles.transportModes, { color: WW.text }]}>{transportDisplay}</Text>
       </View>
 
       <View style={styles.details}>
         <View style={styles.detailRow}>
           <Text style={styles.detailIcon}>⏱️</Text>
-          <Text style={[styles.detailText, { color: theme.TEXT }]}>{formatTime(total_time_minutes)}</Text>
+          <Text style={[styles.detailText, { color: WW.text }]}>{formatTime(total_time_minutes)}</Text>
         </View>
 
         <View style={styles.detailRow}>
           <Text style={styles.detailIcon}>💰</Text>
-          <Text style={[styles.detailText, { color: theme.TEXT }]}>{formatFare(total_fare_ngn)}</Text>
+          <Text style={[styles.detailText, { color: WW.text }]}>{formatFare(total_fare_ngn)}</Text>
         </View>
 
         <View style={styles.detailRow}>
           <Text style={styles.detailIcon}>📍</Text>
-          <Text style={[styles.detailText, { color: theme.TEXT }]}>{formatDistance(total_distance_km)}</Text>
+          <Text style={[styles.detailText, { color: WW.text }]}>{formatDistance(total_distance_km)}</Text>
         </View>
       </View>
 
-      <View style={[styles.footer, { borderTopColor: theme.BORDER }]}>
-        <Text style={[styles.stepsCount, { color: theme.TEXT_SECONDARY }]}>{steps.length} step{steps.length !== 1 ? 's' : ''}</Text>
-        <Text style={[styles.viewDetails, { color: theme.PRIMARY }]}>View Details →</Text>
+      <View style={[styles.footer, { borderTopColor: WW.border }]}>
+        <Text style={[styles.stepsCount, { color: WW.textSub }]}>{steps.length} step{steps.length !== 1 ? 's' : ''}</Text>
+        <Text style={[styles.viewDetails, { color: WW.orange }]}>View Details →</Text>
       </View>
     </TouchableOpacity>
   );

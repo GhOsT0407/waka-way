@@ -80,11 +80,6 @@ async function addReportSupabase(report: Omit<Report, 'id' | 'createdAt' | 'conf
 
   if (error) throw error;
 
-  // Trigger AI verification asynchronously — fire-and-forget
-  supabase.functions
-    .invoke('verify-report', { body: { contribution_id: data.id } })
-    .catch(() => {}); // non-fatal if edge function not deployed
-
   return {
     id: data.id,
     latitude: data.latitude,
@@ -159,17 +154,23 @@ async function fetchRow(id: string): Promise<Report | null> {
   };
 }
 
-// Atomic confirm via RPC — single UPDATE, no read-modify-write race
 async function confirmReportSupabase(id: string): Promise<Report | null> {
-  const { data, error } = await supabase.rpc('confirm_contribution', { contribution_id: id });
-  if (error || !data?.success) return null;
+  const current = await fetchRow(id);
+  if (!current) return null;
+  await supabase
+    .from('contributions')
+    .update({ confirms: (current.confirms || 0) + 1 })
+    .eq('id', id);
   return fetchRow(id);
 }
 
-// Atomic dismiss via RPC
 async function dismissReportSupabase(id: string): Promise<Report | null> {
-  const { data, error } = await supabase.rpc('dismiss_contribution', { contribution_id: id });
-  if (error || !data?.success) return null;
+  const current = await fetchRow(id);
+  if (!current) return null;
+  await supabase
+    .from('contributions')
+    .update({ dismisses: (current.dismisses || 0) + 1 })
+    .eq('id', id);
   return fetchRow(id);
 }
 

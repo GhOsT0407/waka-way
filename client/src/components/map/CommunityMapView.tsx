@@ -1,15 +1,13 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapView, { PROVIDER_GOOGLE, Marker, Circle } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useContributions, Contribution } from '../../hooks/useContributions';
 import { AlertBottomSheet } from './AlertBottomSheet';
 import { configureProximityNotifications, calculateDistance } from '../../services/proximityAlertService';
 import { useAppTheme } from '../../context/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES, MAPTILER_DARK_STYLE } from '../../utils/constants';
-import { circlePolygon } from '../../utils/mapboxInit';
-import { WW } from '../../theme/colors';
+import { SPACING, BORDER_RADIUS, FONT_SIZES, GOOGLE_MAPS_DARK_STYLE, GOOGLE_MAPS_LIGHT_STYLE } from '../../utils/constants';
 
 export interface Region {
   latitude: number;
@@ -18,7 +16,12 @@ export interface Region {
   longitudeDelta: number;
 }
 
-const DEFAULT_CENTER: [number, number] = [3.3792, 6.5244]; // Lagos [lng, lat]
+const DEFAULT_REGION: Region = {
+  latitude: 6.5244,
+  longitude: 3.3792,
+  latitudeDelta: 0.12,
+  longitudeDelta: 0.12,
+};
 
 const MARKER_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons.glyphMap; circleRadius: number }> = {
   security:    { color: '#D32F2F', icon: 'shield-outline',       circleRadius: 500 },
@@ -26,7 +29,7 @@ const MARKER_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons
   traffic:     { color: '#FF9800', icon: 'car-sport-outline',    circleRadius: 0   },
   hazard:      { color: '#FF5722', icon: 'alert-circle-outline', circleRadius: 200 },
   construction:{ color: '#FFC107', icon: 'construct-outline',    circleRadius: 0   },
-  bus_stop:    { color: WW.brt,    icon: 'bus-outline',          circleRadius: 0   },
+  bus_stop:    { color: '#2563EB', icon: 'bus-outline',          circleRadius: 0   },
   taxi_stand:  { color: '#9C27B0', icon: 'car-outline',          circleRadius: 0   },
   other:       { color: '#607D8B', icon: 'help-circle-outline',  circleRadius: 0   },
 };
@@ -46,8 +49,8 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
   filterTypes,
   style,
 }) => {
-  useAppTheme();
-  const cameraRef = useRef<MapLibreGL.Camera>(null);
+  const { WW, isDark } = useAppTheme();
+  const mapRef = useRef<MapView>(null);
 
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading]           = useState(true);
@@ -72,12 +75,12 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
           const loc    = await Location.getCurrentPositionAsync({});
           const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
           setUserLocation(coords);
-          cameraRef.current?.setCamera({
-            centerCoordinate: [coords.longitude, coords.latitude],
-            zoomLevel: 14,
-            animationDuration: 1000,
-            animationMode: 'flyTo',
-          });
+          mapRef.current?.animateToRegion({
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            latitudeDelta: 0.03,
+            longitudeDelta: 0.03,
+          }, 1000);
         }
       } catch {}
       setLoading(false);
@@ -96,12 +99,12 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
 
   const handleCenterUser = useCallback(() => {
     if (!userLocation) return;
-    cameraRef.current?.setCamera({
-      centerCoordinate: [userLocation.longitude, userLocation.latitude],
-      zoomLevel: 14,
-      animationDuration: 800,
-      animationMode: 'easeTo',
-    });
+    mapRef.current?.animateToRegion({
+      latitude: userLocation.latitude,
+      longitude: userLocation.longitude,
+      latitudeDelta: 0.03,
+      longitudeDelta: 0.03,
+    }, 800);
   }, [userLocation]);
 
   const getDistance = useCallback((c: Contribution): number | undefined => {
@@ -109,13 +112,11 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
     return calculateDistance(userLocation.latitude, userLocation.longitude, c.latitude, c.longitude);
   }, [userLocation]);
 
-  const initialCenter: [number, number] = initialRegion
-    ? [initialRegion.longitude, initialRegion.latitude]
-    : DEFAULT_CENTER;
+  const region: Region = initialRegion ?? DEFAULT_REGION;
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.loadingContainer, style]}>
+      <View style={[styles.container, styles.loadingContainer, { backgroundColor: WW.bg }, style]}>
         <ActivityIndicator size="large" color={WW.orange} />
         <Text style={[styles.loadingText, { color: WW.textSub }]}>Loading community map...</Text>
       </View>
@@ -124,46 +125,36 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
 
   return (
     <View style={[styles.container, style]}>
-      <MapLibreGL.MapView
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
-        styleURL={MAPTILER_DARK_STYLE}
-        logoEnabled={false}
-        attributionEnabled={false}
-        compassEnabled={false}
+        initialRegion={region}
+        customMapStyle={isDark ? GOOGLE_MAPS_DARK_STYLE as any : GOOGLE_MAPS_LIGHT_STYLE as any}
+        showsUserLocation
+        showsMyLocationButton={false}
+        showsCompass={false}
       >
-        <MapLibreGL.Camera
-          ref={cameraRef}
-          defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: 13 }}
-        />
-
-        <MapLibreGL.UserLocation visible />
-
         {alerts.map((contribution) => {
           const config    = MARKER_CONFIG[contribution.type] ?? MARKER_CONFIG.other;
           const isVerified = contribution.verified || (contribution.confirm_count >= 5);
 
           return (
             <React.Fragment key={contribution.id}>
-              {/* Danger zone radius polygon */}
+              {/* Danger zone radius circle */}
               {config.circleRadius > 0 && (
-                <MapLibreGL.ShapeSource
-                  id={`circle-src-${contribution.id}`}
-                  shape={circlePolygon(contribution.latitude, contribution.longitude, config.circleRadius)}
-                >
-                  <MapLibreGL.FillLayer
-                    id={`circle-fill-${contribution.id}`}
-                    style={{
-                      fillColor:         `${config.color}20`,
-                      fillOutlineColor:  config.color,
-                    }}
-                  />
-                </MapLibreGL.ShapeSource>
+                <Circle
+                  center={{ latitude: contribution.latitude, longitude: contribution.longitude }}
+                  radius={config.circleRadius}
+                  fillColor={`${config.color}20`}
+                  strokeColor={config.color}
+                  strokeWidth={1}
+                />
               )}
 
-              <MapLibreGL.PointAnnotation
-                id={`contrib-${contribution.id}`}
-                coordinate={[contribution.longitude, contribution.latitude]}
-                onSelected={() => handleMarkerPress(contribution)}
+              <Marker
+                coordinate={{ latitude: contribution.latitude, longitude: contribution.longitude }}
+                onPress={() => handleMarkerPress(contribution)}
               >
                 <View style={styles.markerWrapper}>
                   <View style={[styles.markerContainer, { backgroundColor: config.color }]}>
@@ -176,18 +167,18 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
                   </View>
                   <View style={[styles.markerTip, { borderTopColor: config.color }]} />
                 </View>
-              </MapLibreGL.PointAnnotation>
+              </Marker>
             </React.Fragment>
           );
         })}
-      </MapLibreGL.MapView>
+      </MapView>
 
       {/* Floating controls */}
       <View style={styles.controls}>
-        <TouchableOpacity style={[styles.controlButton, { backgroundColor: WW.bgElevated }]} onPress={handleCenterUser}>
+        <TouchableOpacity style={[styles.controlButton, { backgroundColor: WW.bgElevated, borderColor: WW.border }]} onPress={handleCenterUser}>
           <Ionicons name="locate" size={22} color={WW.orange} />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.controlButton, { backgroundColor: WW.bgElevated }]} onPress={refetch} disabled={alertsLoading}>
+        <TouchableOpacity style={[styles.controlButton, { backgroundColor: WW.bgElevated, borderColor: WW.border }]} onPress={refetch} disabled={alertsLoading}>
           {alertsLoading
             ? <ActivityIndicator size="small" color={WW.orange} />
             : <Ionicons name="refresh" size={22} color={WW.orange} />}
@@ -217,7 +208,7 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
 
 const styles = StyleSheet.create({
   container:        { flex: 1 },
-  loadingContainer: { justifyContent: 'center', alignItems: 'center', backgroundColor: WW.bg },
+  loadingContainer: { justifyContent: 'center', alignItems: 'center' },
   loadingText:      { marginTop: SPACING.MD, fontSize: FONT_SIZES.BODY },
   map:              { width: '100%', height: '100%' },
 
@@ -232,7 +223,7 @@ const styles = StyleSheet.create({
   verifiedBadge: {
     position: 'absolute', top: -4, right: -4,
     width: 14, height: 14, borderRadius: 7,
-    backgroundColor: WW.green,
+    backgroundColor: '#5DBB63',
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: '#FFFFFF',
   },
@@ -249,7 +240,7 @@ const styles = StyleSheet.create({
   controlButton: {
     width: 46, height: 46, borderRadius: 23,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: WW.border,
+    borderWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2, shadowRadius: 4, elevation: 4,
   },

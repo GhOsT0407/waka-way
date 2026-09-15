@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { Colors } from '../theme/colors';
+import { useAppTheme } from '../context/ThemeContext';
+import type { WWColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 import {
   FavoritePlace,
@@ -43,6 +44,8 @@ interface AddPlaceForm {
 }
 
 export default function YouScreen({ navigation }: any) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const { user, logout } = useAuth();
 
   const [activeTab, setActiveTab]         = useState<Tab>('history');
@@ -252,7 +255,7 @@ export default function YouScreen({ navigation }: any) {
                 <View style={styles.cardMeta}>
                   {!!item.total_duration_mins && (
                     <View style={styles.metaChip}>
-                      <Ionicons name="time-outline" size={11} color={Colors.textSecondary} />
+                      <Ionicons name="time-outline" size={11} color={WW.textSub} />
                       <Text style={styles.metaText}>{formatDuration(item.total_duration_mins)}</Text>
                     </View>
                   )}
@@ -263,16 +266,16 @@ export default function YouScreen({ navigation }: any) {
                   )}
                   {(item.transport_modes ?? []).length > 0 && (
                     <View style={styles.metaChip}>
-                      <Ionicons name="bus-outline" size={11} color={Colors.textSecondary} />
+                      <Ionicons name="bus-outline" size={11} color={WW.textSub} />
                       <Text style={styles.metaText}>{(item.transport_modes ?? []).join(', ')}</Text>
                     </View>
                   )}
                 </View>
               </View>
               <View style={styles.cardRight}>
-                <Text style={styles.cardDate}>{formatDate(item.started_at)}</Text>
+                <Text style={styles.cardDate}>{formatDate(item.created_at)}</Text>
                 <TouchableOpacity onPress={() => handleDeleteHistory(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="trash-outline" size={18} color={Colors.textSecondary} />
+                  <Ionicons name="trash-outline" size={18} color={WW.textSub} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -281,7 +284,7 @@ export default function YouScreen({ navigation }: any) {
         ListEmptyComponent={
           !loading ? (
             <View style={styles.empty}>
-              <Ionicons name="navigate-outline" size={44} color={Colors.textSecondary} />
+              <Ionicons name="navigate-outline" size={44} color={WW.textSub} />
               <Text style={styles.emptyTitle}>No trips yet</Text>
               <Text style={styles.emptySub}>Your journey history will appear here</Text>
             </View>
@@ -306,7 +309,7 @@ export default function YouScreen({ navigation }: any) {
               <View style={styles.cardMeta}>
                 {!!item.total_duration_mins && (
                   <View style={styles.metaChip}>
-                    <Ionicons name="time-outline" size={11} color={Colors.textSecondary} />
+                    <Ionicons name="time-outline" size={11} color={WW.textSub} />
                     <Text style={styles.metaText}>{formatDuration(item.total_duration_mins)}</Text>
                   </View>
                 )}
@@ -318,7 +321,7 @@ export default function YouScreen({ navigation }: any) {
               </View>
             </View>
             <TouchableOpacity onPress={() => handleDeleteSaved(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="trash-outline" size={18} color={Colors.textSecondary} />
+              <Ionicons name="trash-outline" size={18} color={WW.textSub} />
             </TouchableOpacity>
           </View>
         </View>
@@ -326,7 +329,7 @@ export default function YouScreen({ navigation }: any) {
       ListEmptyComponent={
         !loading ? (
           <View style={styles.empty}>
-            <Ionicons name="heart-outline" size={44} color={Colors.textSecondary} />
+            <Ionicons name="heart-outline" size={44} color={WW.textSub} />
             <Text style={styles.emptyTitle}>No saved routes</Text>
             <Text style={styles.emptySub}>Tap ♥ on a route to save it here</Text>
           </View>
@@ -339,8 +342,8 @@ export default function YouScreen({ navigation }: any) {
     <>
       {/* Home */}
       <View style={styles.placeRow}>
-        <View style={[styles.placeIcon, { backgroundColor: Colors.blueLight }]}>
-          <Ionicons name="home" size={20} color={Colors.homeGreen} />
+        <View style={[styles.placeIcon, { backgroundColor: WW.orangeDim }]}>
+          <Ionicons name="home" size={20} color={WW.keke} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.placeLabel}>Home</Text>
@@ -375,13 +378,13 @@ export default function YouScreen({ navigation }: any) {
       <View style={styles.favHeader}>
         <Text style={styles.favTitle}>Favorite Places</Text>
         <TouchableOpacity onPress={() => openAddPlace('favorite')}>
-          <Ionicons name="add-circle-outline" size={22} color={Colors.blue} />
+          <Ionicons name="add-circle-outline" size={22} color={WW.orange} />
         </TouchableOpacity>
       </View>
 
       {otherFaves.length === 0 ? (
         <View style={[styles.empty, { paddingTop: 20 }]}>
-          <Ionicons name="bookmark-outline" size={36} color={Colors.textSecondary} />
+          <Ionicons name="bookmark-outline" size={36} color={WW.textSub} />
           <Text style={[styles.emptySub, { marginTop: 8 }]}>Add your favorite Lagos spots</Text>
         </View>
       ) : (
@@ -397,7 +400,7 @@ export default function YouScreen({ navigation }: any) {
               ) : null}
             </View>
             <TouchableOpacity onPress={() => handleDeletePlace(fp.id, fp.name)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="trash-outline" size={18} color={Colors.textSecondary} />
+              <Ionicons name="trash-outline" size={18} color={WW.textSub} />
             </TouchableOpacity>
           </View>
         ))
@@ -412,21 +415,21 @@ export default function YouScreen({ navigation }: any) {
   })();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.container}>
       <StatusBar style="light" />
 
       {/* Top nav row */}
       <View style={styles.topNav}>
         <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')} accessibilityLabel="Close">
-          <Ionicons name="chevron-down" size={22} color={Colors.textPrimary} />
+          <Ionicons name="chevron-down" size={22} color={WW.text} />
         </TouchableOpacity>
         <Text style={styles.topNavTitle}>Profile</Text>
         <View style={styles.topNavRight}>
           <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Preferences')}>
-            <Ionicons name="settings-outline" size={19} color={Colors.textPrimary} />
+            <Ionicons name="settings-outline" size={19} color={WW.text} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={19} color={Colors.textPrimary} />
+            <Ionicons name="log-out-outline" size={19} color={WW.text} />
           </TouchableOpacity>
         </View>
       </View>
@@ -486,12 +489,12 @@ export default function YouScreen({ navigation }: any) {
       {/* Content */}
       {loading && history.length === 0 && savedRoutes.length === 0 && favPlaces.length === 0 ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={Colors.blue} />
+          <ActivityIndicator size="large" color={WW.orange} />
         </View>
       ) : (
         <ScrollView
           contentContainerStyle={styles.content}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.blue} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={WW.orange} />}
         >
           {activeTab === 'history' && renderHistoryTab()}
           {activeTab === 'saved'   && renderSavedTab()}
@@ -507,7 +510,7 @@ export default function YouScreen({ navigation }: any) {
               {addForm.type === 'home' ? 'Set Home' : addForm.type === 'work' ? 'Set Work' : 'Add Favorite'}
             </Text>
             <TouchableOpacity onPress={() => setShowAddPlace(false)}>
-              <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              <Ionicons name="close" size={24} color={WW.text} />
             </TouchableOpacity>
           </View>
 
@@ -519,27 +522,27 @@ export default function YouScreen({ navigation }: any) {
                 value={addForm.label}
                 onChangeText={(t) => setAddForm((p) => ({ ...p, label: t }))}
                 placeholder="Give it a name"
-                placeholderTextColor={Colors.textTertiary}
+                placeholderTextColor={WW.textMuted}
               />
             </View>
           )}
 
           <View style={styles.searchWrap}>
-            <Ionicons name="search-outline" size={18} color={Colors.textSecondary} />
+            <Ionicons name="search-outline" size={18} color={WW.textSub} />
             <TextInput
               style={styles.searchField}
               value={addForm.query}
               onChangeText={(t) => setAddForm((p) => ({ ...p, query: t }))}
               placeholder="Search for a place in Lagos..."
-              placeholderTextColor={Colors.textTertiary}
+              placeholderTextColor={WW.textMuted}
               autoFocus={addForm.type !== 'favorite'}
             />
-            {searchingPlace && <ActivityIndicator size="small" color={Colors.blue} />}
+            {searchingPlace && <ActivityIndicator size="small" color={WW.orange} />}
           </View>
 
           {savingPlace ? (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={Colors.blue} />
+              <ActivityIndicator size="large" color={WW.orange} />
               <Text style={[styles.emptySub, { marginTop: 8 }]}>Saving...</Text>
             </View>
           ) : (
@@ -549,7 +552,7 @@ export default function YouScreen({ navigation }: any) {
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.suggestionItem} onPress={() => handlePlaceSuggestionSelect(item)}>
-                  <Ionicons name="location-outline" size={18} color={Colors.blue} style={{ marginRight: 10 }} />
+                  <Ionicons name="location-outline" size={18} color={WW.orange} style={{ marginRight: 10 }} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.suggName}>{item.name}</Text>
                     {!!item.address && <Text style={styles.suggAddr}>{item.address}</Text>}
@@ -571,8 +574,9 @@ export default function YouScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.mapBackground },
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: WW.bg },
 
   // Top nav
   topNav: {
@@ -581,7 +585,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
-  topNavTitle: { flex: 1, textAlign: 'center', fontSize: Typography.lg, fontWeight: Typography.semibold, color: Colors.textPrimary, letterSpacing: -0.3 },
+  topNavTitle: { flex: 1, textAlign: 'center', fontSize: Typography.lg, fontWeight: Typography.semibold, color: WW.text, letterSpacing: -0.3 },
   topNavRight: { flexDirection: 'row', gap: 6 },
 
   // Profile hero
@@ -590,49 +594,49 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
+    borderBottomColor: WW.border,
   },
   avatarWrap: { marginBottom: 14 },
   avatarRing: {
     width: 88, height: 88, borderRadius: 44,
-    borderWidth: 2.5, borderColor: Colors.blue,
+    borderWidth: 2.5, borderColor: WW.orange,
     alignItems: 'center', justifyContent: 'center',
     padding: 3,
   },
   avatar: {
     width: 76, height: 76, borderRadius: 38,
-    backgroundColor: Colors.blue,
+    backgroundColor: WW.orange,
     alignItems: 'center', justifyContent: 'center',
   },
   avatarText: { fontSize: 32, fontWeight: Typography.bold, color: '#fff' },
-  profileName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: Colors.textPrimary, letterSpacing: -0.5, marginBottom: 4 },
-  profileEmail: { fontSize: Typography.sm, color: Colors.textSecondary, marginBottom: 3 },
-  profileSince: { fontSize: Typography.xs, color: Colors.textTertiary, marginBottom: 20 },
+  profileName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: WW.text, letterSpacing: -0.5, marginBottom: 4 },
+  profileEmail: { fontSize: Typography.sm, color: WW.textSub, marginBottom: 3 },
+  profileSince: { fontSize: Typography.xs, color: WW.textMuted, marginBottom: 20 },
 
   // Stats strip
   statsStrip: {
     flexDirection: 'row',
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: WW.bgElevated,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     paddingVertical: 14,
     paddingHorizontal: 8,
     alignSelf: 'stretch',
   },
   statItem:   { flex: 1, alignItems: 'center' },
-  statNum:    { fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.textPrimary, letterSpacing: -0.5 },
-  statLabel:  { fontSize: Typography.xs, color: Colors.textSecondary, marginTop: 2 },
-  statDivider:{ width: 1, backgroundColor: Colors.border, marginVertical: 4 },
+  statNum:    { fontSize: Typography.xl, fontWeight: Typography.bold, color: WW.text, letterSpacing: -0.5 },
+  statLabel:  { fontSize: Typography.xs, color: WW.textSub, marginTop: 2 },
+  statDivider:{ width: 1, backgroundColor: WW.border, marginVertical: 4 },
 
   // Tabs
-  tabsWrap: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.sheetBg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.border },
+  tabsWrap: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: WW.bgSurface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: WW.border },
   tabs: {
     flexDirection: 'row',
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: WW.bgElevated,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     padding: 3,
     gap: 2,
   },
@@ -643,15 +647,15 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 10,
   },
-  tabActive: { backgroundColor: Colors.blue },
-  tabText:       { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.textSecondary },
+  tabActive: { backgroundColor: WW.orange },
+  tabText:       { fontSize: Typography.sm, fontWeight: Typography.semibold, color: WW.textSub },
   tabTextActive: { color: '#fff' },
   content: { paddingBottom: 40 },
   iconBtn: {
     width: 36, height: 36, borderRadius: 18,
     justifyContent: 'center', alignItems: 'center',
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: WW.bgElevated,
+    borderWidth: 1, borderColor: WW.border,
   },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   clearBtn: { alignSelf: 'flex-end', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 0 },
@@ -662,21 +666,21 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceElevated,
+    borderColor: WW.border,
+    backgroundColor: WW.bgElevated,
   },
   cardRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  cardTitle:     { fontSize: Typography.md, fontWeight: Typography.bold, color: Colors.textPrimary },
-  cardSub:       { fontSize: Typography.sm, marginTop: 2, color: Colors.textSecondary },
+  cardTitle:     { fontSize: Typography.md, fontWeight: Typography.bold, color: WW.text },
+  cardSub:       { fontSize: Typography.sm, marginTop: 2, color: WW.textSub },
   cardMeta:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   metaChip:      { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  metaText:      { fontSize: Typography.sm, color: Colors.textSecondary },
-  metaTextBlue:  { fontSize: Typography.sm, color: Colors.blue },
+  metaText:      { fontSize: Typography.sm, color: WW.textSub },
+  metaTextBlue:  { fontSize: Typography.sm, color: WW.orange },
   cardRight:     { alignItems: 'flex-end', gap: 8 },
-  cardDate:      { fontSize: Typography.sm, color: Colors.textSecondary },
+  cardDate:      { fontSize: Typography.sm, color: WW.textSub },
   empty: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 },
-  emptyTitle: { fontSize: Typography.xl, fontWeight: Typography.semibold, marginTop: 14, color: Colors.textPrimary },
-  emptySub:   { fontSize: Typography.md, textAlign: 'center', marginTop: 8, color: Colors.textSecondary },
+  emptyTitle: { fontSize: Typography.xl, fontWeight: Typography.semibold, marginTop: 14, color: WW.text },
+  emptySub:   { fontSize: Typography.md, textAlign: 'center', marginTop: 8, color: WW.textSub },
   // Places tab
   placeRow: {
     flexDirection: 'row',
@@ -685,14 +689,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.divider,
+    borderBottomColor: WW.divider,
   },
   placeIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  placeLabel:   { fontSize: Typography.xs, fontWeight: Typography.bold, textTransform: 'uppercase', letterSpacing: 0.5, color: Colors.textSecondary },
-  placeName:    { fontSize: Typography.md, fontWeight: Typography.semibold, marginTop: 1, color: Colors.textPrimary },
-  placeAddress: { fontSize: Typography.sm, marginTop: 1, color: Colors.textSecondary },
+  placeLabel:   { fontSize: Typography.xs, fontWeight: Typography.bold, textTransform: 'uppercase', letterSpacing: 0.5, color: WW.textSub },
+  placeName:    { fontSize: Typography.md, fontWeight: Typography.semibold, marginTop: 1, color: WW.text },
+  placeAddress: { fontSize: Typography.sm, marginTop: 1, color: WW.textSub },
   placeEditBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: 'rgba(34,197,94,0.1)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)' },
-  placeEditText: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.blue },
+  placeEditText: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: WW.orange },
   favHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -700,12 +704,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.divider,
+    borderBottomColor: WW.divider,
     marginTop: 8,
   },
-  favTitle: { fontSize: Typography.md, fontWeight: Typography.bold, color: Colors.textPrimary },
+  favTitle: { fontSize: Typography.md, fontWeight: Typography.bold, color: WW.text },
   // Modal
-  modal: { flex: 1, backgroundColor: Colors.mapBackground },
+  modal: { flex: 1, backgroundColor: WW.bg },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -713,25 +717,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-    backgroundColor: Colors.sheetBg,
+    borderBottomColor: WW.border,
+    backgroundColor: WW.bgSurface,
   },
-  modalTitle: { fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.textPrimary },
+  modalTitle: { fontSize: Typography.xl, fontWeight: Typography.bold, color: WW.text },
   labelInput: {
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.divider,
+    borderBottomColor: WW.divider,
   },
-  labelHint: { fontSize: Typography.sm, marginBottom: 8, color: Colors.textSecondary },
+  labelHint: { fontSize: Typography.sm, marginBottom: 8, color: WW.textSub },
   labelField: {
     fontSize: Typography.md,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     borderRadius: 10,
     padding: 10,
-    color: Colors.textPrimary,
-    backgroundColor: Colors.surfaceElevated,
+    color: WW.text,
+    backgroundColor: WW.bgElevated,
   },
   searchWrap: {
     flexDirection: 'row',
@@ -740,18 +744,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.divider,
-    backgroundColor: Colors.sheetBg,
+    borderBottomColor: WW.divider,
+    backgroundColor: WW.bgSurface,
   },
-  searchField: { flex: 1, fontSize: Typography.md, color: Colors.textPrimary },
+  searchField: { flex: 1, fontSize: Typography.md, color: WW.text },
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.divider,
+    borderBottomColor: WW.divider,
   },
-  suggName: { fontSize: Typography.md, fontWeight: Typography.semibold, color: Colors.textPrimary },
-  suggAddr: { fontSize: Typography.sm, marginTop: 2, color: Colors.textSecondary },
+  suggName: { fontSize: Typography.md, fontWeight: Typography.semibold, color: WW.text },
+  suggAddr: { fontSize: Typography.sm, marginTop: 2, color: WW.textSub },
 });
+}

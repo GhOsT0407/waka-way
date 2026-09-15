@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { LightColors } from '../theme/colors';
+import { useAppTheme } from '../context/ThemeContext';
+import type { WWColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 
-const C = LightColors;
 
 function PressableButton({ onPress, disabled, style, children }: {
   onPress: () => void; disabled?: boolean; style?: any; children: React.ReactNode;
@@ -41,6 +41,8 @@ function PressableButton({ onPress, disabled, style, children }: {
 function FocusField({ icon, children, right }: {
   icon: string; children: React.ReactNode; right?: React.ReactNode;
 }) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const [focused, setFocused] = useState(false);
   const borderAnim = useRef(new Animated.Value(0)).current;
 
@@ -55,12 +57,12 @@ function FocusField({ icon, children, right }: {
 
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [C.divider, C.accent],
+    outputRange: [WW.divider, WW.orange],
   });
 
   return (
     <Animated.View style={[styles.field, { borderColor, borderWidth: 1.5 }]}>
-      <Ionicons name={icon as any} size={18} color={focused ? C.accent : C.textMuted} />
+      <Ionicons name={icon as any} size={18} color={focused ? WW.orange : WW.textMuted} />
       {React.Children.map(children, child =>
         React.isValidElement(child)
           ? React.cloneElement(child as React.ReactElement<any>, { onFocus: handleFocus, onBlur: handleBlur })
@@ -72,6 +74,8 @@ function FocusField({ icon, children, right }: {
 }
 
 export default function SignupScreen({ navigation }: any) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const { signup } = useAuth();
   const { showError, showWarning, showSuccess, showInfo } = useToast();
   const [name, setName] = useState('');
@@ -108,7 +112,7 @@ export default function SignupScreen({ navigation }: any) {
 
   const eyeBtn = (
     <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={C.textMuted} />
+      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={WW.textMuted} />
     </TouchableOpacity>
   );
 
@@ -121,13 +125,13 @@ export default function SignupScreen({ navigation }: any) {
           <View style={styles.header}>
             <TouchableOpacity style={styles.backBtn} onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Login')} activeOpacity={0.7}>
               <View style={styles.backCircle}>
-                <Ionicons name="chevron-back" size={20} color={C.textPrimary} />
+                <Ionicons name="chevron-back" size={20} color={WW.text} />
               </View>
             </TouchableOpacity>
             <View style={styles.logoGlow} />
             <View style={styles.logoRing}>
               <View style={styles.logoInner}>
-                <Ionicons name="person-add-outline" size={30} color={C.accent} />
+                <Ionicons name="person-add-outline" size={30} color={WW.orange} />
               </View>
             </View>
             <Text style={styles.appName}>Join WakaWay</Text>
@@ -141,7 +145,7 @@ export default function SignupScreen({ navigation }: any) {
             <FocusField icon="person-outline">
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Full Name" placeholderTextColor={C.textMuted}
+                placeholder="Full Name" placeholderTextColor={WW.textMuted}
                 value={name} onChangeText={setName}
                 autoCapitalize="words" autoCorrect={false} returnKeyType="next"
               />
@@ -150,7 +154,7 @@ export default function SignupScreen({ navigation }: any) {
             <FocusField icon="mail-outline">
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Email" placeholderTextColor={C.textMuted}
+                placeholder="Email" placeholderTextColor={WW.textMuted}
                 value={email} onChangeText={setEmail}
                 keyboardType="email-address" autoCapitalize="none" autoCorrect={false} returnKeyType="next"
               />
@@ -159,7 +163,7 @@ export default function SignupScreen({ navigation }: any) {
             <FocusField icon="lock-closed-outline" right={eyeBtn}>
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Password" placeholderTextColor={C.textMuted}
+                placeholder="Password" placeholderTextColor={WW.textMuted}
                 value={password} onChangeText={setPassword}
                 secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} returnKeyType="next"
               />
@@ -168,7 +172,7 @@ export default function SignupScreen({ navigation }: any) {
             <FocusField icon="lock-closed-outline">
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Confirm Password" placeholderTextColor={C.textMuted}
+                placeholder="Confirm Password" placeholderTextColor={WW.textMuted}
                 value={confirmPassword} onChangeText={setConfirmPassword}
                 secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false}
                 returnKeyType="done" onSubmitEditing={handleSignup}
@@ -194,8 +198,9 @@ export default function SignupScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: WW.bg },
   scroll: { flexGrow: 1, paddingBottom: 32 },
 
   header: {
@@ -203,7 +208,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 36,
     gap: 6,
-    backgroundColor: C.bg,
+    backgroundColor: WW.bg,
   },
   backBtn: {
     alignSelf: 'flex-start',
@@ -214,9 +219,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: C.surfaceSecondary,
+    backgroundColor: WW.bgElevated,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: C.divider,
+    borderColor: WW.divider,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -226,7 +231,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: C.accentSubtle,
+    backgroundColor: WW.orangeDim,
   },
   logoRing: {
     width: 76,
@@ -247,8 +252,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  appName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: C.textPrimary, letterSpacing: -0.5 },
-  tagline: { fontSize: Typography.md, color: C.textSecondary },
+  appName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: WW.text, letterSpacing: -0.5 },
+  tagline: { fontSize: Typography.md, color: WW.textSub },
 
   card: {
     marginHorizontal: 20,
@@ -256,15 +261,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     gap: 14,
-    backgroundColor: C.surface,
+    backgroundColor: WW.bgSurface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: C.divider,
+    borderColor: WW.divider,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12 },
       android: { elevation: 3 },
     }),
   },
-  formHeading: { fontSize: Typography.xl, fontWeight: Typography.bold, marginBottom: 4, color: C.textPrimary },
+  formHeading: { fontSize: Typography.xl, fontWeight: Typography.bold, marginBottom: 4, color: WW.text },
 
   field: {
     flexDirection: 'row',
@@ -273,13 +278,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 13,
     gap: 10,
-    backgroundColor: C.surfaceSecondary,
+    backgroundColor: WW.bgElevated,
   },
   fieldInput: {
     flex: 1,
     fontSize: Typography.lg,
     paddingVertical: 0,
-    color: C.textPrimary,
+    color: WW.text,
   },
 
   primaryBtn: {
@@ -287,13 +292,13 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
     marginTop: 4,
-    backgroundColor: C.accent,
+    backgroundColor: WW.orange,
     ...Platform.select({
-      ios: { shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 },
+      ios: { shadowColor: WW.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 },
       android: { elevation: 5 },
     }),
   },
-  primaryBtnText: { color: C.textOnAccent, fontSize: Typography.lg, fontWeight: Typography.semibold },
+  primaryBtnText: { color: WW.textOnOrange, fontSize: Typography.lg, fontWeight: Typography.semibold },
 
   loginRow: {
     flexDirection: 'row',
@@ -302,6 +307,7 @@ const styles = StyleSheet.create({
     marginTop: 28,
     paddingHorizontal: 20,
   },
-  loginPrompt: { fontSize: Typography.md, color: C.textSecondary },
-  loginLink: { fontSize: Typography.md, fontWeight: Typography.semibold, color: C.accent },
+  loginPrompt: { fontSize: Typography.md, color: WW.textSub },
+  loginLink: { fontSize: Typography.md, fontWeight: Typography.semibold, color: WW.orange },
 });
+}

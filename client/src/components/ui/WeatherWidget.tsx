@@ -1,7 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../theme/colors';
+import { useAppTheme } from '../../context/ThemeContext';
+import type { WWColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
 
 const ICON_MAP = { sunny: 'sunny', cloudy: 'cloudy', rainy: 'rainy' } as const;
@@ -12,6 +13,8 @@ interface Props {
 }
 
 export default function WeatherWidget({ temp, condition = 'cloudy' }: Props) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const scale = useRef(new Animated.Value(1)).current;
   const cfg   = { damping: 20, stiffness: 400, useNativeDriver: true };
 
@@ -25,20 +28,21 @@ export default function WeatherWidget({ temp, condition = 'cloudy' }: Props) {
         accessibilityRole="button"
         style={styles.inner}
       >
-        <Ionicons name={ICON_MAP[condition] as any} size={18} color={Colors.textPrimary} style={{ marginRight: 4 }} />
+        <Ionicons name={ICON_MAP[condition] as any} size={18} color={WW.text} style={{ marginRight: 4 }} />
         <Text style={styles.temp}>{temp}°</Text>
       </TouchableOpacity>
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
   container: {
     alignSelf: 'flex-start',
     borderRadius: 20,
-    backgroundColor: Colors.weatherBg,
+    backgroundColor: WW.bgElevated,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
@@ -52,9 +56,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   temp: {
-    color: Colors.textPrimary,
+    color: WW.text,
     fontSize: Typography.lg,
     fontWeight: Typography.semibold,
     letterSpacing: -0.3,
   },
 });
+}

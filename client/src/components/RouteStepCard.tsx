@@ -20,7 +20,7 @@ interface RouteStepCardProps {
 }
 
 export const RouteStepCard = ({ step, isLast }: RouteStepCardProps) => {
-    const { theme } = useAppTheme();
+    const { WW } = useAppTheme();
     const getIcon = (mode: string, instruction: string) => {
         const lowerMode = mode.toLowerCase();
         const lowerInstr = instruction.toLowerCase();
@@ -36,10 +36,10 @@ export const RouteStepCard = ({ step, isLast }: RouteStepCardProps) => {
 
     const getColor = (mode: string) => {
         switch (mode) {
-            case TRANSPORT_MODES.BUS: return theme.PRIMARY;
-            case TRANSPORT_MODES.WALK: return theme.INFO;
-            case TRANSPORT_MODES.OKADA: return theme.ACCENT;
-            default: return theme.SECONDARY;
+            case TRANSPORT_MODES.BUS: return WW.orange;
+            case TRANSPORT_MODES.WALK: return WW.brt;
+            case TRANSPORT_MODES.OKADA: return WW.orange;
+            default: return WW.orangeGlow;
         }
     };
 
@@ -48,32 +48,32 @@ export const RouteStepCard = ({ step, isLast }: RouteStepCardProps) => {
             {/* Timeline Section */}
             <View style={styles.timelineContainer}>
                 <View style={[styles.iconContainer, { backgroundColor: getColor(step.mode) }]}>
-                    <MaterialCommunityIcons name={getIcon(step.mode, step.instruction) as any} size={16} color={theme.WHITE} />
+                    <MaterialCommunityIcons name={getIcon(step.mode, step.instruction) as any} size={16} color="#FFFFFF" />
                 </View>
                 {!isLast && <View style={styles.line} />}
             </View>
 
             {/* Content Section */}
             <View style={styles.contentContainer}>
-                <Text style={[styles.instruction, { color: theme.TEXT }]}>{step.instruction}</Text>
+                <Text style={[styles.instruction, { color: WW.text }]}>{step.instruction}</Text>
 
                 <View style={styles.metaContainer}>
                     <View style={styles.metaItem}>
-                        <Ionicons name="time-outline" size={14} color={theme.TEXT_SECONDARY} />
-                        <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]}>{step.duration_mins} min</Text>
+                        <Ionicons name="time-outline" size={14} color={WW.textSub} />
+                        <Text style={[styles.metaText, { color: WW.textSub }]}>{step.duration_mins} min</Text>
                     </View>
 
                     {!!step.distance_km && (
                         <View style={styles.metaItem}>
-                            <Ionicons name="resize-outline" size={14} color={theme.TEXT_SECONDARY} />
-                            <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]}>{step.distance_km} km</Text>
+                            <Ionicons name="resize-outline" size={14} color={WW.textSub} />
+                            <Text style={[styles.metaText, { color: WW.textSub }]}>{step.distance_km} km</Text>
                         </View>
                     )}
 
                     {(step.fare ?? 0) > 0 && (
                         <View style={styles.metaItem}>
-                            <Ionicons name="wallet-outline" size={14} color={theme.TEXT_SECONDARY} />
-                            <Text style={[styles.metaText, { color: theme.TEXT_SECONDARY }]}>₦{step.fare}</Text>
+                            <Ionicons name="wallet-outline" size={14} color={WW.textSub} />
+                            <Text style={[styles.metaText, { color: WW.textSub }]}>₦{step.fare}</Text>
                         </View>
                     )}
                 </View>
