@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>WakaWay</title>
+<meta name="description" content="WakaWay routes you across Lagos on danfo, BRT, keke, okada and rail — with the fare before you enter the bus.">
+<meta property="og:title" content="WakaWay — Move Smart. Move Local.">
+<meta property="og:description" content="Know the fare before you enter the bus. Multi-modal Lagos routing across 209 stops.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#080D0B">
+<link rel="icon" href="client/assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;800&family=DM+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+
+    /* Palette — lifted from client/src/theme/colors.ts (WW v2) */
+    --bg:          #080D0B;
+    --surface:     #0F1610;
+    --elevated:    #162019;
+    --line:        rgba(240,245,242,0.09);
+    --line-strong: rgba(240,245,242,0.18);
+
+    --text:        #F0F5F2;
+    --text-sub:    rgba(240,245,242,0.62);
+    --text-muted:  rgba(240,245,242,0.38);
+
+    --danfo:       #F5C518;
+    --danfo-glow:  #F7D44A;
+    --danfo-dim:   rgba(245,197,24,0.14);
+    --green:       #5DBB63;
+    --green-dim:   rgba(93,187,99,0.14);
+    --brt:         #2563EB;
+    --okada:       #EF4444;
+    --rail:        #0EA5E9;
+    --ink:         #111111;
+
+    --sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+    --gutter: clamp(18px, 5vw, 44px);
+    --measure: 62ch;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  img { max-width: 100%; }
+
+  a { color: var(--danfo); text-decoration-color: rgba(245,197,24,0.35); text-underline-offset: 3px; }
+  a:hover { color: var(--danfo-glow); }
+
+  :focus-visible { outline: 2px solid var(--danfo); outline-offset: 3px; border-radius: 2px; }
+
+  .wrap {
+    width: 100%;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding-inline: var(--gutter);
+  }
+
+  /* ── The danfo stripe: yellow body, black hatch. The brand motif. ───────── */
+  .stripe {
+    height: 10px;
+    background: repeating-linear-gradient(
+      115deg,
+      var(--danfo) 0 22px,
+      var(--ink) 22px 30px
+    );
+  }
+
+  /* ── Nav ────────────────────────────────────────────────────────────────── */
+  .nav {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 20;
+    background: rgba(8,13,11,0.88);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    min-height: 64px;
+  }
+  .mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    font-size: 18px;
+    color: var(--text);
+    text-decoration: none;
+    margin-right: auto;
+  }
+  .mark:hover { color: var(--text); }
+  .mark-badge {
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    background: var(--danfo);
+    display: grid; place-items: center;
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .nav-links { display: flex; gap: 22px; }
+  .nav-links a {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-sub);
+    text-decoration: none;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .pill {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--green);
+    border: 1px solid rgba(93,187,99,0.4);
+    background: var(--green-dim);
+    border-radius: 999px;
+    padding: 5px 11px;
+    white-space: nowrap;
+  }
+  @media (max-width: 760px) { .nav-links { display: none; } }
+
+  /* ── Type system ────────────────────────────────────────────────────────── */
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--danfo);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(2.4rem, 5.6vw, 3.75rem);
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    font-weight: 800;
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+  h2 {
+    font-size: clamp(1.7rem, 3.4vw, 2.4rem);
+    line-height: 1.12;
+    letter-spacing: -0.028em;
+    font-weight: 800;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+  }
+  p { margin: 0 0 16px; max-width: var(--measure); }
+  .lede { font-size: clamp(16.5px, 1.9vw, 19px); color: var(--text-sub); }
+
+  section { padding-block: clamp(56px, 9vw, 104px); }
+  .section-head { margin-bottom: clamp(28px, 4vw, 44px); }
+
+  /* ── Hero ───────────────────────────────────────────────────────────────── */
+  .hero { padding-block: clamp(48px, 8vw, 92px) clamp(40px, 6vw, 72px); }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
+    gap: clamp(36px, 5vw, 64px);
+    align-items: center;
+  }
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } }
+
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 13px 20px;
+    border-radius: 11px;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: transform .14s ease, background-color .14s ease, border-color .14s ease;
+  }
+  .btn-primary { background: var(--danfo); color: var(--ink); }
+  .btn-primary:hover { background: var(--danfo-glow); color: var(--ink); transform: translateY(-1px); }
+  .btn-ghost { border-color: var(--line-strong); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--danfo); color: var(--text); transform: translateY(-1px); }
+
+  .hero-note {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin-top: 20px;
+  }
+
+  /* ── Route card: the app's SmartRouteOptions, on the web ────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    overflow: hidden;
+    animation: rise .5s cubic-bezier(.2,.7,.3,1) both;
+  }
+  @keyframes rise {
+    from { opacity: 0.001; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .od { flex: 1; min-width: 0; }
+  .od-row { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot-o { background: var(--text-muted); }
+  .dot-d { background: var(--green); }
+  .od-line {
+    width: 1px; height: 16px;
+    background: var(--line-strong);
+    margin-left: 3.5px;
+  }
+  .fare {
+    font-family: var(--mono);
+    font-size: 21px;
+    font-weight: 500;
+    color: var(--danfo);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .fare small { display: block; font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+
+  .legs { padding: 6px 20px 4px; }
+  .leg {
+    display: grid;
+    grid-template-columns: 74px 1fr auto;
+    gap: 14px;
+    align-items: start;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .leg:last-child { border-bottom: 0; }
+  .chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 5px 0;
+    border-radius: 6px;
+    text-align: center;
+    color: var(--ink);
+  }
+  .chip-walk  { background: rgba(240,245,242,0.12); color: var(--text); }
+  .chip-danfo { background: var(--danfo); }
+  .chip-brt   { background: var(--brt); color: #fff; }
+  .chip-keke  { background: var(--green); color: #fff; }
+  .chip-okada { background: var(--okada); color: #fff; }
+  .chip-rail  { background: var(--rail); color: #fff; }
+
+  .leg-body { min-width: 0; }
+  .leg-title { font-size: 14.5px; font-weight: 600; }
+  .leg-say {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--green);
+    margin-top: 4px;
+    overflow-wrap: anywhere;
+  }
+  .leg-meta {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-sub);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .card-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 20px;
+    background: var(--elevated);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-sub);
+  }
+  .tag {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+  }
+  .tag-easy { color: var(--green); border-color: rgba(93,187,99,0.45); background: var(--green-dim); }
+
+  .alts { display: grid; gap: 8px; margin-top: 10px; }
+  .alt {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(15,22,16,0.6);
+    font-size: 14px;
+  }
+  .alt-modes { display: flex; gap: 5px; flex: none; }
+  .alt-modes span { width: 10px; height: 10px; border-radius: 3px; }
+  .alt-name { flex: 1; min-width: 0; color: var(--text-sub); }
+  .alt-fare { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ── Problem band ───────────────────────────────────────────────────────── */
+  .band { background: var(--surface); border-block: 1px solid var(--line); }
+  .quote {
+    font-size: clamp(1.35rem, 3vw, 2rem);
+    line-height: 1.32;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    max-width: 22ch;
+    margin: 0;
+  }
+  .quote em { color: var(--danfo); font-style: normal; }
+  .band-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: clamp(28px, 5vw, 64px);
+    align-items: start;
+  }
+  @media (max-width: 820px) { .band-grid { grid-template-columns: 1fr; } }
+
+  /* ── Fare ledger ────────────────────────────────────────────────────────── */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+  table { border-collapse: collapse; width: 100%; min-width: 580px; }
+  caption { caption-side: bottom; text-align: left; padding: 12px 18px; font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+  th, td { padding: 13px 18px; text-align: left; border-bottom: 1px solid var(--line); }
+  thead th {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: var(--surface);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody td:first-child { font-weight: 600; }
+  .num {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 9px; vertical-align: 1px; }
+
+  /* ── Rules list (how it routes) ─────────────────────────────────────────── */
+  .rules { border-top: 1px solid var(--line); margin: 0; }
+  .rule {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: clamp(16px, 4vw, 48px);
+    padding: 22px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: baseline;
+  }
+  @media (max-width: 720px) { .rule { grid-template-columns: 1fr; gap: 6px; } }
+  .rule dt {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--danfo);
+  }
+  .rule dd { margin: 0; color: var(--text-sub); max-width: var(--measure); }
+  .rule dd b { color: var(--text); font-weight: 600; }
+
+  /* ── Reports ────────────────────────────────────────────────────────────── */
+  .report-list { display: grid; gap: 10px; max-width: 520px; }
+  .report {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .sev { width: 3px; align-self: stretch; border-radius: 2px; flex: none; }
+  .sev-hi { background: var(--okada); }
+  .sev-mid { background: var(--danfo); }
+  .sev-ok { background: var(--green); }
+  .report-body { flex: 1; min-width: 0; }
+  .report-where { font-size: 14.5px; font-weight: 600; }
+  .report-meta { font-family: var(--mono); font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .verdict {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .verdict-yes { color: var(--green); background: var(--green-dim); border: 1px solid rgba(93,187,99,0.35); }
+  .verdict-wait { color: var(--danfo); background: var(--danfo-dim); border: 1px solid rgba(245,197,24,0.3); }
+
+  /* ── Coverage numbers ───────────────────────────────────────────────────── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  @media (max-width: 720px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .stat { background: var(--bg); padding: 22px clamp(16px, 2.6vw, 26px); }
+  .stat-n {
+    font-family: var(--mono);
+    font-size: clamp(1.9rem, 4.4vw, 2.6rem);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+  .stat-l { font-size: 13.5px; color: var(--text-sub); margin-top: 4px; }
+  .corridors { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+  .corridor {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    color: var(--text-sub);
+    background: var(--surface);
+  }
+
+  /* ── Closing ────────────────────────────────────────────────────────────── */
+  .closing { text-align: center; }
+  .closing p { margin-inline: auto; }
+  .closing h2 { max-width: 16ch; margin-inline: auto; }
+  .closing .cta-row { justify-content: center; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-block: 36px calc(40px + env(safe-area-inset-bottom, 0px));
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .foot-grid { display: flex; flex-wrap: wrap; gap: 18px 32px; align-items: center; }
+  .foot-grid .mark { margin-right: auto; }
+  footer a { color: var(--text-sub); text-decoration: none; }
+  footer a:hover { color: var(--danfo); }
+  .tagline { font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--danfo); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stripe" role="presentation"></div>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="mark" href="#top"><span class="mark-badge" aria-hidden="true">W</span>WakaWay</a>
+    <div class="nav-links">
+      <a href="#routing">Routing</a>
+      <a href="#fares">Fares</a>
+      <a href="#reports">Reports</a>
+      <a href="#coverage">Coverage</a>
+    </div>
+    <span class="pill">Android beta</span>
+  </div>
+</nav>
+
+<header class="hero wrap" id="top">
+  <div class="hero-grid">
+    <div>
+      <p class="eyebrow">Lagos · danfo · BRT · keke · okada · rail</p>
+      <h1>Know the fare before you enter the bus.</h1>
+      <p class="lede">
+        Lagos has no transit API. Danfo routes live in people's heads, and the
+        fare is whatever the conductor says when you are already inside.
+        WakaWay works out the route, the fare range and the exact words to say —
+        before you leave the house.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#routing">See how it routes</a>
+        <a class="btn btn-ghost" href="#fares">Check the fares</a>
+      </div>
+      <p class="hero-note">Free · no ads · map tiles cached for offline use</p>
+    </div>
+
+    <div>
+      <article class="card" aria-label="Example route from Yaba to CMS">
+        <div class="card-top">
+          <div class="od">
+            <div class="od-row"><span class="dot dot-o" aria-hidden="true"></span>Yaba</div>
+            <div class="od-line" aria-hidden="true"></div>
+            <div class="od-row"><span class="dot dot-d" aria-hidden="true"></span>CMS</div>
+          </div>
+          <div class="fare">₦400 – ₦600<small>Total fare</small></div>
+        </div>
+
+        <div class="legs">
+          <div class="leg">
+            <span class="chip chip-walk">Walk</span>
+            <div class="leg-body">
+              <div class="leg-title">Yaba → Yaba BRT</div>
+              <div class="leg-say">“Waka from Yaba reach Yaba BRT”</div>
+            </div>
+            <div class="leg-meta">0.4 km · 6 min</div>
+          </div>
+          <div class="leg">
+            <span class="chip chip-brt">BRT</span>
+            <div class="leg-body">
+              <div class="leg-title">Yaba BRT → CMS</div>
+              <div class="leg-say">“Enter BRT for Yaba BRT busstop, come down for CMS”</div>
+            </div>
+            <div class="leg-meta">7.3 km · 16 min</div>
+          </div>
+          <div class="leg">
+            <span class="chip chip-walk">Walk</span>
+            <div class="leg-body">
+              <div class="leg-title">CMS Terminal → Marina</div>
+              <div class="leg-say">“Waka from CMS reach Marina”</div>
+            </div>
+            <div class="leg-meta">0.3 km · 5 min</div>
+          </div>
+        </div>
+
+        <div class="card-foot">
+          <span class="tag tag-easy">Easy</span>
+          <span>27 min door to door</span>
+          <span>·</span>
+          <span>1 transfer</span>
+        </div>
+      </article>
+
+      <div class="alts">
+        <div class="alt">
+          <div class="alt-modes" aria-hidden="true">
+            <span style="background:var(--green)"></span><span style="background:var(--danfo)"></span>
+          </div>
+          <span class="alt-name">Keke to Ojuelegba, danfo to CMS</span>
+          <span class="alt-fare">₦600 – ₦1,000</span>
+        </div>
+        <div class="alt">
+          <div class="alt-modes" aria-hidden="true">
+            <span style="background:var(--rail)"></span><span style="background:var(--danfo)"></span>
+          </div>
+          <span class="alt-name">Red Line to Oyingbo, danfo to CMS</span>
+          <span class="alt-fare">₦700 – ₦1,100</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="band">
+  <div class="wrap band-grid">
+    <p class="quote">Google Maps ends where <em>Lagos actually begins</em>.</p>
+    <div>
+      <p>
+        Type Yaba to CMS into any mainstream maps app and you get a driving line
+        and a bus icon that means nothing on the ground. It cannot tell you which
+        danfo park to stand in, what the conductor will charge at 6pm, or that
+        okada cannot legally carry you through Surulere.
+      </p>
+      <p>
+        WakaWay encodes that knowledge instead of pretending it is missing: 209
+        geocoded stops across the BRT spine, the Blue and Red Lines and the danfo
+        hubs, priced with 2025 Lagos fares and re-priced for peak hours, night
+        runs and the day's reported incidents.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="routing" class="wrap">
+  <div class="section-head">
+    <p class="eyebrow">How it routes</p>
+    <h2>It thinks like someone who has done the trip before.</h2>
+    <p class="lede">
+      The engine chains walk, keke, okada, danfo, BRT and rail into one journey,
+      then applies the rules Lagosians already apply without thinking.
+    </p>
+  </div>
+
+  <dl class="rules">
+    <div class="rule">
+      <dt>First-mile pivot</dt>
+      <dd>If the walk to the nearest stop runs past <b>1.2 km</b>, the route starts with a keke or okada instead of asking you to trek it.</dd>
+    </div>
+    <div class="rule">
+      <dt>Okada ban zones</dt>
+      <dd>Okada is never suggested inside the <b>ten LGAs</b> where Lagos State bans it — Ikeja, Lagos Island, Lagos Mainland, Eti-Osa, Apapa, Surulere, Mushin, Oshodi-Isolo, Kosofe and Somolu.</dd>
+    </div>
+    <div class="rule">
+      <dt>Peak and night pricing</dt>
+      <dd>Fares are re-priced for the rush windows — <b>7–9 am</b> and <b>5–8 pm</b> — and again for night runs, because the ₦300 morning drop is not a ₦300 drop at 9pm.</dd>
+    </div>
+    <div class="rule">
+      <dt>Incident avoidance</dt>
+      <dd>Routes bend around community-reported flooding, protests and breakdowns with a <b>300 m</b> buffer around the report.</dd>
+    </div>
+    <div class="rule">
+      <dt>Difficulty, stated plainly</dt>
+      <dd><b>Easy</b> is two transit legs or fewer, <b>Moderate</b> is three, <b>Complex</b> is four or more — so a newcomer can pay ₦200 more to avoid a triple transfer with luggage.</dd>
+    </div>
+    <div class="rule">
+      <dt>Pidgin per leg</dt>
+      <dd>Every leg carries the sentence that actually works at the park: <b>“Enter danfo for Ojuelegba side, tell conductor ‘CMS!’”</b></dd>
+    </div>
+  </dl>
+</section>
+
+<section id="fares" class="band">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Fare ledger · 2025 Lagos pricing</p>
+      <h2>The number you see is the number you pay.</h2>
+      <p class="lede">
+        Every mode is priced by distance band before you board, as a range — because
+        a danfo fare is a range, and pretending otherwise is how newcomers get charged double.
+      </p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <caption>Base fare bands per leg, before peak and night adjustment. Cruise speeds are what the engine uses to estimate leg time.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Mode</th>
+            <th scope="col">Short hop</th>
+            <th scope="col">Mid run</th>
+            <th scope="col">Long haul</th>
+            <th scope="col">Speed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="swatch" style="background:var(--danfo)"></span>Danfo</td>
+            <td class="num">₦200–400 <span style="color:var(--text-muted)">≤3 km</span></td>
+            <td class="num">₦300–500 <span style="color:var(--text-muted)">≤8 km</span></td>
+            <td class="num">₦500–900 <span style="color:var(--text-muted)">15 km+</span></td>
+            <td class="num">14 km/h</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--brt)"></span>BRT</td>
+            <td class="num">₦300–400 <span style="color:var(--text-muted)">≤5 km</span></td>
+            <td class="num">₦400–600 <span style="color:var(--text-muted)">≤15 km</span></td>
+            <td class="num">₦600–800 <span style="color:var(--text-muted)">15 km+</span></td>
+            <td class="num">28 km/h</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--rail)"></span>Rail</td>
+            <td class="num">₦300–400 <span style="color:var(--text-muted)">≤5 km</span></td>
+            <td class="num">₦400–600 <span style="color:var(--text-muted)">≤15 km</span></td>
+            <td class="num">₦500–700 <span style="color:var(--text-muted)">15 km+</span></td>
+            <td class="num">60 km/h</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--green)"></span>Keke</td>
+            <td class="num">₦300–500 <span style="color:var(--text-muted)">≤1.5 km</span></td>
+            <td class="num" colspan="2">₦400–800 <span style="color:var(--text-muted)">1.5 km+</span></td>
+            <td class="num">22 km/h</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--okada)"></span>Okada</td>
+            <td class="num">₦500–800 <span style="color:var(--text-muted)">≤2 km</span></td>
+            <td class="num" colspan="2">₦700–1,500 <span style="color:var(--text-muted)">2 km+</span></td>
+            <td class="num">30 km/h</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:rgba(240,245,242,0.3)"></span>Ride-hail</td>
+            <td class="num">₦1,500–2,500 <span style="color:var(--text-muted)">≤5 km</span></td>
+            <td class="num" colspan="2">₦2,000–4,000 <span style="color:var(--text-muted)">5 km+</span></td>
+            <td class="num">35 km/h</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="reports" class="wrap">
+  <div class="band-grid">
+    <div>
+      <p class="eyebrow">Community reports</p>
+      <h2>Riders report it. The app checks it.</h2>
+      <p>
+        Flooding at Ojuelegba, a protest on Ikorodu Road, a broken-down trailer at
+        Mile 2 — riders report what they are looking at, and every report is run
+        through AI verification before it is allowed to bend anyone's route.
+      </p>
+      <p>
+        Other riders confirm or dismiss it from the map, and a confirmed report
+        widens the 300 m avoidance buffer for everybody travelling that corridor.
+      </p>
+    </div>
+    <div class="report-list">
+      <div class="report">
+        <span class="sev sev-hi" aria-hidden="true"></span>
+        <div class="report-body">
+          <div class="report-where">Flooding · Ojuelegba under-bridge</div>
+          <div class="report-meta">12 confirms · 2 dismissals · 14 min ago</div>
+        </div>
+        <span class="verdict verdict-yes">Verified</span>
+      </div>
+      <div class="report">
+        <span class="sev sev-mid" aria-hidden="true"></span>
+        <div class="report-body">
+          <div class="report-where">Heavy traffic · Mile 2 → Orile</div>
+          <div class="report-meta">7 confirms · 1 dismissal · 31 min ago</div>
+        </div>
+        <span class="verdict verdict-yes">Verified</span>
+      </div>
+      <div class="report">
+        <span class="sev sev-ok" aria-hidden="true"></span>
+        <div class="report-body">
+          <div class="report-where">Fare correction · Yaba → Oshodi danfo</div>
+          <div class="report-meta">2 confirms · awaiting review</div>
+        </div>
+        <span class="verdict verdict-wait">Pending</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="coverage" class="band">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Coverage</p>
+      <h2>209 stops, geocoded by hand.</h2>
+      <p class="lede">
+        Built from LAMATA and Primero TSL corridor data, OpenStreetMap and riders
+        who actually use the parks.
+      </p>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-n">209</div><div class="stat-l">Stops with real coordinates</div></div>
+      <div class="stat"><div class="stat-n">164</div><div class="stat-l">Danfo hubs &amp; bus stops</div></div>
+      <div class="stat"><div class="stat-n">31</div><div class="stat-l">BRT stops on two corridors</div></div>
+      <div class="stat"><div class="stat-n">14</div><div class="stat-l">Blue &amp; Red Line stations</div></div>
+    </div>
+
+    <div class="corridors">
+      <span class="corridor">BRT · Ikorodu ↔ TBS/CMS · 22 km</span>
+      <span class="corridor">BRT · Abule-Egba ↔ Oshodi</span>
+      <span class="corridor">Blue Line · Mile 2 ↔ Marina</span>
+      <span class="corridor">Red Line · Oyingbo ↔ Agbado</span>
+      <span class="corridor">Danfo · 8 mainland &amp; island corridors</span>
+    </div>
+  </div>
+</section>
+
+<section class="wrap closing">
+  <p class="eyebrow">Move Smart. Move Local.</p>
+  <h2>Lagos is learnable. Start with the fare.</h2>
+  <p class="lede">
+    WakaWay is in Android beta ahead of its Play Store release. If you want in,
+    or you have fare data for a corridor we have priced wrong, say so.
+  </p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="mailto:davidokafor0407@gmail.com?subject=WakaWay%20beta">Ask for the beta</a>
+    <a class="btn btn-ghost" href="privacy-policy.html">Privacy policy</a>
+  </div>
+</section>
+
+<div class="stripe" role="presentation"></div>
+
+<footer>
+  <div class="wrap foot-grid">
+    <a class="mark" href="#top"><span class="mark-badge" aria-hidden="true">W</span>WakaWay</a>
+    <span class="tagline">Built in Lagos</span>
+    <a href="privacy-policy.html">Privacy</a>
+    <a href="mailto:davidokafor0407@gmail.com">Contact</a>
+  </div>
+</footer>
+
+</body>
+</html>
