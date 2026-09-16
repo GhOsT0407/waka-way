@@ -940,7 +940,7 @@ function makeStyles(WW: WW) {
 
   // ── Loading overlay ─────────────────────────────────────────────────────────
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: WW.scrim,
     alignItems: 'center',
     justifyContent: 'center',
@@ -971,7 +971,7 @@ function makeStyles(WW: WW) {
 
   // ── Search overlay — the canvas's Search screen, on the theme ground ──────
   searchOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 200,
   },
   overlayStripe: {

@@ -292,7 +292,7 @@ export default function NavigationScreen({ route, navigation }: any) {
       {/* Full-screen Google map */}
       <MapView
         ref={mapRef}
-        provider={PROVIDER_GOOGLE}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         style={StyleSheet.absoluteFill}
         customMapStyle={GOOGLE_MAPS_DARK_STYLE as any}
         showsCompass
@@ -605,7 +605,7 @@ function makeStyles(WW: WWColors) {
   endBtnText: { fontFamily: Fonts.bold, fontSize: Typography.lg, color: WW.bg },
 
   arrivedOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: WW.scrim,
     justifyContent: 'center', alignItems: 'center',
     padding: 24,
