@@ -33,7 +33,7 @@
     --danfo-dim:   rgba(245,197,24,0.14);
     --green:       #5DBB63;
     --green-dim:   rgba(93,187,99,0.14);
-    --brt:         #2563EB;
+    --brt:         #1E6FD9;
     --okada:       #EF4444;
     --rail:        #0EA5E9;
     --ink:         #111111;
@@ -212,126 +212,229 @@
     margin-top: 20px;
   }
 
-  /* ── Route card: the app's SmartRouteOptions, on the web ────────────────── */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 18px;
+  /* ── Device frames ───────────────────────────────────────────────────────── */
+  /* Screens are built at the app's real 393×852 with the canvas's own values,
+     then scaled by --k, so the site shows the design rather than a redraw. */
+  .phone-wrap {
+    width: calc(393px * var(--k));
+    height: calc(852px * var(--k));
+    flex: none;
+    filter: drop-shadow(0 26px 50px rgba(0,0,0,.5));
+  }
+  .phone {
+    width: 393px;
+    height: 852px;
+    border-radius: 38px;
     overflow: hidden;
-    animation: rise .5s cubic-bezier(.2,.7,.3,1) both;
+    position: relative;
+    transform: scale(var(--k));
+    transform-origin: top left;
+    font-family: var(--sans);
+    background: var(--pbg);
+    color: var(--pink);
   }
-  @keyframes rise {
-    from { opacity: 0.001; transform: translateY(14px); }
-    to   { opacity: 1; transform: none; }
+  .ph-light {
+    --pbg: #FBFAF8; --psurf: #FFFFFF; --pelev: #F2F1ED;
+    --pink: #14161A; --psub: #43464E; --pmut: #6B6E76;
+    --pbd: rgba(20,22,26,.10); --pdiv: rgba(20,22,26,.07); --pgrn: #1F7A3D;
   }
-  .card-top {
-    display: flex;
-    align-items: flex-start;
-    gap: 16px;
-    padding: 20px 20px 16px;
-    border-bottom: 1px solid var(--line);
+  .ph-dark {
+    --pbg: #14161A; --psurf: #17181C; --pelev: #1F2126;
+    --pink: #F2F1ED; --psub: #C7C6C1; --pmut: #8A8D95;
+    --pbd: rgba(242,241,237,.08); --pdiv: rgba(242,241,237,.06); --pgrn: #2E9E52;
   }
-  .od { flex: 1; min-width: 0; }
-  .od-row { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .dot-o { background: var(--text-muted); }
-  .dot-d { background: var(--green); }
-  .od-line {
-    width: 1px; height: 16px;
-    background: var(--line-strong);
-    margin-left: 3.5px;
-  }
-  .fare {
-    font-family: var(--mono);
-    font-size: 21px;
-    font-weight: 500;
-    color: var(--danfo);
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-  }
-  .fare small { display: block; font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
 
-  .legs { padding: 6px 20px 4px; }
-  .leg {
-    display: grid;
-    grid-template-columns: 74px 1fr auto;
-    gap: 14px;
-    align-items: start;
-    padding: 14px 0;
-    border-bottom: 1px solid var(--line);
-  }
-  .leg:last-child { border-bottom: 0; }
-  .chip {
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 5px 0;
-    border-radius: 6px;
-    text-align: center;
-    color: var(--ink);
-  }
-  .chip-walk  { background: rgba(240,245,242,0.12); color: var(--text); }
-  .chip-danfo { background: var(--danfo); }
-  .chip-brt   { background: var(--brt); color: #fff; }
-  .chip-keke  { background: var(--green); color: #fff; }
-  .chip-okada { background: var(--okada); color: #fff; }
-  .chip-rail  { background: var(--rail); color: #fff; }
-
-  .leg-body { min-width: 0; }
-  .leg-title { font-size: 14.5px; font-weight: 600; }
-  .leg-say {
-    font-family: var(--mono);
-    font-size: 12.5px;
-    color: var(--green);
-    margin-top: 4px;
-    overflow-wrap: anywhere;
-  }
-  .leg-meta {
-    font-family: var(--mono);
-    font-size: 12.5px;
-    color: var(--text-sub);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .card-foot {
+  .ph-status {
+    padding: 22px 26px 0;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
-    padding: 14px 20px;
-    background: var(--elevated);
-    font-family: var(--mono);
-    font-size: 12.5px;
-    color: var(--text-sub);
+    justify-content: space-between;
+    font: 700 11px var(--sans);
+    letter-spacing: 1.2px;
+    color: var(--pmut);
   }
-  .tag {
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 4px 9px;
+  .ph-head { padding: 22px 16px 10px; display: flex; align-items: center; gap: 12px; }
+  .ph-back {
+    width: 44px; height: 44px; flex: none;
     border-radius: 999px;
-    border: 1px solid var(--line-strong);
+    background: var(--pelev);
+    border: 1px solid var(--pbd);
+    display: grid; place-items: center;
+    color: var(--pink);
   }
-  .tag-easy { color: var(--green); border-color: rgba(93,187,99,0.45); background: var(--green-dim); }
+  .ph-eyebrow { font: 700 11px var(--sans); letter-spacing: .8px; color: var(--pmut); }
+  .ph-dest { font: 800 22px var(--sans); letter-spacing: -.4px; margin-top: 2px; }
 
-  .alts { display: grid; gap: 8px; margin-top: 10px; }
-  .alt {
+  .ph-fare {
+    margin: 10px 16px 0;
+    height: 96px;
+    border-radius: 20px;
+    background: var(--psurf);
+    border: 1px solid var(--pbd);
+    box-shadow: 0 10px 26px -18px rgba(0,0,0,.45);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 16px;
+  }
+  .ph-mode {
+    width: 44px; height: 44px; flex: none;
+    border-radius: 12px;
+    display: grid; place-items: center;
+    font: 800 11px var(--sans);
+  }
+  .ph-fare-main { flex: 1; min-width: 0; }
+  .ph-fare-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: nowrap; }
+  .ph-amount { font: 800 32px/1 var(--sans); letter-spacing: -1px; }
+  .ph-mins { font: 600 15px var(--sans); color: var(--psub); white-space: nowrap; }
+  .ph-sub { font: 400 13px var(--sans); color: var(--pmut); margin-top: 4px; }
+  .ph-status-tag { font: 700 13px var(--sans); color: var(--pgrn); flex: none; white-space: nowrap; }
+
+  .ph-label {
+    font: 700 11px var(--sans);
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    color: var(--pmut);
+    margin: 22px 16px 8px;
+  }
+  .ph-rows { display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
+  .ph-row {
+    min-height: 68px;
+    border-radius: 16px;
+    background: var(--psurf);
+    border: 1px solid var(--pbd);
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 16px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: rgba(15,22,16,0.6);
-    font-size: 14px;
+    padding: 12px 14px;
   }
-  .alt-modes { display: flex; gap: 5px; flex: none; }
-  .alt-modes span { width: 10px; height: 10px; border-radius: 3px; }
-  .alt-name { flex: 1; min-width: 0; color: var(--text-sub); }
-  .alt-fare { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ph-row-badge {
+    width: 40px; height: 40px; flex: none;
+    border-radius: 12px;
+    display: grid; place-items: center;
+    font: 800 10px var(--sans);
+  }
+  .ph-row-main { flex: 1; min-width: 0; }
+  .ph-row-head { font: 700 17px var(--sans); }
+  .ph-row-desc { font: 400 13px var(--sans); color: var(--pmut); margin-top: 2px; }
+  .ph-row-tag { font: 700 13px var(--sans); flex: none; }
+
+  .ph-legs { margin: 26px 16px 0; }
+  .ph-leg { display: flex; gap: 14px; }
+  .ph-node-col { width: 44px; display: flex; flex-direction: column; align-items: center; flex: none; }
+  .ph-node {
+    width: 44px; height: 44px;
+    border-radius: 999px;
+    display: grid; place-items: center;
+    font: 800 11px var(--sans);
+  }
+  .ph-rail { width: 2px; flex: 1; min-height: 14px; background: var(--pbd); }
+  .ph-leg-main { flex: 1; min-width: 0; padding-bottom: 22px; }
+  .ph-leg-title { font: 700 17px/1.35 var(--sans); }
+  .ph-leg-sub { font: 400 15px var(--sans); color: var(--pmut); margin-top: 3px; }
+  .ph-leg-local { font: 500 13px/1.4 var(--sans); color: var(--psub); margin-top: 6px; }
+
+  .ph-cta {
+    position: absolute;
+    left: 16px; right: 16px; bottom: 40px;
+    padding: 17px;
+    border-radius: 999px;
+    background: var(--danfo);
+    color: #1A1200;
+    font: 800 17px var(--sans);
+    text-align: center;
+    box-shadow: 0 12px 30px -14px rgba(245,197,24,.9);
+  }
+
+  /* navigation screen */
+  .ph-map { position: absolute; inset: 0; background: #101216; }
+  .ph-maneuver {
+    position: absolute;
+    top: 96px; left: 16px; right: 16px;
+    height: 116px;
+    border-radius: 24px;
+    background: rgba(20,22,26,.93);
+    border: 1px solid #2E3035;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 16px;
+  }
+  .ph-dist { font: 800 34px/1 var(--sans); letter-spacing: -1.2px; color: #F2F1ED; }
+  .ph-instruction { font: 400 17px/1.3 var(--sans); color: #C7C6C1; margin-top: 4px; }
+  .ph-then {
+    position: absolute;
+    top: 226px; left: 16px; right: 16px;
+    border-radius: 16px;
+    background: rgba(20,22,26,.93);
+    border: 1px solid #2E3035;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .ph-then-label { font: 700 10px var(--sans); letter-spacing: 1.2px; color: #8A8D95; }
+  .ph-then-text { font: 600 15px var(--sans); color: #F2F1ED; margin-top: 3px; }
+  .ph-trip {
+    position: absolute;
+    left: 16px; right: 16px; bottom: 40px;
+    height: 78px;
+    border-radius: 22px;
+    background: rgba(20,22,26,.93);
+    border: 1px solid #2E3035;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 18px;
+  }
+  .ph-eta { font: 800 24px var(--sans); letter-spacing: -.6px; color: #F2F1ED; }
+  .ph-left { font: 400 13px var(--sans); color: #8A8D95; margin-top: 2px; }
+  .ph-end {
+    margin-left: auto;
+    padding: 11px 20px;
+    border-radius: 999px;
+    background: #EF4444;
+    color: #fff;
+    font: 800 14px var(--sans);
+  }
+
+  /* one-dot home screen */
+  .ph-onedot-label { position: absolute; left: 26px; top: 214px; max-width: 210px; }
+  .ph-onedot-eyebrow { font: 700 11px var(--sans); letter-spacing: .8px; color: #8A8D95; }
+  .ph-onedot-fare { font: 800 58px/.95 var(--sans); letter-spacing: -2.4px; margin-top: 6px; }
+  .ph-onedot-sub { font: 400 15px/1.4 var(--sans); color: #C7C6C1; margin-top: 10px; }
+  .ph-saved {
+    position: absolute;
+    left: 26px; right: 26px; bottom: 110px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(242,241,237,.08);
+  }
+  .ph-saved b { font: 600 17px var(--sans); }
+  .ph-saved span { font: 600 13px var(--sans); color: #8A8D95; }
+  .ph-pill {
+    position: absolute;
+    left: 26px; right: 26px; bottom: 40px;
+    height: 56px;
+    border-radius: 999px;
+    background: var(--danfo);
+    color: #1A1200;
+    display: grid; place-items: center;
+    font: 800 17px var(--sans);
+  }
+
+  /* screens strip */
+  .screens {
+    display: flex;
+    gap: clamp(20px, 4vw, 48px);
+    flex-wrap: wrap;
+  }
+  .screen { display: flex; flex-direction: column; gap: 14px; width: calc(393px * var(--k)); }
+
+  .screen h3 { margin-bottom: 4px; }
+  .screen p { font-size: 14.5px; color: var(--text-sub); margin: 0; }
+
+  figure.screen { margin: 0; }
 
   /* ── Problem band ───────────────────────────────────────────────────────── */
   .band { background: var(--surface); border-block: 1px solid var(--line); }
@@ -518,70 +621,186 @@
     </div>
 
     <div>
-      <article class="card" aria-label="Example route from Yaba to CMS">
-        <div class="card-top">
-          <div class="od">
-            <div class="od-row"><span class="dot dot-o" aria-hidden="true"></span>Yaba</div>
-            <div class="od-line" aria-hidden="true"></div>
-            <div class="od-row"><span class="dot dot-d" aria-hidden="true"></span>CMS</div>
-          </div>
-          <div class="fare">₦400 – ₦600<small>Total fare</small></div>
-        </div>
+      <div class="phone-wrap" style="--k:.72">
+        <div class="phone ph-light" role="img"
+             aria-label="WakaWay route options screen: current location to Marina, danfo ₦400, 42 minutes, with two other ways and the leg-by-leg guide.">
 
-        <div class="legs">
-          <div class="leg">
-            <span class="chip chip-walk">Walk</span>
-            <div class="leg-body">
-              <div class="leg-title">Yaba → Yaba BRT</div>
-              <div class="leg-say">“Waka from Yaba reach Yaba BRT”</div>
-            </div>
-            <div class="leg-meta">0.4 km · 6 min</div>
-          </div>
-          <div class="leg">
-            <span class="chip chip-brt">BRT</span>
-            <div class="leg-body">
-              <div class="leg-title">Yaba BRT → CMS</div>
-              <div class="leg-say">“Enter BRT for Yaba BRT busstop, come down for CMS”</div>
-            </div>
-            <div class="leg-meta">7.3 km · 16 min</div>
-          </div>
-          <div class="leg">
-            <span class="chip chip-walk">Walk</span>
-            <div class="leg-body">
-              <div class="leg-title">CMS Terminal → Marina</div>
-              <div class="leg-say">“Waka from CMS reach Marina”</div>
-            </div>
-            <div class="leg-meta">0.3 km · 5 min</div>
-          </div>
-        </div>
+          <div class="ph-status"><span>WAKAWAY</span><span>9:41</span></div>
 
-        <div class="card-foot">
-          <span class="tag tag-easy">Easy</span>
-          <span>27 min door to door</span>
-          <span>·</span>
-          <span>1 transfer</span>
-        </div>
-      </article>
+          <div class="ph-head">
+            <span class="ph-back" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg>
+            </span>
+            <span style="min-width:0">
+              <span class="ph-eyebrow">CURRENT LOCATION →</span>
+              <span class="ph-dest" style="display:block">Marina</span>
+            </span>
+          </div>
 
-      <div class="alts">
-        <div class="alt">
-          <div class="alt-modes" aria-hidden="true">
-            <span style="background:var(--green)"></span><span style="background:var(--danfo)"></span>
+          <div class="ph-fare">
+            <span class="ph-mode" style="background:var(--danfo);color:#1A1200">DNF</span>
+            <span class="ph-fare-main">
+              <span class="ph-fare-row">
+                <span class="ph-amount">₦400</span>
+                <span class="ph-mins">42 min</span>
+              </span>
+              <span class="ph-sub">arrive 10:23 · 9.4 km</span>
+            </span>
+            <span class="ph-status-tag">Recommended</span>
           </div>
-          <span class="alt-name">Keke to Ojuelegba, danfo to CMS</span>
-          <span class="alt-fare">₦600 – ₦1,000</span>
-        </div>
-        <div class="alt">
-          <div class="alt-modes" aria-hidden="true">
-            <span style="background:var(--rail)"></span><span style="background:var(--danfo)"></span>
+
+          <div class="ph-label">Other ways · 2</div>
+          <div class="ph-rows">
+            <div class="ph-row">
+              <span class="ph-row-badge" style="background:var(--brt);color:#fff">BRT</span>
+              <span class="ph-row-main">
+                <span class="ph-row-head" style="display:block">₦600 · 38 min</span>
+                <span class="ph-row-desc" style="display:block">BRT via Ikorodu Road</span>
+              </span>
+              <span class="ph-row-tag" style="color:var(--brt)">Fastest</span>
+            </div>
+            <div class="ph-row">
+              <span class="ph-row-badge" style="background:var(--green);color:#14161A">KK</span>
+              <span class="ph-row-main">
+                <span class="ph-row-head" style="display:block">₦250 · 54 min</span>
+                <span class="ph-row-desc" style="display:block">Keke + danfo via Yaba</span>
+              </span>
+              <span class="ph-row-tag" style="color:var(--pgrn)">Cheapest</span>
+            </div>
           </div>
-          <span class="alt-name">Red Line to Oyingbo, danfo to CMS</span>
-          <span class="alt-fare">₦700 – ₦1,100</span>
+
+          <div class="ph-legs">
+            <div class="ph-leg">
+              <span class="ph-node-col">
+                <span class="ph-node" style="background:var(--pelev);color:var(--pink)">WK</span>
+                <span class="ph-rail"></span>
+              </span>
+              <span class="ph-leg-main">
+                <span class="ph-leg-title" style="display:block">Waka to Ojuelegba park</span>
+                <span class="ph-leg-sub" style="display:block">6 min · 420 m</span>
+                <span class="ph-leg-local" style="display:block">Waka 420m go the park, pass the bridge</span>
+              </span>
+            </div>
+            <div class="ph-leg">
+              <span class="ph-node-col">
+                <span class="ph-node" style="background:var(--danfo);color:#1A1200">DNF</span>
+                <span class="ph-rail"></span>
+              </span>
+              <span class="ph-leg-main">
+                <span class="ph-leg-title" style="display:block">Danfo · Ojuelegba → CMS</span>
+                <span class="ph-leg-sub" style="display:block">28 min · 7.8 km · ₦400</span>
+                <span class="ph-leg-local" style="display:block">Enter danfo wey dey go CMS</span>
+              </span>
+            </div>
+            <div class="ph-leg">
+              <span class="ph-node-col">
+                <span class="ph-node" style="background:var(--pelev);color:var(--pink)">WK</span>
+              </span>
+              <span class="ph-leg-main">
+                <span class="ph-leg-title" style="display:block">Waka to Marina</span>
+                <span class="ph-leg-sub" style="display:block">8 min · 600 m</span>
+                <span class="ph-leg-local" style="display:block">Waka small from CMS park</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="ph-cta">Start waka · 42 min</div>
         </div>
       </div>
     </div>
   </div>
 </header>
+
+<section id="demo" class="wrap">
+  <div class="section-head">
+    <p class="eyebrow">The screens</p>
+    <h2>Stripped until only the fare and the next move are left.</h2>
+    <p class="lede">
+      Every screen here is the app's own design at its real 393 × 852 — danfo yellow
+      on near-black, Plus Jakarta Sans, the 4pt spacing scale, 10/12/16/20 radii.
+    </p>
+  </div>
+
+  <div class="screens">
+    <figure class="screen" style="--k:.62">
+      <div class="phone-wrap">
+        <div class="phone ph-dark" role="img"
+             aria-label="WakaWay home screen: next danfo ₦400, Ojuelegba to CMS, 42 minutes, with a saved place and a start button.">
+          <div class="ph-status"><span>WAKAWAY</span><span>9:41</span></div>
+
+          <svg viewBox="0 0 393 560" width="393" height="560" style="position:absolute;left:0;top:130px" aria-hidden="true">
+            <circle cx="196" cy="420" r="120" fill="none" stroke="rgba(242,241,237,.06)" stroke-width="1"></circle>
+            <circle cx="196" cy="420" r="210" fill="none" stroke="rgba(242,241,237,.05)" stroke-width="1"></circle>
+            <path d="M196 420 C196 320 250 250 268 168" fill="none" stroke="#F5C518" stroke-width="6" stroke-linecap="round" stroke-dasharray="1 16"></path>
+            <circle cx="268" cy="168" r="6" fill="#F2F1ED"></circle>
+            <circle cx="196" cy="420" r="13" fill="#F5C518"></circle>
+          </svg>
+
+          <div class="ph-onedot-label">
+            <div class="ph-onedot-eyebrow">NEXT DANFO</div>
+            <div class="ph-onedot-fare">₦400</div>
+            <div class="ph-onedot-sub">Ojuelegba → CMS<br>42 min · enter danfo at the park</div>
+          </div>
+
+          <div class="ph-saved"><b>Marina</b><span>saved</span></div>
+          <div class="ph-pill">Start waka</div>
+        </div>
+      </div>
+      <figcaption>
+        <h3>Home</h3>
+        <p>No map, no menu, no cards. The fare you are about to pay, where it takes you, and one button.</p>
+      </figcaption>
+    </figure>
+
+    <figure class="screen" style="--k:.62">
+      <div class="phone-wrap">
+        <div class="phone ph-dark" role="img"
+             aria-label="WakaWay navigation screen: in 400 metres, enter the danfo going to CMS. Arriving 10:23 with 9.4 km left.">
+          <div class="ph-map" aria-hidden="true">
+            <svg viewBox="0 0 393 852" width="393" height="852">
+              <path d="M-20 660 L200 660 L200 300 L420 300" fill="none" stroke="rgba(242,241,237,.07)" stroke-width="26"></path>
+              <path d="M60 880 L60 480 L300 480 L300 120" fill="none" stroke="rgba(242,241,237,.05)" stroke-width="18"></path>
+              <path d="M196 760 C196 640 130 600 130 500 C130 420 300 420 300 320" fill="none" stroke="#F5C518" stroke-width="9" stroke-linecap="round"></path>
+              <circle cx="196" cy="760" r="12" fill="#F5C518"></circle>
+              <circle cx="300" cy="320" r="7" fill="#F2F1ED"></circle>
+            </svg>
+          </div>
+
+          <div class="ph-status" style="position:relative;color:#8A8D95"><span>WAKAWAY</span><span>9:41</span></div>
+
+          <div class="ph-maneuver">
+            <span class="ph-mode" style="background:var(--danfo);color:#1A1200">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path></svg>
+            </span>
+            <span style="flex:1;min-width:0">
+              <span class="ph-dist" style="display:block">400 m</span>
+              <span class="ph-instruction" style="display:block">Enter danfo wey dey go CMS</span>
+            </span>
+          </div>
+
+          <div class="ph-then">
+            <span style="flex:1;min-width:0">
+              <span class="ph-then-label" style="display:block">THEN</span>
+              <span class="ph-then-text" style="display:block">Come down for CMS park · waka 600 m</span>
+            </span>
+          </div>
+
+          <div class="ph-trip">
+            <span>
+              <span class="ph-eta" style="display:block">10:23</span>
+              <span class="ph-left" style="display:block">9.4 km left · ₦400</span>
+            </span>
+            <span class="ph-end">End</span>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        <h3>Navigation</h3>
+        <p>The distance, the maneuver in the words you will actually say, and what comes after it. Nothing else moves.</p>
+      </figcaption>
+    </figure>
+  </div>
+</section>
 
 <section class="band">
   <div class="wrap band-grid">
