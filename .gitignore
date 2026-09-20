@@ -43,3 +43,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# IDE
+.idea/
+
+# Claude Code local config (permission allowlists embed real commands and keys)
+.claude/settings.json
+.claude/settings.local.json
