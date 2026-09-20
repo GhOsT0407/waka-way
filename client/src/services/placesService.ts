@@ -127,8 +127,12 @@ const LAGOS_BBOX = '2.6,6.0,4.5,6.9';
 // Cache coordinates from Maptiler results so getPlaceDetails works without a 2nd call
 const maptilerCache = new Map<string, PlaceDetails>();
 
+/** Why the last remote search returned nothing, so the UI can say so. */
+export type SearchProblem = 'no_key' | 'offline' | 'rejected' | null;
+export let lastSearchProblem: SearchProblem = null;
+
 async function searchMaptiler(query: string): Promise<PlacePrediction[]> {
-  if (!MAPTILER_KEY) return [];
+  if (!MAPTILER_KEY) { lastSearchProblem = 'no_key'; return []; }
 
   try {
     const url =
@@ -139,7 +143,9 @@ async function searchMaptiler(query: string): Promise<PlacePrediction[]> {
       `&limit=5`;
 
     const res  = await fetch(url);
+    if (!res.ok) { lastSearchProblem = 'rejected'; return []; }
     const json = await res.json();
+    lastSearchProblem = null;
 
     return (json.features ?? []).map((f: any) => {
       const placeId   = `mt:${f.id}`;
@@ -161,6 +167,8 @@ async function searchMaptiler(query: string): Promise<PlacePrediction[]> {
       };
     });
   } catch {
+    // fetch itself threw: DNS / no route / TLS — the device can't reach the API.
+    lastSearchProblem = 'offline';
     return [];
   }
 }

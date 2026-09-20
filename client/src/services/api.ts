@@ -91,6 +91,8 @@ export const getNearbyStops = async (
 
 export const searchRoutes = async (data: {
   origin: { latitude: number; longitude: number };
+  /** Set when the rider typed a start ("Ikeja to Lekki"); otherwise the GPS fix. */
+  originName?: string;
   destination: { latitude: number; longitude: number };
   destinationName?: string;
   destinationDetails?: any;
@@ -103,7 +105,7 @@ export const searchRoutes = async (data: {
     const smartRoute = calculateSmartRoute(
       data.origin.latitude,
       data.origin.longitude,
-      'Your Location',
+      data.originName || 'Your Location',
       data.destination.latitude,
       data.destination.longitude,
       data.destinationName || 'Destination',
