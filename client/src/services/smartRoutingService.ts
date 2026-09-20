@@ -1,14 +1,17 @@
 /**
  * WakaWay Smart Routing Service
  *
- * Accurate Lagos multimodal routing using real infrastructure:
- *   - BRT: Ikorodu ↔ TBS/CMS corridor (Primero Transport)
- *   - Blue Line Rail: Mile 2 ↔ Marina (operational since Sep 2023)
- *   - Red Line Rail: Agbado ↔ Oyingbo (operational since Oct 2024)
- *   - LagFerry waterway routes
- *   - Danfo/Keke/Okada for local and feeder trips
+ * Lagos multimodal routing over real corridors (data/lagosRoutes.ts):
+ *   - BRT: Ikorodu – TBS and Oshodi – Abule-Egba (LAMATA)
+ *   - Rail: Blue Line Mile 2 – Marina; Red Line Agbado – Oyingbo (timetabled)
+ *   - ~30 danfo corridors, each an ordered list of real stops
+ *   - Walk / keke / okada for first and last mile (decisions/0011)
  *
- * Sources: LAMATA, LagFerry, Primero TSL, Wikipedia Lagos Rail Mass Transit
+ * A bus leg can only exist along a corridor; the engine no longer draws a
+ * "danfo" between two hubs no bus connects. Trips the network doesn't reach
+ * get an honest "ask at the park" option instead of an invented line.
+ *
+ * Sources: wakaway/Routes Data Research.md
  */
 
 // ─────────────────────────────────────────────────────────────
@@ -37,6 +40,16 @@ export interface RouteLeg {
   instruction: string;
   localInstruction: string;
   icon: string;
+  /** Keke inside a restricted LGA: inner streets only, may not be there. */
+  mayBeUnavailable?: boolean;
+  /** For bus/rail legs: the corridor ridden and how many stops it spans. */
+  corridorName?: string;
+  stopsSpanned?: number;
+  /** Intermediate stop names, in order, for "via …" captions. */
+  viaStops?: string[];
+  /** What the conductor shouts for this bus — "Oshodi Oshodi!" */
+  conductorCall?: string;
+  confidence?: 'verified' | 'local' | 'likely';
 }
 
 export interface RouteOption {
@@ -52,6 +65,8 @@ export interface RouteOption {
   priceFormatted: string;
   isCheapest: boolean;
   isFastest: boolean;
+  /** Fewest changes of vehicle among the options. */
+  isSimplest: boolean;
   isRecommended: boolean;
   recommendationReason?: string;
   tags: string[];
@@ -118,53 +133,58 @@ function uid(): string {
 // CONFIGURATION
 // ─────────────────────────────────────────────────────────────
 
+// km/h, in-traffic averages. BRT's 28 was the dedicated-lane design speed;
+// 20 is what the Ikorodu corridor actually does across a day.
 const SPEEDS: Record<TransportMode, number> = {
-  walk:  4,
-  keke:  22,
-  okada: 30,
+  walk:  4.5,
+  keke:  18,
+  okada: 25,
   danfo: 14,
-  brt:   28,
+  brt:   20,
   rail:  60,
   uber:  35,
   bolt:  35,
 };
 
-// 2025 Lagos transport pricing
+// Fare bands, April 2026 (wakaway/Routes Data Research.md). BRT and rail
+// bands bracket the LAMATA table of 2 Mar 2026; a per-route lookup is the
+// next step. Danfo is what riders report, not an official figure.
 function calcPrice(distKm: number, mode: TransportMode): { min: number; max: number } {
   switch (mode) {
     case 'walk':  return { min: 0, max: 0 };
 
     case 'keke':
-      return distKm <= 1.5
-        ? { min: 300,  max: 500  }
-        : { min: 400,  max: 800  };
+      if (distKm < 1)  return { min: 200, max: 300 };
+      if (distKm <= 3) return { min: 300, max: 500 };
+      return              { min: 500, max: 800 };
 
     case 'okada':
-      return distKm <= 2
-        ? { min: 500,  max: 800  }
-        : { min: 700,  max: 1500 };
+      if (distKm < 0.5)  return { min: 200, max: 300 };
+      if (distKm <= 1.5) return { min: 300, max: 500 };
+      if (distKm <= 3)   return { min: 500, max: 800 };
+      return                { min: 800, max: 1200 };
 
     case 'danfo':
-      if (distKm <= 3)  return { min: 200, max: 400 };
+      if (distKm <= 3)  return { min: 200, max: 300 };
       if (distKm <= 8)  return { min: 300, max: 500 };
       if (distKm <= 15) return { min: 400, max: 700 };
-      return               { min: 500, max: 900 };
+      return               { min: 600, max: 1000 };
 
     case 'brt':
-      if (distKm <= 5)  return { min: 300, max: 400 };
-      if (distKm <= 15) return { min: 400, max: 600 };
-      return               { min: 600, max: 800 };
+      if (distKm <= 5)  return { min: 450, max: 570 };
+      if (distKm <= 15) return { min: 570, max: 680 };
+      return               { min: 680, max: 1080 };
 
     case 'rail':
-      if (distKm <= 5)  return { min: 300, max: 400 };
-      if (distKm <= 15) return { min: 400, max: 600 };
-      return               { min: 500, max: 700 };
+      if (distKm <= 5)  return { min: 200, max: 500 };
+      if (distKm <= 15) return { min: 500, max: 1000 };
+      return               { min: 1000, max: 1500 };
 
     case 'uber':
     case 'bolt':
       return distKm <= 5
-        ? { min: 1500, max: 2500 }
-        : { min: 2000, max: 4000 };
+        ? { min: 2500, max: 4000 }
+        : { min: 4000, max: 8000 };
 
     default:
       return { min: 0, max: 0 };
@@ -192,45 +212,17 @@ function modeIcon(mode: TransportMode): string {
 }
 
 // ─────────────────────────────────────────────────────────────
-// OKADA BAN ZONES (Lagos State policy)
-// Banned LGAs: Ikeja, Lagos Island, Lagos Mainland, Eti-Osa,
-// Apapa, Surulere, Mushin, Oshodi-Isolo, Kosofe, Somolu
-// ─────────────────────────────────────────────────────────────
-
-// Polygon-based check: okada banned if point is inside the core metro bbox
-// We approximate by banning okada for coordinates within Lagos metro core
-function isOkadaBannedLocation(lat: number, lng: number): boolean {
-  // Rough bounding box covering all banned LGAs:
-  // Lagos Island, Victoria Island, Ikoyi, Lekki, Surulere,
-  // Yaba, Mushin, Oshodi, Ikeja, Maryland, Ketu, Ojota, Apapa
-  const bannedZones: Array<[number, number, number, number]> = [
-    // [minLat, maxLat, minLng, maxLng]
-    [6.410, 6.650, 3.280, 3.620], // Core metro (covers all banned LGAs)
-  ];
-  return bannedZones.some(
-    ([minLat, maxLat, minLng, maxLng]) =>
-      lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng
-  );
-}
-
-// Okada allowed only in far outskirts: Ikorodu rural, Epe, Badagry, Alimosho rural
-function isOkadaAllowed(fromLat: number, fromLng: number, toLat: number, toLng: number): boolean {
-  return !isOkadaBannedLocation(fromLat, fromLng) && !isOkadaBannedLocation(toLat, toLng);
-}
-
-// ─────────────────────────────────────────────────────────────
 // INFRASTRUCTURE DATA  (imported from centralised data file)
 // ─────────────────────────────────────────────────────────────
 
-import {
-  Stop,
-  BRT_IKORODU_STOPS,
-  BRT_ABULE_EGBA_STOPS,
-  BLUE_LINE_STOPS,
-  RED_LINE_STOPS,
-  DANFO_HUBS,
-  ALL_STOPS,
-} from '../data/lagosStops';
+import { Stop } from '../data/lagosStops';
+import { GRAPH_STOPS, GraphStop } from '../data/lagosRoutes';
+import { isKekeRestricted, isOkadaBanned } from './lagosZones';
+import { searchGraph, corridorFare, redLineRunningAt, GraphLeg, GraphPath } from './routeGraph';
+
+// The graph's stops double as the "nearest stop" pool: they are the ones
+// whose coordinates were checked, and the ones a bus actually serves.
+const ALL_STOPS: Stop[] = GRAPH_STOPS.map((g) => ({ name: g.name, latitude: g.latitude, longitude: g.longitude }));
 
 // ─────────────────────────────────────────────────────────────
 // STOP SEARCH HELPERS
@@ -251,32 +243,11 @@ export function findNearestBusStop(lat: number, lng: number): Stop | null {
   return nearestStop(lat, lng, ALL_STOPS);
 }
 
-function stopsAlongCorridor(
-  fromLat: number, fromLng: number,
-  toLat: number, toLng: number,
-  pool: Stop[],
-  exclude: string[],
-  max: number
-): Stop[] {
-  const total = calculateDistance(fromLat, fromLng, toLat, toLng);
-  return pool
-    .filter(s => !exclude.includes(s.name))
-    .map(s => {
-      const dA = calculateDistance(fromLat, fromLng, s.latitude, s.longitude);
-      const dB = calculateDistance(s.latitude, s.longitude, toLat, toLng);
-      return { s, dA, dB, ratio: (dA + dB) / total };
-    })
-    .filter(x => x.ratio < 1.35 && x.dA < total && x.dB < total)
-    .sort((a, b) => a.dA - b.dA)
-    .slice(0, max)
-    .map(x => x.s);
-}
-
 // ─────────────────────────────────────────────────────────────
 // LEG BUILDER
 // ─────────────────────────────────────────────────────────────
 
-function buildLeg(mode: TransportMode, from: Location, to: Location): RouteLeg {
+function buildLeg(mode: TransportMode, from: Location, to: Location, mayBeUnavailable?: boolean): RouteLeg {
   const distanceKm = Math.round(
     calculateDistance(from.latitude, from.longitude, to.latitude, to.longitude) * 100
   ) / 100;
@@ -298,15 +269,16 @@ function buildLeg(mode: TransportMode, from: Location, to: Location): RouteLeg {
     instruction,
     localInstruction,
     icon: modeIcon(mode),
+    ...(mayBeUnavailable ? { mayBeUnavailable: true } : {}),
   };
 }
 
 function lagosInstruction(mode: TransportMode, from: string, to: string): string {
   switch (mode) {
-    case 'walk':  return `Walk from ${from} to ${to}`;
-    case 'keke':  return `Take Keke NAPEP from ${from} — tell driver "${to}"`;
-    case 'okada': return `Board Okada at ${from}, ride to ${to}`;
-    case 'danfo': return `Board Danfo at ${from} heading ${to}`;
+    case 'walk':  return `Walk to ${to}`;
+    case 'keke':  return `At ${from}, enter a keke going to ${to}.`;
+    case 'okada': return `At ${from}, take an okada to ${to}.`;
+    case 'danfo': return `At ${from}, ask for any bus going to ${to}.`;
     case 'brt':   return `Enter BRT at ${from}, alight at ${to}`;
     case 'rail':  return `Board train at ${from} station, alight at ${to}`;
     case 'uber':
@@ -317,10 +289,10 @@ function lagosInstruction(mode: TransportMode, from: string, to: string): string
 
 function lagosPidginInstruction(mode: TransportMode, from: string, to: string): string {
   switch (mode) {
-    case 'walk':  return `Waka from ${from} reach ${to}`;
-    case 'keke':  return `Enter keke for ${from}, tell am make e drop you ${to}`;
-    case 'okada': return `Carry okada from ${from} go ${to}`;
-    case 'danfo': return `Enter danfo for ${from} side, tell conductor "${to}!"`;
+    case 'walk':  return `Waka go ${to}`;
+    case 'keke':  return `For ${from}, enter keke wey dey go ${to}, tell am make e drop you there`;
+    case 'okada': return `For ${from}, carry okada go ${to}`;
+    case 'danfo': return `For ${from}, ask for any bus wey dey go ${to} side`;
     case 'brt':   return `Enter BRT for ${from} busstop, come down for ${to}`;
     case 'rail':  return `Enter train for ${from} station, come down for ${to}`;
     case 'uber':
@@ -353,29 +325,53 @@ export const TRIP_BAND_LABEL: Record<TripBand, string> = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// CONNECTOR MODE SELECTION
-// First/last mile mode — walk, keke, okada, or danfo for very long legs
+// CONNECTOR MODE SELECTION — decisions/0011
+// First/last mile: walk, keke, okada, or a short bus hop. Legality
+// comes from the LGA polygons; the mode from distance within what is
+// legal. Rider preference never overrides legality.
 // ─────────────────────────────────────────────────────────────
+
+const WALK_MAX          = 1.0;  // ≈ 13 min — Lagosians walk this to a stop
+const WALK_MAX_NO_KEKE  = 1.2;  // stretch when keke is restricted
+const KEKE_LAST_MILE    = 1.5;  // inner-street keke inside a restricted LGA
+const KEKE_MAX          = 4.0;
+const OKADA_MAX         = 6.0;
+
+interface ConnectorChoice { mode: TransportMode; mayBeUnavailable?: boolean }
 
 function connectorMode(
   fromLat: number, fromLng: number,
   toLat: number, toLng: number,
   distKm: number,
   preferred?: TransportMode
-): TransportMode {
-  if (distKm <= 0.2) return 'walk';
+): ConnectorChoice {
+  if (distKm <= WALK_MAX) return { mode: 'walk' };
 
-  const okadaOk = isOkadaAllowed(fromLat, fromLng, toLat, toLng);
+  const hop = { fromLat, fromLng, toLat, toLng };
+  const kekeOk  = !isKekeRestricted(hop);
+  const okadaOk = !isOkadaBanned(hop);
 
-  if (preferred === 'keke'  && distKm <= 5.0) return 'keke';
-  if (preferred === 'okada' && distKm <= 6.0 && okadaOk) return 'okada';
+  // Okada only when asked for, and only where it is not impounded on sight.
+  if (preferred === 'okada' && okadaOk && distKm <= OKADA_MAX) return { mode: 'okada' };
 
-  // Very long feeder legs (> 8km) — use danfo rather than keke for the connector
-  if (distKm > 8) return 'danfo';
+  if (kekeOk && distKm <= KEKE_MAX) return { mode: 'keke' };
 
-  if (distKm <= 5.0) return 'keke';
-  if (okadaOk && distKm <= 8.0) return 'okada';
-  return 'keke';
+  if (!kekeOk) {
+    if (distKm <= WALK_MAX_NO_KEKE) return { mode: 'walk' };
+    if (distKm <= KEKE_LAST_MILE)   return { mode: 'keke', mayBeUnavailable: true };
+  }
+
+  // Too far to walk, keke unavailable or too far: a bus hop — but between
+  // two arbitrary points there may be no bus that does exactly this, so it
+  // is flagged, and a corridor route will always be preferred over it.
+  return { mode: 'danfo', mayBeUnavailable: true };
+}
+
+/** Build the first/last-mile leg between two points, choosing the mode. */
+function buildConnector(from: Location, to: Location, preferred?: TransportMode): RouteLeg {
+  const distKm = calculateDistance(from.latitude, from.longitude, to.latitude, to.longitude);
+  const c = connectorMode(from.latitude, from.longitude, to.latitude, to.longitude, distKm, preferred);
+  return buildLeg(c.mode, from, to, c.mayBeUnavailable);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -405,176 +401,111 @@ function assembleOption(
     totalPriceMin,
     totalPriceMax,
     priceFormatted: formatPrice(totalPriceMin, totalPriceMax),
-    isCheapest: false, isFastest: false, isRecommended: false,
+    isCheapest: false, isFastest: false, isSimplest: false, isRecommended: false,
     tags: [...tags],
   };
 }
 
-/** Build a route along a rail line (Blue or Red) */
-function buildRailRoute(
-  origin: Location,
-  destination: Location,
-  line: Stop[],
-  lineName: string,
-  pref?: TransportMode
-): RouteOption | null {
-  // Find nearest entry/exit stations
-  const entryStation = nearestStop(origin.latitude, origin.longitude, line);
-  const exitStation  = nearestStop(destination.latitude, destination.longitude, line, entryStation ? [entryStation.name] : []);
-  if (!entryStation || !exitStation) return null;
-  if (entryStation.name === exitStation.name) return null;
+const toLocation = (g: GraphStop): Location => ({ latitude: g.latitude, longitude: g.longitude, name: g.name });
 
-  const walkToEntry = calculateDistance(origin.latitude, origin.longitude, entryStation.latitude, entryStation.longitude);
-  const walkFromExit = calculateDistance(exitStation.latitude, exitStation.longitude, destination.latitude, destination.longitude);
-
-  // Only suggest rail if it genuinely helps (not if you need to walk farther than the rail leg)
-  const railDist = calculateDistance(entryStation.latitude, entryStation.longitude, exitStation.latitude, exitStation.longitude);
-  if (railDist < 1.5) return null;
-  if (walkToEntry > railDist * 1.2 || walkFromExit > railDist * 1.2) return null;
-
-  const legs: RouteLeg[] = [];
-
-  if (walkToEntry >= 0.05) {
-    const mode = connectorMode(origin.latitude, origin.longitude, entryStation.latitude, entryStation.longitude, walkToEntry, pref);
-    legs.push(buildLeg(mode, origin, entryStation));
-  }
-
-  legs.push(buildLeg('rail', entryStation, exitStation));
-
-  if (walkFromExit >= 0.05) {
-    const mode = connectorMode(exitStation.latitude, exitStation.longitude, destination.latitude, destination.longitude, walkFromExit);
-    legs.push(buildLeg(mode, exitStation, destination));
-  }
-
-  return assembleOption(uid(), 'segmented', `${lineName} Train`, `Via ${entryStation.name} → ${exitStation.name}`, legs, ['Rail', 'Fast']);
+/** One bus/rail leg along a corridor: real distance, stop count, table fare. */
+function buildCorridorLeg(gl: GraphLeg): RouteLeg {
+  const from = toLocation(gl.from), to = toLocation(gl.to);
+  const distanceKm = Math.round(gl.distanceKm * 100) / 100;
+  const stopsSpanned = gl.via.length + 1;
+  const price = corridorFare(gl.corridor, stopsSpanned) ?? calcPrice(distanceKm, gl.mode);
+  const leg = buildLeg(gl.mode, from, to);
+  const call = conductorCall(gl);
+  const vehicle = gl.mode === 'brt' ? 'BRT' : gl.mode === 'rail' ? 'train' : gl.mode === 'keke' ? 'keke' : 'danfo';
+  const stopsNote = stopsSpanned > 1 ? ` (${stopsSpanned} stops)` : '';
+  // The instruction is what a friend would tell you, not a label: where to
+  // stand, which bus to look for, what to tell the conductor.
+  const instruction = gl.mode === 'rail'
+    ? `At ${from.name}, board the ${gl.corridor.name} toward ${gl.terminal.name}. Get off at ${to.name}${stopsNote}.`
+    : gl.mode === 'keke'
+      ? `At ${from.name}, enter a keke going to ${to.name}.`
+      : `At ${from.name}, enter the ${vehicle} calling "${call}". Tell the conductor you're dropping at ${to.name}${stopsNote}.`;
+  const localInstruction = gl.mode === 'rail'
+    ? `For ${from.name} station, enter ${gl.corridor.name} wey dey go ${gl.terminal.name}. Come down for ${to.name}.`
+    : gl.mode === 'keke'
+      ? `For ${from.name}, enter keke wey dey go ${to.name}.`
+      : `For ${from.name}, enter ${vehicle} wey dey shout "${call}!". Tell conductor say you go drop for ${to.name}.`;
+  return {
+    ...leg,
+    distanceKm,
+    durationMins: Math.max(1, Math.ceil(gl.minutes)),
+    priceMin: price.min,
+    priceMax: price.max,
+    instruction,
+    localInstruction,
+    corridorName: gl.corridor.name,
+    stopsSpanned,
+    viaStops: gl.via.map((v) => v.name),
+    conductorCall: gl.mode === 'rail' || gl.mode === 'keke' ? undefined : call,
+    confidence: gl.corridor.confidence,
+  };
 }
 
-/** Build a BRT route — tries each physical corridor independently to prevent impossible cross-corridor routes */
-function buildBRTRoute(
-  origin: Location,
-  destination: Location,
-  pref?: TransportMode
-): RouteOption | null {
-  for (const corridorStops of [BRT_IKORODU_STOPS, BRT_ABULE_EGBA_STOPS]) {
-    const entryStop = nearestStop(origin.latitude, origin.longitude, corridorStops);
-    const exitStop  = nearestStop(destination.latitude, destination.longitude, corridorStops, entryStop ? [entryStop.name] : []);
-    if (!entryStop || !exitStop) continue;
+/** "Oshodi Oshodi" — the corridor's own call for that terminal, else the Lagos default of the name said twice. */
+function conductorCall(gl: GraphLeg): string {
+  const explicit = gl.corridor.calls?.[gl.terminal.id];
+  if (explicit) return explicit;
+  const short = gl.terminal.name.replace(/\s*\(.*\)$/, '').replace(/ Garage$| Terminal$| Station$/i, '');
+  return `${short} ${short}`;
+}
 
-    const brtDist = calculateDistance(entryStop.latitude, entryStop.longitude, exitStop.latitude, exitStop.longitude);
-    if (brtDist < 3) continue;
+function optionNameFor(path: GraphPath): { name: string; tags: string[] } {
+  const modes = new Set(path.legs.map((l) => l.mode));
+  if (modes.has('rail')) return { name: path.legs.find((l) => l.mode === 'rail')!.corridor.name, tags: ['Rail', 'Fast'] };
+  if (modes.has('brt'))  return { name: 'BRT', tags: ['BRT'] };
+  const busChanges = path.legs.filter((l) => l.mode !== 'keke').length - 1;
+  const lead = modes.has('danfo') ? 'Danfo' : 'Keke';
+  return { name: busChanges <= 0 ? lead : `${lead} · ${busChanges} change${busChanges > 1 ? 's' : ''}`, tags: ['Budget'] };
+}
 
-    const walkToEntry  = calculateDistance(origin.latitude, origin.longitude, entryStop.latitude, entryStop.longitude);
-    const walkFromExit = calculateDistance(exitStop.latitude, exitStop.longitude, destination.latitude, destination.longitude);
-    if (walkToEntry > 4 || walkFromExit > 4) continue;
+// What a first/last-mile gap costs, by the same rules that will build the
+// leg: walking is free of fuss, a keke needs finding, a bus hop needs waiting.
+function accessMinutes(pref?: TransportMode) {
+  return (from: { latitude: number; longitude: number }, to: { latitude: number; longitude: number }, km: number): number => {
+    const c = connectorMode(from.latitude, from.longitude, to.latitude, to.longitude, km, pref);
+    const ride = (km / SPEEDS[c.mode]) * 60;
+    const fuss = c.mode === 'walk' ? 0 : c.mode === 'danfo' ? 18 : c.mayBeUnavailable ? 12 : 8;
+    return ride + fuss;
+  };
+}
 
+/** Every itinerary the corridor graph can find, as priced options. */
+function buildGraphOptions(origin: Location, destination: Location, pref?: TransportMode): RouteOption[] {
+  const paths = searchGraph(origin, destination, { allowTimetabled: redLineRunningAt(), accessMinutes: accessMinutes(pref) });
+  return paths.map((path) => {
     const legs: RouteLeg[] = [];
-
-    if (walkToEntry >= 0.05) {
-      const mode = connectorMode(origin.latitude, origin.longitude, entryStop.latitude, entryStop.longitude, walkToEntry, pref);
-      legs.push(buildLeg(mode, origin, entryStop));
-    }
-
-    legs.push(buildLeg('brt', entryStop, exitStop));
-
-    if (walkFromExit >= 0.05) {
-      const mode = connectorMode(exitStop.latitude, exitStop.longitude, destination.latitude, destination.longitude, walkFromExit);
-      legs.push(buildLeg(mode, exitStop, destination));
-    }
-
-    return assembleOption(uid(), 'segmented', 'BRT (Express)', `Via ${entryStop.name} → ${exitStop.name}`, legs, ['BRT', 'Faster']);
-  }
-  return null;
+    const board = toLocation(path.board), alight = toLocation(path.alight);
+    if (path.accessKm >= 0.05) legs.push(buildConnector(origin, board, pref));
+    for (const gl of path.legs) legs.push(buildCorridorLeg(gl));
+    if (path.egressKm >= 0.05) legs.push(buildConnector(alight, destination, pref));
+    const { name, tags } = optionNameFor(path);
+    const lowest = path.legs.reduce((c, l) => (l.corridor.confidence === 'likely' ? 'likely' : c), 'local' as string);
+    if (lowest === 'likely') tags.push('Unverified');
+    const via = path.legs.map((l) => l.to.name);
+    return assembleOption(uid(), 'segmented', name, `Via ${[path.board.name, ...via].join(' → ')}`, legs, tags);
+  });
 }
 
-/** Build a danfo multimodal route via major hubs */
-function buildDanfoRoute(
-  origin: Location,
-  destination: Location,
-  pref?: TransportMode
-): RouteOption {
-  const legs: RouteLeg[] = [];
+/**
+ * Nothing in the corridor data reaches one end of this trip. Say so, with the
+ * nearest known park, rather than draw a line no bus follows.
+ */
+function buildUnknownRoute(origin: Location, destination: Location, pref?: TransportMode): RouteOption {
   const totalDist = calculateDistance(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
-
-  // Only go direct for genuinely walkable trips — anything longer gets a stop anchor
-  if (totalDist <= 0.8) {
-    const mode = connectorMode(origin.latitude, origin.longitude, destination.latitude, destination.longitude, totalDist, pref);
-    legs.push(buildLeg(mode, origin, destination));
-    return assembleOption(uid(), 'direct', 'Direct', `${mode === 'walk' ? 'Walk' : 'Keke'} direct`, legs, ['Short Trip']);
+  if (totalDist <= OKADA_MAX) {
+    const leg = buildConnector(origin, destination, pref);
+    return assembleOption(uid(), 'direct', 'Direct', `${leg.mode === 'walk' ? 'Walk' : 'Ride'} direct`, [leg], ['Short Trip']);
   }
-
-  // Snap origin to the nearest stop in ALL_STOPS first, then fall back to DANFO_HUBS.
-  // This mirrors Lara's "find your nearest bus stop" approach — a user standing next to
-  // a BRT terminal shouldn't be routed to a danfo hub 2km away.
-  const firstHubRaw =
-    nearestStop(origin.latitude, origin.longitude, ALL_STOPS) ??
-    nearestStop(origin.latitude, origin.longitude, DANFO_HUBS);
-
-  // Prefer danfo-specific hubs for the main trunk, but use the closest ALL_STOPS entry
-  // as the boarding anchor if it's genuinely closer (saves the user from a long first mile).
-  const nearestDanfoHub = nearestStop(origin.latitude, origin.longitude, DANFO_HUBS);
-  const firstHub = (() => {
-    if (!firstHubRaw) return nearestDanfoHub;
-    if (!nearestDanfoHub) return firstHubRaw;
-    const dAll   = calculateDistance(origin.latitude, origin.longitude, firstHubRaw.latitude, firstHubRaw.longitude);
-    const dDanfo = calculateDistance(origin.latitude, origin.longitude, nearestDanfoHub.latitude, nearestDanfoHub.longitude);
-    // Use the ALL_STOPS anchor only if it's meaningfully closer (saves ≥300m)
-    return dAll < dDanfo - 0.3 ? firstHubRaw : nearestDanfoHub;
-  })();
-
-  // Find nearest hub to destination (different from first)
-  const lastHub = firstHub
-    ? nearestStop(destination.latitude, destination.longitude, DANFO_HUBS, [firstHub.name])
-    : nearestStop(destination.latitude, destination.longitude, DANFO_HUBS);
-
-  if (!firstHub || !lastHub) {
-    // Fallback: single danfo leg
-    const mode = totalDist <= 0.5 ? 'walk' : 'danfo';
-    legs.push(buildLeg(mode, origin, destination));
-    return assembleOption(uid(), 'direct', 'Danfo Direct', 'Direct danfo', legs, ['Budget']);
-  }
-
-  const distToFirst = calculateDistance(origin.latitude, origin.longitude, firstHub.latitude, firstHub.longitude);
-  const distFromLast = calculateDistance(lastHub.latitude, lastHub.longitude, destination.latitude, destination.longitude);
-  const hubToHubDist = calculateDistance(firstHub.latitude, firstHub.longitude, lastHub.latitude, lastHub.longitude);
-
-  // First mile
-  if (distToFirst >= 0.05) {
-    const mode = connectorMode(origin.latitude, origin.longitude, firstHub.latitude, firstHub.longitude, distToFirst, pref);
-    legs.push(buildLeg(mode, origin, firstHub));
-  }
-
-  // Hub-to-hub: if long, find intermediate stops
-  if (hubToHubDist > 6) {
-    const intermediates = stopsAlongCorridor(
-      firstHub.latitude, firstHub.longitude,
-      lastHub.latitude, lastHub.longitude,
-      DANFO_HUBS,
-      [firstHub.name, lastHub.name],
-      2
-    );
-    const chain = [firstHub, ...intermediates, lastHub];
-    for (let i = 0; i < chain.length - 1; i++) {
-      const from = chain[i], to = chain[i + 1];
-      const d = calculateDistance(from.latitude, from.longitude, to.latitude, to.longitude);
-      if (d < 0.1) continue;
-      legs.push(buildLeg('danfo', from, to));
-    }
-  } else if (hubToHubDist >= 0.05) {
-    legs.push(buildLeg('danfo', firstHub, lastHub));
-  }
-
-  // Last mile
-  if (distFromLast >= 0.05) {
-    const mode = connectorMode(lastHub.latitude, lastHub.longitude, destination.latitude, destination.longitude, distFromLast, pref);
-    legs.push(buildLeg(mode, lastHub, destination));
-  }
-
-  if (legs.length === 0) {
-    legs.push(buildLeg('danfo', origin, destination));
-  }
-
-  const keyStops = [firstHub.name, lastHub.name].join(' → ');
-  return assembleOption(uid(), 'segmented', 'Danfo Route', `Via ${keyStops}`, legs, ['Budget', 'Popular']);
+  const leg = buildLeg('danfo', origin, destination, true);
+  leg.instruction = `Ask at the nearest park for a bus toward ${destination.name}`;
+  leg.localInstruction = `Go the nearest park, ask conductor wey dey go ${destination.name} side`;
+  leg.confidence = 'likely';
+  return assembleOption(uid(), 'direct', 'Ask at the park', 'No known bus line for this trip yet', [leg], ['Unverified']);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -615,15 +546,26 @@ export function calculateSmartRoute(
   const totalDist = calculateDistance(originLat, originLng, destLat, destLng);
   const tripBand  = classifyTrip(totalDist);
 
-  // BRT — internal guard rejects if corridor doesn't help (brtDist < 3km or feeder > 4km)
-  const brtRoute = buildBRTRoute(origin, destination, pref);
-  if (brtRoute) options.push(brtRoute);
+  // Short trips are a walk or one keke where legal (decisions/0011); anything
+  // longer rides a corridor. If the network doesn't reach, say so.
+  const directLimit = isKekeRestricted({
+    fromLat: originLat, fromLng: originLng, toLat: destLat, toLng: destLng,
+  }) ? KEKE_LAST_MILE : KEKE_MAX;
+  if (totalDist <= directLimit) {
+    const leg = buildConnector(origin, destination, pref);
+    const label = leg.mode === 'walk' ? 'Walk' : leg.mode === 'okada' ? 'Okada' : leg.mode === 'danfo' ? 'Bus' : 'Keke';
+    options.push(assembleOption(uid(), 'direct', 'Direct', `${label} direct`, [leg], ['Short Trip']));
+  }
+  if (totalDist > WALK_MAX) options.push(...buildGraphOptions(origin, destination, pref));
+  if (options.length === 0) options.push(buildUnknownRoute(origin, destination, pref));
 
-  // Danfo/Keke — always included; buildDanfoRoute handles micro trips internally
-  const danfoRoute = buildDanfoRoute(origin, destination, pref);
-  options.push(danfoRoute);
-
-  // Remove near-duplicate routes (same legs count & similar price)
+  // Remove near-duplicate routes (same legs count & similar price). Confirmed
+  // options go first so a confirmed line is never dropped as a duplicate of
+  // a 'likely' one, and an option with an ad-hoc connector never shadows one
+  // built entirely from corridors.
+  const rank = (o: RouteOption) =>
+    (o.tags.includes('Unverified') ? 2 : 0) + (o.legs.some(l => l.mayBeUnavailable) ? 1 : 0);
+  options.sort((a, b) => rank(a) - rank(b));
   const deduped: RouteOption[] = [];
   for (const opt of options) {
     const isDup = deduped.some(
@@ -647,6 +589,14 @@ export function calculateSmartRoute(
     opt.isFastest  = opt.id === fastest.id;
     if (opt.isCheapest) opt.tags.push('Cheapest');
     if (opt.isFastest && opt.id !== cheapest.id) opt.tags.push('Fastest');
+  }
+  // Simplest = fewest vehicle changes, when that is a different option from
+  // the fastest and cheapest (otherwise the label adds nothing).
+  const rides = (o: RouteOption) => o.legs.filter(l => l.mode !== 'walk').length;
+  const simplest = finalOptions.reduce((a, b) => rides(a) <= rides(b) ? a : b);
+  if (finalOptions.length > 1 && simplest.id !== cheapest.id && simplest.id !== fastest.id) {
+    simplest.isSimplest = true;
+    simplest.tags.push('Simplest');
   }
 
   // ── Incident avoidance reranking ──────────────────────────────────────
@@ -672,14 +622,20 @@ export function calculateSmartRoute(
     }
   }
 
-  // Pick recommended: prefer unaffected BRT > unaffected fastest > unaffected first > any
-  let recommended =
-    finalOptions.find(o => !affectedByIncident.has(o.id) && o.tags.includes('BRT')) ??
-    finalOptions.find(o => !affectedByIncident.has(o.id) && o.isFastest) ??
-    finalOptions.find(o => !affectedByIncident.has(o.id)) ??
-    finalOptions.find(o => o.tags.includes('BRT')) ??
-    finalOptions.find(o => o.isFastest) ??
-    finalOptions[0];
+  // Pick recommended: unaffected and verified first; among those, the fastest
+  // unless a cheaper one is within 10 min of it (Lagosians trade minutes for naira).
+  // Confirmed corridors beat an ad-hoc connector, which beats an unconfirmed line.
+  const solid = (o: RouteOption) => !o.tags.includes('Unverified') && !o.legs.some(l => l.mayBeUnavailable);
+  const confirmed = (o: RouteOption) => !o.tags.includes('Unverified');
+  const clean = finalOptions.filter(o => !affectedByIncident.has(o.id) && solid(o));
+  const pool = clean.length ? clean
+    : finalOptions.filter(solid).length ? finalOptions.filter(solid)
+    : finalOptions.filter(confirmed).length ? finalOptions.filter(confirmed)
+    : finalOptions;
+  const fastestIn = pool.reduce((a, b) => a.totalDurationMins <= b.totalDurationMins ? a : b);
+  const cheapestIn = pool.reduce((a, b) => a.totalPriceMax <= b.totalPriceMax ? a : b);
+  let recommended = (cheapestIn !== fastestIn && cheapestIn.totalDurationMins - fastestIn.totalDurationMins <= 10
+    && cheapestIn.totalPriceMax < fastestIn.totalPriceMax) ? cheapestIn : fastestIn;
 
   recommended.isRecommended = true;
   recommended.recommendationReason = affectedByIncident.has(recommended.id)
@@ -730,7 +686,10 @@ export function calculateSmartRoute(
 }
 
 function pickRecommendationReason(opt: RouteOption): string {
-  if (opt.tags.includes('BRT')) return 'BRT runs on dedicated lanes — more reliable in traffic';
-  if (opt.isFastest)            return 'Quickest route for this trip';
+  if (opt.tags.includes('Rail')) return 'The train skips the traffic entirely';
+  if (opt.tags.includes('BRT'))  return 'BRT runs on its own lane — steadier in traffic';
+  if (opt.isFastest && opt.isCheapest) return 'Fastest and cheapest for this trip';
+  if (opt.isFastest)             return 'Quickest route for this trip';
+  if (opt.isCheapest)            return 'Cheapest, and only a few minutes longer';
   return 'Best balance of speed and cost for Lagos';
 }
