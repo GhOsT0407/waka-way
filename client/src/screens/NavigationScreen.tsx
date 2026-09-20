@@ -6,8 +6,9 @@ import {
   TouchableOpacity,
   Platform,
   Animated,
-  PanResponder,
+  Pressable,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -21,11 +22,8 @@ import { fetchAllLegGeometries, LatLng } from '../services/directionsService';
 import { GOOGLE_MAPS_DARK_STYLE } from '../utils/constants';
 
 const ADVANCE_THRESHOLD_M = 80;
-const PEEK_HEIGHT = 72;
 const NAV_ZOOM   = 17;
 const NAV_PITCH  = 50;
-
-const SPRING = { tension: 100, friction: 20, useNativeDriver: true } as const;
 
 // Polyline / badge colour per leg, from the mode tokens. Walk is drawn in the
 // light ink so it reads as "you, on foot" against the dark map.
@@ -125,46 +123,6 @@ export default function NavigationScreen({ route, navigation }: any) {
   const currentLegRef = useRef(0);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const sheetY = useRef(new Animated.Value(0)).current;
-  const sheetHeightRef = useRef(200);
-  const gestureStartY = useRef(0);
-
-  const expandSheet = (velocity = 0) => {
-    Animated.spring(sheetY, { toValue: 0, velocity, ...SPRING }).start();
-  };
-
-  const collapseSheet = (velocity = 0) => {
-    Animated.spring(sheetY, {
-      toValue: sheetHeightRef.current - PEEK_HEIGHT,
-      velocity,
-      ...SPRING,
-    }).start();
-  };
-
-  const sheetPan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        gestureStartY.current = (sheetY as any)._value;
-      },
-      onPanResponderMove: (_, g) => {
-        const maxY = sheetHeightRef.current - PEEK_HEIGHT;
-        sheetY.setValue(Math.max(0, Math.min(maxY, gestureStartY.current + g.dy)));
-      },
-      onPanResponderRelease: (_, g) => {
-        const maxY = sheetHeightRef.current - PEEK_HEIGHT;
-        const current = (sheetY as any)._value;
-        if (g.vy < -0.3 || g.dy < -30) {
-          expandSheet(g.vy * 1000);
-        } else if (g.vy > 0.3 || g.dy > 30) {
-          collapseSheet(g.vy * 1000);
-        } else {
-          current < maxY / 2 ? expandSheet() : collapseSheet();
-        }
-      },
-    })
-  ).current;
-
   const [currentLegIndex, setCurrentLegIndex] = useState(0);
   const [userCoords, setUserCoords] = useState<Coord | null>(null);
   const [distanceToNext, setDistanceToNext] = useState<number | null>(null);
@@ -183,7 +141,6 @@ export default function NavigationScreen({ route, navigation }: any) {
   const remainingKm = legs
     .slice(currentLegIndex)
     .reduce((sum, l) => sum + (l.distanceKm ?? 0), 0);
-  const progressPct = legs.length ? Math.round((currentLegIndex / legs.length) * 100) : 0;
 
   useEffect(() => {
     const anim = Animated.loop(
@@ -276,6 +233,44 @@ export default function NavigationScreen({ route, navigation }: any) {
     return () => locationSubRef.current?.remove();
   }, []);
 
+  const advanceLeg = () => {
+    const idx = currentLegRef.current;
+    if (idx >= legs.length - 1) {
+      setArrived(true);
+      locationSubRef.current?.remove();
+    } else {
+      currentLegRef.current = idx + 1;
+      setCurrentLegIndex(idx + 1);
+    }
+  };
+
+  // The validation doc's one question after every trip. "Something wrong"
+  // opens Report with the trip filled in so the fix takes two taps.
+  const askIfItWorked = (after: () => void) => {
+    const lead = legs.find((l) => l.mode !== 'walk');
+    const toReport = (kind: 'route_down' | 'fare_change' | 'stop_moved') => {
+      navigation.navigate('Main', {
+        screen: 'Report',
+        params: {
+          kind,
+          origin: legs[0]?.from.name,
+          destination: destinationName,
+          mode: lead?.mode,
+          fare: option.totalPriceMax,
+        },
+      });
+    };
+    Alert.alert(
+      'Did the route work?',
+      'Your answer fixes the map for the next person.',
+      [
+        { text: 'Yes, e work', onPress: after },
+        { text: 'Wrong bus / stop', onPress: () => toReport('route_down') },
+        { text: 'Fare was different', onPress: () => toReport('fare_change') },
+      ],
+    );
+  };
+
   const endJourney = () => {
     locationSubRef.current?.remove();
     // Ending a journey returns to the tabs, not to the route-options sheet
@@ -302,7 +297,7 @@ export default function NavigationScreen({ route, navigation }: any) {
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         }}
-        onPress={() => { collapseSheet(); setIsTracking(false); }}
+        onPress={() => setIsTracking(false)}
       >
         {/* Route polylines — rendered after ORS responds */}
         {geometriesLoaded && legs.map((leg, i) => {
@@ -402,7 +397,7 @@ export default function NavigationScreen({ route, navigation }: any) {
                   <Text style={styles.distText}>{formatDist(distanceToNext)}</Text>
                 )}
                 <Text style={styles.instructionText} numberOfLines={2}>
-                  {currentLeg.instruction}
+                  {currentLeg.localInstruction || currentLeg.instruction}
                 </Text>
               </View>
             </View>
@@ -410,7 +405,7 @@ export default function NavigationScreen({ route, navigation }: any) {
             {nextLeg && (
               <View style={styles.nextStrip}>
                 <Text style={styles.nextEyebrow}>Then</Text>
-                <Text style={styles.nextText} numberOfLines={1}>{nextLeg.instruction}</Text>
+                <Text style={styles.nextText} numberOfLines={1}>{nextLeg.localInstruction || nextLeg.instruction}</Text>
                 <Text style={styles.nextStep}>{currentLegIndex + 2}/{legs.length}</Text>
               </View>
             )}
@@ -418,73 +413,54 @@ export default function NavigationScreen({ route, navigation }: any) {
         )}
       </View>
 
-      {/* Arrived overlay */}
+      {/* Arrived — the one dot, grown into a check (morph 6) */}
       {arrived && (
         <View style={styles.arrivedOverlay}>
-          <View style={styles.arrivedCard}>
-            <Ionicons name="checkmark-circle" size={64} color={WW.orange} />
-            <Text style={styles.arrivedTitle}>You've arrived!</Text>
-            <Text style={styles.arrivedSub}>{destinationName}</Text>
-            <TouchableOpacity style={styles.doneBtn} onPress={endJourney}>
-              <Text style={styles.doneBtnText}>Done</Text>
-            </TouchableOpacity>
+          <View style={styles.arrivedDot}>
+            <Ionicons name="checkmark" size={38} color={WW.textOnOrange} />
           </View>
+          <Text style={styles.arrivedTitle}>You done reach!</Text>
+          <Text style={styles.arrivedSub}>{destinationName}</Text>
+          <Pressable onPress={() => askIfItWorked(endJourney)} accessibilityRole="button" style={({ pressed }) => [styles.doneBtn, pressed && { opacity: 0.85 }]}>
+            <Text style={styles.doneBtnText}>Done</Text>
+          </Pressable>
         </View>
       )}
 
-      {/* Bottom sheet */}
+      {/* Action bar — ETA · remaining · next · End (morph 5: the tab bar, as a pill) */}
       {!arrived && (
-        <Animated.View
-          style={[
-            styles.bottomBar,
-            {
-              paddingBottom: insets.bottom + 8,
-              transform: [{ translateY: sheetY }],
-            },
-          ]}
-          onLayout={(e) => { sheetHeightRef.current = e.nativeEvent.layout.height; }}
-        >
-          <View {...sheetPan.panHandlers} style={styles.dragHandleArea}>
-            <View style={styles.dragPill} />
+        <View style={[styles.actionBar, { bottom: insets.bottom + 26 }]}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.etaText}>{formatETA(remainingMins)}</Text>
+            <Text style={styles.remainingText} numberOfLines={1}>
+              {remainingMins} min · {remainingKm.toFixed(1)} km left{speedKmh > 0 ? ` · ${speedKmh} km/h` : ''}
+            </Text>
           </View>
-
-          <View style={styles.bottomContent}>
-            <View style={styles.tripRow}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.etaText}>{formatETA(remainingMins)}</Text>
-                <Text style={styles.tripSub} numberOfLines={1}>
-                  {remainingMins} min · {remainingKm.toFixed(1)} km left{speedKmh > 0 ? ` · ${speedKmh} km/h` : ''}
-                </Text>
-              </View>
-
-              <View style={styles.bottomActions}>
-                <TouchableOpacity
-                  style={[styles.recenterBtn, isTracking && navMode === 'tracking' && styles.recenterIdle]}
-                  onPress={() => { setIsTracking(true); setNavMode('tracking'); }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Recenter on my location"
-                >
-                  <Ionicons name="navigate" size={20} color={WW.text} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.endBtn}
-                  onPress={endJourney}
-                  accessibilityRole="button"
-                  accessibilityLabel="End journey"
-                >
-                  <Text style={styles.endBtnText}>End</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.progressTrack}>
-              <View style={[
-                styles.progressFill,
-                { width: `${Math.max(progressPct, 3)}%`, backgroundColor: legColor(WW, currentLeg?.mode ?? 'walk') },
-              ]} />
-            </View>
-          </View>
-        </Animated.View>
+          <Pressable
+            onPress={() => { setIsTracking(true); setNavMode('tracking'); }}
+            accessibilityRole="button"
+            accessibilityLabel="Recenter on my location"
+            style={({ pressed }) => [styles.roundAction, pressed && { opacity: 0.7 }]}
+          >
+            <Ionicons name="navigate" size={18} color={WW.textOnOrange} />
+          </Pressable>
+          <Pressable
+            onPress={advanceLeg}
+            accessibilityRole="button"
+            accessibilityLabel="Next step"
+            style={({ pressed }) => [styles.roundAction, pressed && { opacity: 0.7 }]}
+          >
+            <Ionicons name="arrow-forward" size={18} color={WW.textOnOrange} />
+          </Pressable>
+          <Pressable
+            onPress={() => askIfItWorked(endJourney)}
+            accessibilityRole="button"
+            accessibilityLabel="End journey"
+            style={({ pressed }) => [styles.endBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.endBtnText}>End</Text>
+          </Pressable>
+        </View>
       )}
     </View>
   );
@@ -561,72 +537,52 @@ function makeStyles(WW: WWColors) {
     backgroundColor: WW.orange, borderWidth: 3, borderColor: '#fff',
   },
 
-  bottomBar: {
-    position: 'absolute', left: 0, right: 0, bottom: 0,
-    borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
-    backgroundColor: WW.frosted,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: WW.borderStrong,
+  actionBar: {
+    position: 'absolute', left: 14, right: 14, height: 72,
+    borderRadius: Radius.pill, backgroundColor: WW.orange,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingLeft: 22, paddingRight: 8,
+    shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 40, shadowOffset: { width: 0, height: 16 },
+    elevation: 14,
   },
-  dragHandleArea: {
-    width: '100%', paddingVertical: 10,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  dragPill: { width: 36, height: 5, borderRadius: Radius.pill, backgroundColor: WW.borderStrong },
-  bottomContent: { paddingHorizontal: Space.lg, paddingTop: Space.xs, paddingBottom: Space.sm },
-  tripRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: Space.md },
   etaText: {
-    fontFamily: Fonts.extrabold, fontSize: Typography.hero, lineHeight: Typography.hero,
-    color: WW.greenGlow, letterSpacing: Tracking.tight,
+    fontFamily: Fonts.extrabold, fontSize: Typography.xl, lineHeight: Typography.xl,
+    color: WW.textOnOrange, letterSpacing: Tracking.tight / 2,
   },
-  tripSub: { fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textSub, marginTop: 6 },
-  progressTrack: {
-    marginTop: 14, height: 6, borderRadius: Radius.pill, overflow: 'hidden',
-    backgroundColor: 'rgba(242,241,237,0.14)',
-  },
-  progressFill: { height: 6, borderRadius: Radius.pill },
-  speedPill: { display: 'none' },
-  speedNum: { color: '#fff', fontSize: 20, fontWeight: '800', lineHeight: 22 },
-  speedUnit: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '600' },
-  bottomLeft: { flex: 1 },
-  bottomDest: { fontSize: Typography.lg, fontWeight: Typography.bold, color: WW.text },
-  bottomTime: { fontSize: Typography.sm, marginTop: 2, color: WW.textSub },
-  bottomActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  recenterBtn: {
-    width: 52, height: 52, borderRadius: Radius.lg,
-    backgroundColor: 'rgba(242,241,237,0.10)',
+  remainingText: { fontFamily: Fonts.semibold, fontSize: 12, color: 'rgba(26,18,0,0.72)', marginTop: 3 },
+  roundAction: {
+    width: 48, height: 48, borderRadius: Radius.pill,
+    backgroundColor: 'rgba(26,18,0,0.10)',
     alignItems: 'center', justifyContent: 'center',
   },
-  recenterIdle: { opacity: 0.45 },
   endBtn: {
-    height: 52, paddingHorizontal: 22, borderRadius: Radius.lg,
-    backgroundColor: WW.text,
+    height: 48, paddingHorizontal: 22, borderRadius: Radius.pill,
+    backgroundColor: WW.textOnOrange,
     alignItems: 'center', justifyContent: 'center',
   },
-  endBtnText: { fontFamily: Fonts.bold, fontSize: Typography.lg, color: WW.bg },
+  endBtnText: { fontFamily: Fonts.extrabold, fontSize: Typography.md, color: WW.orange },
 
   arrivedOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: WW.scrim,
+    backgroundColor: 'rgba(20,22,26,0.86)',
     justifyContent: 'center', alignItems: 'center',
-    padding: 24,
+    padding: 32, gap: 8,
   },
-  arrivedCard: {
-    width: '100%', borderRadius: 20,
-    backgroundColor: WW.bgSurface,
-    borderWidth: 1, borderColor: WW.border,
-    padding: 32, alignItems: 'center', gap: 16,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 20 },
-      android: { elevation: 12 },
-    }),
+  arrivedDot: {
+    width: 72, height: 72, borderRadius: Radius.pill, backgroundColor: WW.orange,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+    shadowColor: WW.orange, shadowOpacity: 0.6, shadowRadius: 30, shadowOffset: { width: 0, height: 10 },
   },
-  arrivedTitle: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: WW.text },
-  arrivedSub: { fontSize: Typography.lg, textAlign: 'center', color: WW.textSub },
+  arrivedTitle: {
+    fontFamily: Fonts.extrabold, fontSize: 32, lineHeight: 34,
+    color: WW.text, letterSpacing: -0.8, textAlign: 'center',
+  },
+  arrivedSub: { fontFamily: Fonts.regular, fontSize: Typography.lg, color: WW.textSub, textAlign: 'center' },
   doneBtn: {
-    paddingHorizontal: 40, paddingVertical: 14,
-    borderRadius: 30, marginTop: 8, backgroundColor: WW.orange,
+    marginTop: 22, paddingHorizontal: 34, height: 52, borderRadius: Radius.pill,
+    backgroundColor: WW.orange, alignItems: 'center', justifyContent: 'center',
   },
-  doneBtnText: { color: '#fff', fontWeight: Typography.bold, fontSize: Typography.lg },
+  doneBtnText: { fontFamily: Fonts.extrabold, fontSize: Typography.md, color: WW.textOnOrange },
 
   routeLoadingBadge: {
     position: 'absolute', bottom: 130, alignSelf: 'center',

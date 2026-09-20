@@ -9,26 +9,26 @@ import type { WWColors } from '../../theme/colors';
 import { Fonts, Typography, Tracking } from '../../theme/typography';
 import { Space, HIT } from '../../theme/spacing';
 
-// Bottom tab bar — Home · Search · Contribute · You.
+// Bottom tab bar — Home · Live · Report · You (WakaWay Mobile canvas, 1a).
 //
 // Sits on translucent material over whatever is behind it (the live map on
-// Home), which is why it blurs rather than paints. The label colour is
-// textMuted, which clears 4.5:1 on both grounds; the canvas's lighter grey did
-// not. Every item is 88×48 with hitSlop up to the 44pt minimum.
+// Home), which is why it blurs rather than paints. The active tab's glyph
+// sits in a danfo-yellow tile; the label colour is textMuted, which clears
+// 4.5:1 on both grounds. Every item is 88×48 with hitSlop up to 44pt.
 
 type IconPair = { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap };
 
 const ICONS: Record<string, IconPair> = {
-  Home:         { active: 'home',        inactive: 'home-outline' },
-  Search:       { active: 'search',      inactive: 'search-outline' },
-  Contribution: { active: 'add-circle',  inactive: 'add-circle-outline' },
-  You:          { active: 'person',      inactive: 'person-outline' },
+  Home:   { active: 'home',            inactive: 'home-outline' },
+  Live:   { active: 'radio',           inactive: 'radio-outline' },
+  Report: { active: 'megaphone',       inactive: 'megaphone-outline' },
+  You:    { active: 'person',          inactive: 'person-outline' },
 };
 
 const LABELS: Record<string, string> = {
   Home: 'Home',
-  Search: 'Search',
-  Contribution: 'Contribute',
+  Live: 'Live',
+  Report: 'Report',
   You: 'You',
 };
 
@@ -69,11 +69,13 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
               accessibilityLabel={label}
               style={({ pressed }) => [s.item, pressed && s.itemPressed]}
             >
-              <Ionicons
-                name={focused ? icon.active : icon.inactive}
-                size={20}
-                color={focused ? WW.text : WW.textMuted}
-              />
+              <View style={[s.glyph, focused && s.glyphActive]}>
+                <Ionicons
+                  name={focused ? icon.active : icon.inactive}
+                  size={18}
+                  color={focused ? WW.textOnOrange : WW.textMuted}
+                />
+              </View>
               <Text style={[s.label, focused ? s.labelActive : s.labelInactive]} numberOfLines={1}>
                 {label}
               </Text>
@@ -91,12 +93,12 @@ function makeStyles(WW: WWColors) {
       backgroundColor: Platform.OS === 'ios' ? 'transparent' : WW.frosted,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: WW.border,
-      paddingTop: Space.xs,
+      paddingTop: Space.sm,
     },
     row: {
       flexDirection: 'row',
       justifyContent: 'space-evenly',
-      alignItems: 'center',
+      alignItems: 'flex-start',
     },
     item: {
       width: 88,
@@ -105,20 +107,14 @@ function makeStyles(WW: WWColors) {
       justifyContent: 'center',
       gap: 5,
     },
-    itemPressed: {
-      opacity: 0.6,
+    itemPressed: { opacity: 0.6 },
+    glyph: {
+      width: 28, height: 24, borderRadius: 8,
+      alignItems: 'center', justifyContent: 'center',
     },
-    label: {
-      fontSize: Typography.xs,
-      letterSpacing: Tracking.none,
-    },
-    labelActive: {
-      fontFamily: Fonts.bold,
-      color: WW.text,
-    },
-    labelInactive: {
-      fontFamily: Fonts.semibold,
-      color: WW.textMuted,
-    },
+    glyphActive: { backgroundColor: WW.orange },
+    label: { fontSize: Typography.xs, letterSpacing: Tracking.none },
+    labelActive:   { fontFamily: Fonts.bold, color: WW.text },
+    labelInactive: { fontFamily: Fonts.semibold, color: WW.textMuted },
   });
 }

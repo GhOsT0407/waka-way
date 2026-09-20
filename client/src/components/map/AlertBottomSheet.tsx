@@ -1,551 +1,155 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Dimensions,
-  Image,
-  ActivityIndicator,
-} from 'react-native';
-import { PanGestureHandler, State as GestureState } from 'react-native-gesture-handler';
-import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Image, ActivityIndicator } from 'react-native';
 import { Contribution } from '../../hooks/useContributions';
 import { useAppTheme } from '../../context/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../../utils/constants';
+import type { WWColors } from '../../theme/colors';
+import { Fonts, Typography, Tracking } from '../../theme/typography';
+import { Space, Radius } from '../../theme/spacing';
+import { kindMeta, timeAgo, freshnessOf, freshnessLabel } from '../../utils/reportKinds';
+import { Sheet, SheetView, SheetRef } from '../ui/Sheet';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const BOTTOM_SHEET_MAX_HEIGHT = SCREEN_HEIGHT * 0.6;
-const BOTTOM_SHEET_MIN_HEIGHT = 0;
-
-// Marker configuration for styling
-const MARKER_CONFIG: Record<string, {
-  color: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-}> = {
-  security: { color: '#D32F2F', icon: 'shield-outline', label: 'Security' },
-  danger_zone: { color: '#D32F2F', icon: 'warning-outline', label: 'Danger Zone' },
-  traffic: { color: '#FF9800', icon: 'car-sport-outline', label: 'Traffic' },
-  hazard: { color: '#FF5722', icon: 'alert-circle-outline', label: 'Hazard' },
-  construction: { color: '#FFC107', icon: 'construct-outline', label: 'Construction' },
-  bus_stop: { color: '#2196F3', icon: 'bus-outline', label: 'Bus Stop' },
-  taxi_stand: { color: '#9C27B0', icon: 'car-outline', label: 'Taxi Stand' },
-  other: { color: '#607D8B', icon: 'help-circle-outline', label: 'Other' },
-};
+// One report, as the Live map's sheet (WakaWay Mobile canvas): kind · age,
+// the title at 22/800, the body, then the two votes — "Still dey happen"
+// confirms, "Don clear" dismisses. Both go through the vote RPC (0010).
 
 interface AlertBottomSheetProps {
-  /** The contribution to display */
   contribution: Contribution | null;
-  /** Whether the sheet is visible */
   visible: boolean;
-  /** Close the sheet */
   onClose: () => void;
-  /** User's current vote on this contribution */
   userVote: 'CONFIRM' | 'DISMISS' | null;
-  /** Vote on the contribution */
   onVote: (contributionId: string, voteType: 'CONFIRM' | 'DISMISS') => Promise<boolean>;
-  /** Distance from user (optional) */
   distance?: number;
 }
 
-/**
- * AlertBottomSheet Component
- * 
- * Displays contribution details with voting buttons when a map marker is tapped.
- * Features:
- * - "Still there? âœ… Yes" and "All clear? âŒ No" voting buttons
- * - Verified badge for 5+ confirms
- * - Visual feedback for user's existing vote
- * - Image preview if available
- * - Trust score indicator
- */
 export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
-  contribution,
-  visible,
-  onClose,
-  userVote,
-  onVote,
-  distance,
+  contribution, visible, onClose, userVote, onVote, distance,
 }) => {
   const { WW } = useAppTheme();
-  const translateY = useRef(new Animated.Value(BOTTOM_SHEET_MAX_HEIGHT)).current;
-  const [isVoting, setIsVoting] = useState(false);
-  const [currentVote, setCurrentVote] = useState<'CONFIRM' | 'DISMISS' | null>(null);
+  const s = useMemo(() => makeStyles(WW), [WW]);
+  const ref = useRef<SheetRef>(null);
+  const [voting, setVoting] = useState<'CONFIRM' | 'DISMISS' | null>(null);
+  const [vote, setVote] = useState(userVote);
 
-  // Update currentVote when userVote changes
+  useEffect(() => setVote(userVote), [userVote, contribution?.id]);
   useEffect(() => {
-    setCurrentVote(userVote);
-  }, [userVote]);
-
-  // Animate sheet visibility
-  useEffect(() => {
-    Animated.spring(translateY, {
-      toValue: visible ? 0 : BOTTOM_SHEET_MAX_HEIGHT,
-      useNativeDriver: true,
-      tension: 65,
-      friction: 11,
-    }).start();
-  }, [visible, translateY]);
-
-  const onGestureEvent = ({ nativeEvent }: any) => {
-    if (nativeEvent.translationY > 0) {
-      translateY.setValue(nativeEvent.translationY);
-    }
-  };
-
-  const onHandlerStateChange = ({ nativeEvent }: any) => {
-    if (nativeEvent.oldState === GestureState.ACTIVE) {
-      if (nativeEvent.translationY > 100) {
-        onClose();
-      } else {
-        Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
-      }
-    }
-  };
-
-  // Handle vote
-  const handleVote = async (voteType: 'CONFIRM' | 'DISMISS') => {
-    if (!contribution || isVoting) return;
-
-    setIsVoting(true);
-    try {
-      const success = await onVote(contribution.id, voteType);
-      if (success) {
-        // Update local state
-        setCurrentVote(currentVote === voteType ? null : voteType);
-      }
-    } finally {
-      setIsVoting(false);
-    }
-  };
+    if (visible && contribution) ref.current?.snapToIndex(0);
+    else ref.current?.close();
+  }, [visible, contribution]);
 
   if (!contribution) return null;
+  const meta = kindMeta(contribution.type);
+  const color = meta.color(WW);
 
-  const config = MARKER_CONFIG[contribution.type] || MARKER_CONFIG.other;
-  const isVerified = contribution.verified || (contribution.confirm_count >= 5);
-  const trustLevel = contribution.reporter_trust_score >= 1.5 ? 'high' : 
-                     contribution.reporter_trust_score >= 0.8 ? 'medium' : 'low';
-
-  // Format relative time
-  const formatRelativeTime = (timestamp: string): string => {
-    const now = new Date();
-    const date = new Date(timestamp);
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return date.toLocaleDateString();
+  const cast = async (type: 'CONFIRM' | 'DISMISS') => {
+    if (voting) return;
+    setVoting(type);
+    const ok = await onVote(contribution.id, type);
+    if (ok) setVote(type);
+    setVoting(null);
   };
 
+  const confirms = contribution.confirm_count ?? contribution.confirms ?? 0;
+  const dismisses = contribution.dismiss_count ?? contribution.dismisses ?? 0;
+  const fresh = freshnessOf(contribution);
+  const freshColor = fresh === 'verified' ? WW.green : fresh === 'reported' ? WW.warning : WW.textMuted;
+
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          transform: [{ translateY }],
-        },
-      ]}
+    <Sheet
+      ref={ref}
+      index={-1}
+      enableDynamicSizing
+      enablePanDownToClose
+      onClose={onClose}
     >
-      {/* Handle */}
-      <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange}>
-        <Animated.View style={styles.handleContainer}>
-          <View style={[styles.handle, { backgroundColor: WW.border }]} />
-        </Animated.View>
-      </PanGestureHandler>
-
-      {/* Content */}
-      <View style={[styles.content, { backgroundColor: WW.bgSurface }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={[styles.typeIcon, { backgroundColor: `${config.color}20` }]}>
-            <Ionicons name={config.icon} size={28} color={config.color} />
-          </View>
-          <View style={styles.headerText}>
-            <View style={styles.titleRow}>
-              <Text style={[styles.typeLabel, { color: config.color }]}>
-                {config.label.toUpperCase()}
-              </Text>
-              {isVerified && (
-                <View style={styles.verifiedBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color="#22C55E" />
-                  <Text style={styles.verifiedText}>Verified</Text>
-                </View>
-              )}
-            </View>
-            <Text style={[styles.title, { color: WW.text }]} numberOfLines={2}>
-              {contribution.title}
-            </Text>
-          </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color={WW.textSub} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Description */}
-        {contribution.description && (
-          <Text style={[styles.description, { color: WW.textSub }]}>
-            {contribution.description}
+      <SheetView style={s.body}>
+        <View style={s.kindRow}>
+          <View style={[s.kindDot, { backgroundColor: color }]} />
+          <Text style={s.kind}>
+            {meta.label.toUpperCase()} · {timeAgo(contribution.created_at).toUpperCase()}
+            {distance != null ? ` · ${distance < 1 ? `${Math.round(distance * 1000)} M` : `${distance.toFixed(1)} KM`} AWAY` : ''}
           </Text>
-        )}
-
-        {/* Image */}
-        {contribution.image_url && (
-          <Image
-            source={{ uri: contribution.image_url }}
-            style={styles.image}
-            resizeMode="cover"
-          />
-        )}
-
-        {/* Meta Info */}
-        <View style={styles.metaContainer}>
-          <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={16} color={WW.textSub} />
-            <Text style={[styles.metaText, { color: WW.textSub }]}>
-              {formatRelativeTime(contribution.created_at)}
-            </Text>
-          </View>
-          {distance !== undefined && (
-            <View style={styles.metaItem}>
-              <Ionicons name="location-outline" size={16} color={WW.textSub} />
-              <Text style={[styles.metaText, { color: WW.textSub }]}>
-                {distance < 1 ? `${Math.round(distance * 1000)}m` : `${distance.toFixed(1)}km`} away
-              </Text>
-            </View>
-          )}
-          {contribution.address && (
-            <View style={styles.metaItem}>
-              <Ionicons name="navigate-outline" size={16} color={WW.textSub} />
-              <Text style={[styles.metaText, { color: WW.textSub }]} numberOfLines={1}>
-                {contribution.address}
-              </Text>
-            </View>
-          )}
         </View>
-
-        {/* Vote Stats */}
-        <View style={[styles.statsContainer, { backgroundColor: WW.orangeDim }]}>
-          <View style={styles.statItem}>
-            <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
-            <Text style={[styles.statNumber, { color: WW.text }]}>
-              {contribution.confirm_count || contribution.confirms || 0}
-            </Text>
-            <Text style={[styles.statLabel, { color: WW.textSub }]}>
-              Confirms
-            </Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Ionicons name="close-circle" size={20} color="#F44336" />
-            <Text style={[styles.statNumber, { color: WW.text }]}>
-              {contribution.dismiss_count || contribution.dismisses || 0}
-            </Text>
-            <Text style={[styles.statLabel, { color: WW.textSub }]}>
-              Dismisses
-            </Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Ionicons 
-              name={trustLevel === 'high' ? 'star' : trustLevel === 'medium' ? 'star-half' : 'star-outline'} 
-              size={20} 
-              color={trustLevel === 'high' ? '#FFD700' : trustLevel === 'medium' ? '#FFA500' : '#999'}
-            />
-            <Text style={[styles.statNumber, { color: WW.text }]}>
-              {(contribution.reporter_trust_score || 1).toFixed(1)}
-            </Text>
-            <Text style={[styles.statLabel, { color: WW.textSub }]}>
-              Trust
-            </Text>
-          </View>
-        </View>
-
-        {/* Voting Buttons */}
-        <View style={styles.votingContainer}>
-          <Text style={[styles.votingPrompt, { color: WW.text }]}>
-            Is this issue still there?
+        <View style={[s.freshPill, { backgroundColor: freshColor + '22' }]}>
+          <View style={[s.kindDot, { backgroundColor: freshColor }]} />
+          <Text style={[s.freshText, { color: fresh === 'stale' ? WW.textMuted : fresh === 'verified' ? WW.green : WW.warningText }]}>
+            {freshnessLabel(fresh, confirms)}
           </Text>
-          <View style={styles.votingButtons}>
-            {/* Confirm Button */}
-            <TouchableOpacity
-              style={[
-                styles.voteButton,
-                styles.confirmButton,
-                currentVote === 'CONFIRM' && styles.voteButtonActive,
-                currentVote === 'DISMISS' && styles.voteButtonDisabled,
-              ]}
-              onPress={() => handleVote('CONFIRM')}
-              disabled={isVoting}
-            >
-              {isVoting && currentVote !== 'DISMISS' ? (
-                <ActivityIndicator size="small" color="#22C55E" />
-              ) : (
-                <>
-                  <Ionicons
-                    name={currentVote === 'CONFIRM' ? 'checkmark-circle' : 'checkmark-circle-outline'}
-                    size={24}
-                    color={currentVote === 'DISMISS' ? '#999' : '#22C55E'}
-                  />
-                  <Text style={[
-                    styles.voteButtonText,
-                    { color: currentVote === 'DISMISS' ? '#999' : '#22C55E' }
-                  ]}>
-                    Still there âœ…
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {/* Dismiss Button */}
-            <TouchableOpacity
-              style={[
-                styles.voteButton,
-                styles.dismissButton,
-                currentVote === 'DISMISS' && styles.voteButtonActive,
-                currentVote === 'CONFIRM' && styles.voteButtonDisabled,
-              ]}
-              onPress={() => handleVote('DISMISS')}
-              disabled={isVoting}
-            >
-              {isVoting && currentVote !== 'CONFIRM' ? (
-                <ActivityIndicator size="small" color="#F44336" />
-              ) : (
-                <>
-                  <Ionicons
-                    name={currentVote === 'DISMISS' ? 'close-circle' : 'close-circle-outline'}
-                    size={24}
-                    color={currentVote === 'CONFIRM' ? '#999' : '#F44336'}
-                  />
-                  <Text style={[
-                    styles.voteButtonText,
-                    { color: currentVote === 'CONFIRM' ? '#999' : '#F44336' }
-                  ]}>
-                    All clear âŒ
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-          {currentVote && (
-            <Text style={[styles.votedHint, { color: WW.textSub }]}>
-              Tap again to remove your vote
-            </Text>
-          )}
         </View>
 
-        {/* Danger Zone Warning */}
-        {['security', 'danger_zone'].includes(contribution.type) && (
-          <View style={styles.dangerWarning}>
-            <Ionicons name="warning" size={18} color="#D32F2F" />
-            <Text style={styles.dangerText}>
-              âš ï¸ 500m danger zone marked on map. Exercise caution in this area.
-            </Text>
-          </View>
+        <Text style={s.title}>{contribution.title}</Text>
+        {!!contribution.description && <Text style={s.desc}>{contribution.description}</Text>}
+        {!!contribution.image_url && (
+          <Image source={{ uri: contribution.image_url }} style={s.image} resizeMode="cover" />
         )}
-      </View>
-    </Animated.View>
+
+        <Text style={s.tally}>
+          {confirms} say e still dey · {dismisses} say e don clear
+        </Text>
+
+        <View style={s.actions}>
+          <Pressable
+            onPress={() => cast('CONFIRM')}
+            disabled={!!voting}
+            accessibilityRole="button"
+            accessibilityState={{ selected: vote === 'CONFIRM' }}
+            style={({ pressed }) => [s.confirm, vote === 'CONFIRM' && s.confirmActive, pressed && s.pressed]}
+          >
+            {voting === 'CONFIRM'
+              ? <ActivityIndicator color={WW.textOnOrange} />
+              : <Text style={s.confirmText}>{vote === 'CONFIRM' ? 'You said e still dey' : 'Still dey happen'}</Text>}
+          </Pressable>
+          <Pressable
+            onPress={() => cast('DISMISS')}
+            disabled={!!voting}
+            accessibilityRole="button"
+            accessibilityState={{ selected: vote === 'DISMISS' }}
+            style={({ pressed }) => [s.dismiss, vote === 'DISMISS' && s.dismissActive, pressed && s.pressed]}
+          >
+            {voting === 'DISMISS'
+              ? <ActivityIndicator color={WW.text} />
+              : <Text style={s.dismissText}>Don clear</Text>}
+          </Pressable>
+        </View>
+      </SheetView>
+    </Sheet>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: BOTTOM_SHEET_MAX_HEIGHT,
-    zIndex: 1000,
-  },
-  handleContainer: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    backgroundColor: 'transparent',
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-  },
-  content: {
-    flex: 1,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: SPACING.MD,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: SPACING.MD,
-  },
-  typeIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.MD,
-  },
-  headerText: {
-    flex: 1,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  typeLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  verifiedText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#22C55E',
-    marginLeft: 4,
-  },
-  title: {
-    fontSize: FONT_SIZES.HEADING_3,
-    fontWeight: '600',
-    lineHeight: 24,
-  },
-  closeButton: {
-    padding: 8,
-    marginLeft: SPACING.SM,
-  },
-  description: {
-    fontSize: FONT_SIZES.BODY,
-    lineHeight: 22,
-    marginBottom: SPACING.MD,
-  },
-  image: {
-    width: '100%',
-    height: 150,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    marginBottom: SPACING.MD,
-  },
-  metaContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: SPACING.MD,
-    gap: SPACING.MD,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  metaText: {
-    fontSize: FONT_SIZES.SMALL,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    padding: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    marginBottom: SPACING.MD,
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: FONT_SIZES.HEADING_3,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  votingContainer: {
-    marginBottom: SPACING.MD,
-  },
-  votingPrompt: {
-    fontSize: FONT_SIZES.BODY,
-    fontWeight: '600',
-    marginBottom: SPACING.SM,
-    textAlign: 'center',
-  },
-  votingButtons: {
-    flexDirection: 'row',
-    gap: SPACING.MD,
-  },
-  voteButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    borderWidth: 2,
-    gap: 8,
-  },
-  confirmButton: {
-    borderColor: '#22C55E',
-    backgroundColor: 'rgba(76, 175, 80, 0.05)',
-  },
-  dismissButton: {
-    borderColor: '#F44336',
-    backgroundColor: 'rgba(244, 67, 54, 0.05)',
-  },
-  voteButtonActive: {
-    borderWidth: 2,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  voteButtonDisabled: {
-    opacity: 0.5,
-    borderColor: '#CCC',
-  },
-  voteButtonText: {
-    fontSize: FONT_SIZES.BODY,
-    fontWeight: '600',
-  },
-  votedHint: {
-    fontSize: FONT_SIZES.SMALL,
-    textAlign: 'center',
-    marginTop: SPACING.SM,
-    fontStyle: 'italic',
-  },
-  dangerWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(211, 47, 47, 0.1)',
-    padding: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MEDIUM,
-    gap: SPACING.SM,
-  },
-  dangerText: {
-    flex: 1,
-    fontSize: FONT_SIZES.SMALL,
-    color: '#D32F2F',
-    fontWeight: '500',
-  },
-});
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+    body: { paddingHorizontal: Space.lg, paddingBottom: Space.xxl + Space.lg, paddingTop: Space.xs },
+    kindRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+    kindDot: { width: 8, height: 8, borderRadius: Radius.pill },
+    kind: { fontFamily: Fonts.bold, fontSize: Typography.xs, letterSpacing: Tracking.eyebrow, color: WW.textMuted },
+    freshPill: {
+      alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6,
+      paddingVertical: 4, paddingHorizontal: 8, borderRadius: Radius.pill, marginBottom: 10,
+    },
+    freshText: { fontFamily: Fonts.bold, fontSize: Typography.xs, letterSpacing: Tracking.eyebrow },
+    title: {
+      fontFamily: Fonts.extrabold, fontSize: Typography.xl, lineHeight: Typography.xl * 1.2,
+      color: WW.text, letterSpacing: Tracking.tight / 2,
+    },
+    desc: { fontFamily: Fonts.regular, fontSize: Typography.md, lineHeight: Typography.md * 1.45, color: WW.textSub, marginTop: Space.sm },
+    image: { width: '100%', height: 160, borderRadius: Radius.lg, marginTop: Space.md, backgroundColor: WW.bgElevated },
+    tally: { fontFamily: Fonts.medium, fontSize: Typography.sm, color: WW.textMuted, marginTop: Space.md },
+    actions: { flexDirection: 'row', gap: 10, marginTop: 18 },
+    confirm: {
+      flex: 1, minHeight: 50, paddingHorizontal: 14,
+      borderRadius: Radius.pill, backgroundColor: WW.orange,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    confirmActive: { backgroundColor: WW.orangeGlow },
+    confirmText: { fontFamily: Fonts.extrabold, fontSize: Typography.md, color: WW.textOnOrange },
+    dismiss: {
+      minHeight: 50, paddingHorizontal: 20,
+      borderRadius: Radius.pill, borderWidth: 1, borderColor: WW.border,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    dismissActive: { borderColor: WW.text, backgroundColor: WW.bgElevated },
+    dismissText: { fontFamily: Fonts.semibold, fontSize: Typography.md, color: WW.text },
+    pressed: { opacity: 0.8 },
+  });
+}
 
 export default AlertBottomSheet;

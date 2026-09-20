@@ -1,762 +1,373 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  FlatList,
-  Modal,
-  TextInput,
-  ActivityIndicator,
-  RefreshControl,
-  Platform,
+  View, Text, StyleSheet, Pressable, ScrollView, RefreshControl, Alert,
+  TextInput, ActivityIndicator, Switch,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { useAppTheme } from '../context/ThemeContext';
 import type { WWColors } from '../theme/colors';
-import { Typography } from '../theme/typography';
+import { Fonts, Typography, Tracking } from '../theme/typography';
+import { Space, Radius, HIT } from '../theme/spacing';
 import {
-  FavoritePlace,
-  RouteHistoryItem,
-  SavedRoute,
-  getFavoritePlaces,
-  upsertFavoritePlace,
-  deleteFavoritePlace,
-  getRouteHistory,
-  deleteRouteHistory,
-  clearAllRouteHistory,
-  getSavedRoutes,
-  deleteSavedRoute,
+  getRouteHistory, deleteRouteHistory, clearAllRouteHistory,
+  getSavedRoutes, deleteSavedRoute,
+  getFavoritePlaces, upsertFavoritePlace, deleteFavoritePlace,
+  RouteHistoryItem, SavedRoute, FavoritePlace,
 } from '../services/supabaseDataService';
-import { searchPlaces, getPlaceDetails } from '../services/placesService';
+import { searchPlaces, getPlaceDetails, PlacePrediction } from '../services/placesService';
+import { Sheet, SheetView, SheetRef } from '../components/ui/Sheet';
+
+// You (WakaWay Mobile canvas): the name at 34/800, "email · N trips",
+// Trips / Saved / Places as pill tabs, rows with a 4pt colour bar and the
+// figure on the right, the dark-mode card, then Preferences and Sign out.
+//
+// Home and Work are written to Supabase (favorite_places) AND to the
+// AsyncStorage keys Home's shortcut sheet reads, so setting them here shows
+// up on Home immediately and survives a reinstall.
 
 type Tab = 'history' | 'saved' | 'places';
-
-interface AddPlaceForm {
-  type: 'home' | 'work' | 'favorite';
-  query: string;
-  label: string;
-}
+const HOME_PLACE_KEY = 'quickPick_home';
+const WORK_PLACE_KEY = 'quickPick_work';
 
 export default function YouScreen({ navigation }: any) {
-  const { WW } = useAppTheme();
-  const styles = useMemo(() => makeStyles(WW), [WW]);
+  const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const { WW, isDark, toggleTheme } = useAppTheme();
+  const s = useMemo(() => makeStyles(WW), [WW]);
 
-  const [activeTab, setActiveTab]         = useState<Tab>('history');
-  const [history, setHistory]             = useState<RouteHistoryItem[]>([]);
-  const [savedRoutes, setSavedRoutes]     = useState<SavedRoute[]>([]);
-  const [favPlaces, setFavPlaces]         = useState<FavoritePlace[]>([]);
-  const [loading, setLoading]             = useState(false);
-  const [refreshing, setRefreshing]       = useState(false);
+  const [tab, setTab] = useState<Tab>('history');
+  const [history, setHistory] = useState<RouteHistoryItem[]>([]);
+  const [saved, setSaved] = useState<SavedRoute[]>([]);
+  const [places, setPlaces] = useState<FavoritePlace[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Add place modal
-  const [showAddPlace, setShowAddPlace]   = useState(false);
-  const [addForm, setAddForm]             = useState<AddPlaceForm>({ type: 'favorite', query: '', label: '' });
-  const [placeSuggestions, setPlaceSuggestions] = useState<any[]>([]);
-  const [searchingPlace, setSearchingPlace]     = useState(false);
-  const [savingPlace, setSavingPlace]     = useState(false);
+  // add-place sheet
+  const sheetRef = useRef<SheetRef>(null);
+  const [addType, setAddType] = useState<'home' | 'work' | 'favorite'>('favorite');
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<PlacePrediction[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [savingPlace, setSavingPlace] = useState(false);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const searchTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const loadData = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
     try {
-      const [hist, saved, places] = await Promise.all([
-        getRouteHistory(user.id),
-        getSavedRoutes(user.id),
-        getFavoritePlaces(user.id),
-      ]);
-      setHistory(hist);
-      setSavedRoutes(saved);
-      setFavPlaces(places);
+      const [h, sv, p] = await Promise.all([getRouteHistory(user.id), getSavedRoutes(user.id), getFavoritePlaces(user.id)]);
+      setHistory(h); setSaved(sv); setPlaces(p);
+      // Keep Home's shortcut keys in step with the account.
+      for (const t of ['home', 'work'] as const) {
+        const fp = p.find((x) => x.type === t);
+        const key = t === 'home' ? HOME_PLACE_KEY : WORK_PLACE_KEY;
+        if (fp) await AsyncStorage.setItem(key, JSON.stringify(toSearchItem(fp)));
+      }
     } finally {
       setLoading(false);
     }
   }, [user]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { load(); }, [load]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
+  const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: () => logout() },
-    ]);
-  };
-
-  const handleDeleteHistory = (id: string) => {
-    Alert.alert('Remove Trip', 'Remove this trip from history?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteRouteHistory(id);
-          setHistory((p) => p.filter((h) => h.id !== id));
-        },
-      },
-    ]);
-  };
-
-  const handleClearHistory = () => {
-    if (!user) return;
-    Alert.alert('Clear History', 'Delete all trip history? This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear All',
-        style: 'destructive',
-        onPress: async () => {
-          await clearAllRouteHistory(user.id);
-          setHistory([]);
-        },
-      },
-    ]);
-  };
-
-  const handleDeleteSaved = (id: string) => {
-    Alert.alert('Remove Route', 'Remove this saved route?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteSavedRoute(id);
-          setSavedRoutes((p) => p.filter((s) => s.id !== id));
-        },
-      },
-    ]);
-  };
-
-  const handleDeletePlace = (id: string, name: string) => {
-    Alert.alert('Remove Place', `Remove "${name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteFavoritePlace(id);
-          setFavPlaces((p) => p.filter((fp) => fp.id !== id));
-        },
-      },
-    ]);
-  };
-
-  const openAddPlace = (type: 'home' | 'work' | 'favorite') => {
-    setAddForm({ type, query: '', label: type === 'favorite' ? '' : type });
-    setPlaceSuggestions([]);
-    setShowAddPlace(true);
-  };
-
+  // ── place search ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    if (!addForm.query.trim()) { setPlaceSuggestions([]); return; }
-
-    setSearchingPlace(true);
+    if (!query.trim()) { setSuggestions([]); setSearching(false); return; }
+    setSearching(true);
     searchTimeout.current = setTimeout(async () => {
-      const results = await searchPlaces(addForm.query);
-      setPlaceSuggestions(results);
-      setSearchingPlace(false);
-    }, 400);
-  }, [addForm.query]);
+      setSuggestions(await searchPlaces(query));
+      setSearching(false);
+    }, 350);
+  }, [query]);
 
-  const handlePlaceSuggestionSelect = async (suggestion: any) => {
-    if (!user) return;
+  const openAdd = (type: 'home' | 'work' | 'favorite') => {
+    setAddType(type); setQuery(''); setSuggestions([]);
+    sheetRef.current?.snapToIndex(0);
+  };
+
+  const pickPlace = async (sug: PlacePrediction) => {
+    if (!user || savingPlace) return;
     setSavingPlace(true);
     try {
-      const details = await getPlaceDetails(suggestion.placeId);
-      if (!details) return;
-
-      const label = addForm.type === 'home' ? 'Home'
-        : addForm.type === 'work' ? 'Work'
-        : addForm.label || details.name;
-
-      const saved = await upsertFavoritePlace(user.id, {
-        label,
-        name:      details.name,
-        address:   details.address,
-        latitude:  details.latitude,
-        longitude: details.longitude,
-        type:      addForm.type,
+      const d = await getPlaceDetails(sug.placeId);
+      if (!d) return;
+      const label = addType === 'home' ? 'Home' : addType === 'work' ? 'Work' : d.name;
+      const row = await upsertFavoritePlace(user.id, {
+        label, name: d.name, address: d.address, latitude: d.latitude, longitude: d.longitude, type: addType,
       });
-
-      if (saved) {
-        setFavPlaces((p) => {
-          const filtered = addForm.type === 'home' || addForm.type === 'work'
-            ? p.filter((fp) => fp.type !== addForm.type)
-            : p;
-          return [...filtered, saved];
-        });
+      if (row) {
+        setPlaces((p) => [...(addType === 'favorite' ? p : p.filter((x) => x.type !== addType)), row]);
+        if (addType !== 'favorite') {
+          await AsyncStorage.setItem(addType === 'home' ? HOME_PLACE_KEY : WORK_PLACE_KEY, JSON.stringify(toSearchItem(row)));
+        }
       }
-
-      setShowAddPlace(false);
+      sheetRef.current?.close();
     } finally {
       setSavingPlace(false);
     }
   };
 
-  const formatDuration = (mins?: number) => {
-    if (!mins) return '';
-    if (mins < 60) return `${mins} min`;
-    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  const confirm = (title: string, msg: string, onYes: () => void) =>
+    Alert.alert(title, msg, [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: onYes }]);
+
+  const removeHistory = (id: string) => confirm('Remove trip', 'Remove this trip from your history?', async () => {
+    await deleteRouteHistory(id); setHistory((p) => p.filter((h) => h.id !== id));
+  });
+  const removeSaved = (id: string) => confirm('Remove route', 'Remove this saved route?', async () => {
+    await deleteSavedRoute(id); setSaved((p) => p.filter((x) => x.id !== id));
+  });
+  const removePlace = (fp: FavoritePlace) => confirm('Remove place', `Remove "${fp.label}"?`, async () => {
+    await deleteFavoritePlace(fp.id); setPlaces((p) => p.filter((x) => x.id !== fp.id));
+    if (fp.type !== 'favorite') await AsyncStorage.removeItem(fp.type === 'home' ? HOME_PLACE_KEY : WORK_PLACE_KEY);
+  });
+  const clearHistory = () => {
+    if (!user) return;
+    Alert.alert('Clear history', 'Delete all trip history? This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Clear all', style: 'destructive', onPress: async () => { await clearAllRouteHistory(user.id); setHistory([]); } },
+    ]);
   };
 
-  const formatFare = (min?: number, max?: number) => {
-    if (!min && !max) return '';
-    if (!min || !max || min === max) return `₦${(max ?? min ?? 0).toLocaleString()}`;
-    return `₦${min.toLocaleString()} – ₦${max.toLocaleString()}`;
-  };
+  const name = user?.email?.split('@')[0]?.replace(/[._]/g, ' ')?.replace(/\b\w/g, (c) => c.toUpperCase()) ?? 'Traveller';
 
-  const formatDate = (iso: string) => {
-    const d = new Date(iso);
-    const today = new Date();
-    const diff  = today.getTime() - d.getTime();
-    const days  = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7)  return `${days} days ago`;
-    return d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
-  };
-
-  const homePlace = favPlaces.find((p) => p.type === 'home');
-  const workPlace = favPlaces.find((p) => p.type === 'work');
-  const otherFaves = favPlaces.filter((p) => p.type === 'favorite');
-
-  // ── TABS ─────────────────────────────────────────────────────────────────────
-
-  const renderHistoryTab = () => (
-    <>
-      {history.length > 0 && (
-        <TouchableOpacity style={styles.clearBtn} onPress={handleClearHistory}>
-          <Text style={styles.clearBtnText}>Clear history</Text>
-        </TouchableOpacity>
-      )}
-      <FlatList
-        data={history}
-        keyExtractor={(i) => i.id}
-        scrollEnabled={false}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.cardRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle} numberOfLines={1}>{item.destination_name}</Text>
-                <Text style={styles.cardSub} numberOfLines={1}>From {item.origin_name}</Text>
-                <View style={styles.cardMeta}>
-                  {!!item.total_duration_mins && (
-                    <View style={styles.metaChip}>
-                      <Ionicons name="time-outline" size={11} color={WW.textSub} />
-                      <Text style={styles.metaText}>{formatDuration(item.total_duration_mins)}</Text>
-                    </View>
-                  )}
-                  {(!!item.total_fare_min || !!item.total_fare_max) && (
-                    <View style={styles.metaChip}>
-                      <Text style={styles.metaTextBlue}>{formatFare(item.total_fare_min, item.total_fare_max)}</Text>
-                    </View>
-                  )}
-                  {(item.transport_modes ?? []).length > 0 && (
-                    <View style={styles.metaChip}>
-                      <Ionicons name="bus-outline" size={11} color={WW.textSub} />
-                      <Text style={styles.metaText}>{(item.transport_modes ?? []).join(', ')}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-              <View style={styles.cardRight}>
-                <Text style={styles.cardDate}>{formatDate(item.created_at)}</Text>
-                <TouchableOpacity onPress={() => handleDeleteHistory(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="trash-outline" size={18} color={WW.textSub} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
-        ListEmptyComponent={
-          !loading ? (
-            <View style={styles.empty}>
-              <Ionicons name="navigate-outline" size={44} color={WW.textSub} />
-              <Text style={styles.emptyTitle}>No trips yet</Text>
-              <Text style={styles.emptySub}>Your journey history will appear here</Text>
-            </View>
-          ) : null
-        }
-      />
-    </>
-  );
-
-  const renderSavedTab = () => (
-    <FlatList
-      data={savedRoutes}
-      keyExtractor={(i) => i.id}
-      scrollEnabled={false}
-      renderItem={({ item }) => (
-        <View style={styles.card}>
-          <View style={styles.cardRow}>
-            <Ionicons name="heart" size={18} color="#EF4444" style={{ marginRight: 8 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle} numberOfLines={1}>{item.destination_name}</Text>
-              <Text style={styles.cardSub} numberOfLines={1}>From {item.origin_name}</Text>
-              <View style={styles.cardMeta}>
-                {!!item.total_duration_mins && (
-                  <View style={styles.metaChip}>
-                    <Ionicons name="time-outline" size={11} color={WW.textSub} />
-                    <Text style={styles.metaText}>{formatDuration(item.total_duration_mins)}</Text>
-                  </View>
-                )}
-                {(!!item.total_fare_min || !!item.total_fare_max) && (
-                  <View style={styles.metaChip}>
-                    <Text style={styles.metaTextBlue}>{formatFare(item.total_fare_min, item.total_fare_max)}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-            <TouchableOpacity onPress={() => handleDeleteSaved(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="trash-outline" size={18} color={WW.textSub} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-      ListEmptyComponent={
-        !loading ? (
-          <View style={styles.empty}>
-            <Ionicons name="heart-outline" size={44} color={WW.textSub} />
-            <Text style={styles.emptyTitle}>No saved routes</Text>
-            <Text style={styles.emptySub}>Tap ♥ on a route to save it here</Text>
-          </View>
-        ) : null
-      }
-    />
-  );
-
-  const renderPlacesTab = () => (
-    <>
-      {/* Home */}
-      <View style={styles.placeRow}>
-        <View style={[styles.placeIcon, { backgroundColor: WW.orangeDim }]}>
-          <Ionicons name="home" size={20} color={WW.keke} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.placeLabel}>Home</Text>
-          <Text style={styles.placeName} numberOfLines={1}>{homePlace ? homePlace.name : 'Not set'}</Text>
-          {homePlace?.address ? (
-            <Text style={styles.placeAddress} numberOfLines={1}>{homePlace.address}</Text>
-          ) : null}
-        </View>
-        <TouchableOpacity style={styles.placeEditBtn} onPress={() => openAddPlace('home')}>
-          <Text style={styles.placeEditText}>{homePlace ? 'Change' : 'Set'}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Work */}
-      <View style={styles.placeRow}>
-        <View style={[styles.placeIcon, { backgroundColor: 'rgba(249,115,22,0.12)' }]}>
-          <Ionicons name="briefcase" size={20} color="#F97316" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.placeLabel}>Work</Text>
-          <Text style={styles.placeName} numberOfLines={1}>{workPlace ? workPlace.name : 'Not set'}</Text>
-          {workPlace?.address ? (
-            <Text style={styles.placeAddress} numberOfLines={1}>{workPlace.address}</Text>
-          ) : null}
-        </View>
-        <TouchableOpacity style={styles.placeEditBtn} onPress={() => openAddPlace('work')}>
-          <Text style={styles.placeEditText}>{workPlace ? 'Change' : 'Set'}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Favorites */}
-      <View style={styles.favHeader}>
-        <Text style={styles.favTitle}>Favorite Places</Text>
-        <TouchableOpacity onPress={() => openAddPlace('favorite')}>
-          <Ionicons name="add-circle-outline" size={22} color={WW.orange} />
-        </TouchableOpacity>
-      </View>
-
-      {otherFaves.length === 0 ? (
-        <View style={[styles.empty, { paddingTop: 20 }]}>
-          <Ionicons name="bookmark-outline" size={36} color={WW.textSub} />
-          <Text style={[styles.emptySub, { marginTop: 8 }]}>Add your favorite Lagos spots</Text>
-        </View>
-      ) : (
-        otherFaves.map((fp) => (
-          <View key={fp.id} style={styles.placeRow}>
-            <View style={[styles.placeIcon, { backgroundColor: 'rgba(167,139,250,0.12)' }]}>
-              <Ionicons name="star" size={20} color="#A78BFA" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.placeName} numberOfLines={1}>{fp.name}</Text>
-              {fp.address ? (
-                <Text style={styles.placeAddress} numberOfLines={1}>{fp.address}</Text>
-              ) : null}
-            </View>
-            <TouchableOpacity onPress={() => handleDeletePlace(fp.id, fp.name)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="trash-outline" size={18} color={WW.textSub} />
-            </TouchableOpacity>
-          </View>
-        ))
-      )}
-    </>
-  );
-
-  const userInitial = user?.email?.[0]?.toUpperCase() ?? '?';
-  const memberSince = (() => {
-    const d = new Date();
-    return d.toLocaleDateString('en-NG', { month: 'long', year: 'numeric' });
+  const rows = (() => {
+    if (tab === 'history') return history.map((h) => ({
+      key: h.id,
+      title: `${h.origin_name} → ${h.destination_name}`,
+      sub: [dayLabel(h.created_at), h.transport_modes?.[0], fmtMins(h.total_duration_mins)].filter(Boolean).join(' · '),
+      right: fmtFare(h.total_fare_min, h.total_fare_max),
+      color: modeColor(WW, h.transport_modes?.[0]),
+      onLongPress: () => removeHistory(h.id),
+    }));
+    if (tab === 'saved') return saved.map((r) => ({
+      key: r.id,
+      title: `${r.origin_name} → ${r.destination_name}`,
+      sub: [r.transport_modes?.join(' + '), fmtMins(r.total_duration_mins)].filter(Boolean).join(' · ') || 'Saved route',
+      right: fmtFare(r.total_fare_min, r.total_fare_max),
+      color: modeColor(WW, r.transport_modes?.[0]),
+      onLongPress: () => removeSaved(r.id),
+    }));
+    const home = places.find((p) => p.type === 'home');
+    const work = places.find((p) => p.type === 'work');
+    return [
+      { key: 'home', title: 'Home', sub: home ? `${home.name}${home.address ? `, ${home.address}` : ''}` : 'Not set — tap to set', right: '', color: WW.green, onPress: () => openAdd('home'), onLongPress: home ? () => removePlace(home) : undefined },
+      { key: 'work', title: 'Work', sub: work ? `${work.name}${work.address ? `, ${work.address}` : ''}` : 'Not set — tap to set', right: '', color: WW.brt, onPress: () => openAdd('work'), onLongPress: work ? () => removePlace(work) : undefined },
+      ...places.filter((p) => p.type === 'favorite').map((p) => ({
+        key: p.id, title: p.label, sub: `${p.name}${p.address ? `, ${p.address}` : ''}`, right: '', color: WW.warning,
+        onPress: undefined as undefined | (() => void), onLongPress: () => removePlace(p),
+      })),
+    ];
   })();
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={styles.container}>
-      <StatusBar style="light" />
+    <View style={s.root}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <ScrollView
+        contentContainerStyle={[s.scroll, { paddingTop: insets.top + Space.sm, paddingBottom: 120 }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={WW.textMuted} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={s.name}>{name}</Text>
+        <Text style={s.meta}>{user?.email ?? ''} · {history.length} {history.length === 1 ? 'trip' : 'trips'}</Text>
 
-      {/* Top nav row */}
-      <View style={styles.topNav}>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')} accessibilityLabel="Close">
-          <Ionicons name="chevron-down" size={22} color={WW.text} />
-        </TouchableOpacity>
-        <Text style={styles.topNavTitle}>Profile</Text>
-        <View style={styles.topNavRight}>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Preferences')}>
-            <Ionicons name="settings-outline" size={19} color={WW.text} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={19} color={WW.text} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Profile hero */}
-      <View style={styles.profileHero}>
-        <View style={styles.avatarWrap}>
-          <View style={styles.avatarRing}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{userInitial}</Text>
-            </View>
-          </View>
-        </View>
-        <Text style={styles.profileName}>
-          {user?.email?.split('@')[0]?.replace(/\./g, ' ')?.replace(/\b\w/g, (c) => c.toUpperCase()) ?? 'Traveller'}
-        </Text>
-        <Text style={styles.profileEmail}>{user?.email ?? ''}</Text>
-        <Text style={styles.profileSince}>Member since {memberSince}</Text>
-
-        {/* Stats strip */}
-        <View style={styles.statsStrip}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{history.length}</Text>
-            <Text style={styles.statLabel}>Trips</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{savedRoutes.length}</Text>
-            <Text style={styles.statLabel}>Saved</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{favPlaces.length}</Text>
-            <Text style={styles.statLabel}>Places</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Segmented Tabs */}
-      <View style={styles.tabsWrap}>
-        <View style={styles.tabs}>
-          {(['history', 'saved', 'places'] as Tab[]).map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, activeTab === tab && styles.tabActive]}
-              onPress={() => setActiveTab(tab)}
-              activeOpacity={0.7}
+        <View style={s.tabs}>
+          {([['history', 'Trips'], ['saved', 'Saved'], ['places', 'Places']] as [Tab, string][]).map(([k, label]) => (
+            <Pressable
+              key={k}
+              onPress={() => setTab(k)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === k }}
+              style={({ pressed }) => [s.tab, tab === k && s.tabActive, pressed && { opacity: 0.7 }]}
             >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                {tab === 'history' ? 'History' : tab === 'saved' ? 'Saved' : 'Places'}
-              </Text>
-            </TouchableOpacity>
+              <Text style={[s.tabText, tab === k && s.tabTextActive]}>{label}</Text>
+            </Pressable>
           ))}
         </View>
-      </View>
 
-      {/* Content */}
-      {loading && history.length === 0 && savedRoutes.length === 0 && favPlaces.length === 0 ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={WW.orange} />
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={styles.content}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={WW.orange} />}
-        >
-          {activeTab === 'history' && renderHistoryTab()}
-          {activeTab === 'saved'   && renderSavedTab()}
-          {activeTab === 'places'  && renderPlacesTab()}
-        </ScrollView>
-      )}
-
-      {/* Add Place Modal */}
-      <Modal visible={showAddPlace} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAddPlace(false)}>
-        <SafeAreaView style={styles.modal}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {addForm.type === 'home' ? 'Set Home' : addForm.type === 'work' ? 'Set Work' : 'Add Favorite'}
+        <View style={s.list}>
+          {loading ? (
+            <ActivityIndicator color={WW.textMuted} style={{ marginTop: Space.xl }} />
+          ) : rows.length === 0 ? (
+            <Text style={s.empty}>
+              {tab === 'history' ? 'No trips yet — your first waka go show here.' : 'Nothing saved yet. Tap the heart on a route.'}
             </Text>
-            <TouchableOpacity onPress={() => setShowAddPlace(false)}>
-              <Ionicons name="close" size={24} color={WW.text} />
-            </TouchableOpacity>
-          </View>
+          ) : rows.map((r) => (
+            <Pressable
+              key={r.key}
+              onPress={(r as any).onPress}
+              onLongPress={r.onLongPress}
+              delayLongPress={350}
+              accessibilityRole={(r as any).onPress ? 'button' : undefined}
+              style={({ pressed }) => [s.row, pressed && (r as any).onPress && { opacity: 0.7 }]}
+            >
+              <View style={[s.bar, { backgroundColor: r.color }]} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.rowTitle} numberOfLines={1}>{r.title}</Text>
+                <Text style={s.rowSub} numberOfLines={1}>{r.sub}</Text>
+              </View>
+              {!!r.right && <Text style={s.rowRight}>{r.right}</Text>}
+              {tab === 'places' && <Ionicons name="chevron-forward" size={16} color={WW.textMuted} />}
+            </Pressable>
+          ))}
 
-          {addForm.type === 'favorite' && (
-            <View style={styles.labelInput}>
-              <Text style={styles.labelHint}>Label (e.g. "Church", "Market")</Text>
-              <TextInput
-                style={styles.labelField}
-                value={addForm.label}
-                onChangeText={(t) => setAddForm((p) => ({ ...p, label: t }))}
-                placeholder="Give it a name"
-                placeholderTextColor={WW.textMuted}
-              />
-            </View>
+          {tab === 'places' && !loading && (
+            <Pressable onPress={() => openAdd('favorite')} accessibilityRole="button" style={({ pressed }) => [s.addRow, pressed && { opacity: 0.7 }]}>
+              <Ionicons name="add" size={18} color={WW.text} />
+              <Text style={s.addText}>Add a place</Text>
+            </Pressable>
           )}
+          {tab === 'history' && history.length > 0 && (
+            <Pressable onPress={clearHistory} accessibilityRole="button" style={({ pressed }) => [s.addRow, pressed && { opacity: 0.7 }]}>
+              <Text style={[s.addText, { color: WW.textMuted }]}>Clear history</Text>
+            </Pressable>
+          )}
+        </View>
 
-          <View style={styles.searchWrap}>
-            <Ionicons name="search-outline" size={18} color={WW.textSub} />
+        {/* Dark mode */}
+        <View style={s.card}>
+          <Text style={s.cardLabel}>Dark mode</Text>
+          <Switch
+            value={isDark}
+            onValueChange={toggleTheme}
+            trackColor={{ false: WW.borderStrong, true: WW.orange }}
+            thumbColor="#FFFFFF"
+            ios_backgroundColor={WW.borderStrong}
+            accessibilityLabel="Toggle dark mode"
+          />
+        </View>
+
+        <Pressable onPress={() => navigation.navigate('Preferences')} accessibilityRole="button" style={({ pressed }) => [s.linkRow, pressed && { opacity: 0.7 }]}>
+          <Text style={s.linkText}>Preferences & account</Text>
+          <Ionicons name="chevron-forward" size={16} color={WW.textMuted} />
+        </Pressable>
+        <Pressable
+          onPress={() => Alert.alert('Sign out', 'Sign out of WakaWay?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign out', style: 'destructive', onPress: () => logout() }])}
+          accessibilityRole="button"
+          style={({ pressed }) => [s.linkRow, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={[s.linkText, { color: WW.error }]}>Sign out</Text>
+        </Pressable>
+      </ScrollView>
+
+      {/* Add-place sheet */}
+      <Sheet ref={sheetRef} index={-1} snapPoints={['70%']} enablePanDownToClose keyboardBehavior="extend" keyboardBlurBehavior="restore">
+        <SheetView style={s.sheetBody}>
+          <Text style={s.sheetTitle}>
+            {addType === 'home' ? 'Where you dey stay?' : addType === 'work' ? 'Where you dey work?' : 'Add a place'}
+          </Text>
+          <View style={s.inputWrap}>
+            <Ionicons name="search" size={15} color={WW.orange} />
             <TextInput
-              style={styles.searchField}
-              value={addForm.query}
-              onChangeText={(t) => setAddForm((p) => ({ ...p, query: t }))}
-              placeholder="Search for a place in Lagos..."
+              style={s.input}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search places in Lagos…"
               placeholderTextColor={WW.textMuted}
-              autoFocus={addForm.type !== 'favorite'}
+              autoFocus
+              autoCorrect={false}
             />
-            {searchingPlace && <ActivityIndicator size="small" color={WW.orange} />}
+            {(searching || savingPlace) && <ActivityIndicator size="small" color={WW.textMuted} />}
           </View>
-
-          {savingPlace ? (
-            <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={WW.orange} />
-              <Text style={[styles.emptySub, { marginTop: 8 }]}>Saving...</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={placeSuggestions}
-              keyExtractor={(i) => i.placeId}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.suggestionItem} onPress={() => handlePlaceSuggestionSelect(item)}>
-                  <Ionicons name="location-outline" size={18} color={WW.orange} style={{ marginRight: 10 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.suggName}>{item.name}</Text>
-                    {!!item.address && <Text style={styles.suggAddr}>{item.address}</Text>}
-                  </View>
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                addForm.query.trim() && !searchingPlace ? (
-                  <View style={styles.empty}>
-                    <Text style={styles.emptySub}>No places found. Try a different search.</Text>
-                  </View>
-                ) : null
-              }
-            />
-          )}
-        </SafeAreaView>
-      </Modal>
-    </SafeAreaView>
+          <View>
+            {suggestions.slice(0, 8).map((sug) => (
+              <Pressable key={sug.placeId} onPress={() => pickPlace(sug)} style={({ pressed }) => [s.sugRow, pressed && { opacity: 0.7 }]}>
+                <View style={s.sugIcon}><Ionicons name="location-outline" size={16} color={WW.textSub} /></View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={s.rowTitle} numberOfLines={1}>{sug.name}</Text>
+                  {!!sug.address && <Text style={s.rowSub} numberOfLines={1}>{sug.address}</Text>}
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </SheetView>
+      </Sheet>
+    </View>
   );
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+function toSearchItem(fp: FavoritePlace) {
+  return { id: fp.id, name: fp.name, address: fp.address ?? '', coordinates: { latitude: fp.latitude, longitude: fp.longitude } };
+}
+function fmtMins(m?: number) { return m ? (m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60}m`) : ''; }
+function fmtFare(min?: number, max?: number) {
+  if (!min && !max) return '';
+  if (!min || min === max) return `₦${(max ?? min ?? 0).toLocaleString()}`;
+  return `₦${min.toLocaleString()}–${(max ?? min).toLocaleString()}`;
+}
+function dayLabel(iso: string) {
+  const d = new Date(iso), now = new Date();
+  const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  const time = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (same(d, now)) return `Today ${time}`;
+  if (same(d, y)) return 'Yesterday';
+  return d.toLocaleDateString([], { weekday: 'short' });
+}
+function modeColor(WW: WWColors, mode?: string) {
+  switch ((mode ?? '').toLowerCase()) {
+    case 'danfo': return WW.danfo;
+    case 'brt':   return WW.brt;
+    case 'keke':  return WW.keke;
+    case 'okada': return WW.okada;
+    case 'rail':  return WW.brt;
+    default:      return WW.textMuted;
+  }
 }
 
 function makeStyles(WW: WWColors) {
   return StyleSheet.create({
-  container: { flex: 1, backgroundColor: WW.bg },
+    root: { flex: 1, backgroundColor: WW.bg },
+    scroll: { paddingHorizontal: Space.lg },
+    name: { fontFamily: Fonts.extrabold, fontSize: Typography.hero, lineHeight: Typography.hero * 1.05, color: WW.text, letterSpacing: -1.2 },
+    meta: { fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textMuted, marginTop: 4 },
 
-  // Top nav
-  topNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  topNavTitle: { flex: 1, textAlign: 'center', fontSize: Typography.lg, fontWeight: Typography.semibold, color: WW.text, letterSpacing: -0.3 },
-  topNavRight: { flexDirection: 'row', gap: 6 },
+    tabs: { flexDirection: 'row', gap: 6, paddingTop: 22 },
+    tab: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: Radius.pill, backgroundColor: WW.bgElevated },
+    tabActive: { backgroundColor: WW.orange },
+    tabText: { fontFamily: Fonts.bold, fontSize: Typography.sm, color: WW.textSub },
+    tabTextActive: { color: WW.textOnOrange },
 
-  // Profile hero
-  profileHero: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: WW.border,
-  },
-  avatarWrap: { marginBottom: 14 },
-  avatarRing: {
-    width: 88, height: 88, borderRadius: 44,
-    borderWidth: 2.5, borderColor: WW.orange,
-    alignItems: 'center', justifyContent: 'center',
-    padding: 3,
-  },
-  avatar: {
-    width: 76, height: 76, borderRadius: 38,
-    backgroundColor: WW.orange,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { fontSize: 32, fontWeight: Typography.bold, color: '#fff' },
-  profileName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: WW.text, letterSpacing: -0.5, marginBottom: 4 },
-  profileEmail: { fontSize: Typography.sm, color: WW.textSub, marginBottom: 3 },
-  profileSince: { fontSize: Typography.xs, color: WW.textMuted, marginBottom: 20 },
+    list: { paddingTop: 18 },
+    row: {
+      flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64,
+      paddingVertical: Space.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: WW.divider,
+    },
+    bar: { width: 4, height: 36, borderRadius: Radius.pill },
+    rowTitle: { fontFamily: Fonts.semibold, fontSize: Typography.lg, color: WW.text },
+    rowSub: { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textMuted, marginTop: 2 },
+    rowRight: { fontFamily: Fonts.extrabold, fontSize: Typography.lg, color: WW.text },
+    empty: { fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textMuted, paddingVertical: Space.xl, lineHeight: 22 },
+    addRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: HIT, paddingVertical: Space.md },
+    addText: { fontFamily: Fonts.semibold, fontSize: Typography.md, color: WW.text },
 
-  // Stats strip
-  statsStrip: {
-    flexDirection: 'row',
-    backgroundColor: WW.bgElevated,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: WW.border,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    alignSelf: 'stretch',
-  },
-  statItem:   { flex: 1, alignItems: 'center' },
-  statNum:    { fontSize: Typography.xl, fontWeight: Typography.bold, color: WW.text, letterSpacing: -0.5 },
-  statLabel:  { fontSize: Typography.xs, color: WW.textSub, marginTop: 2 },
-  statDivider:{ width: 1, backgroundColor: WW.border, marginVertical: 4 },
+    card: {
+      marginTop: 26, padding: Space.lg, borderRadius: Radius.lg,
+      backgroundColor: WW.bgSurface, borderWidth: 1, borderColor: WW.border,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    },
+    cardLabel: { fontFamily: Fonts.semibold, fontSize: Typography.lg, color: WW.text },
+    linkRow: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      minHeight: 56, paddingVertical: Space.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: WW.divider,
+    },
+    linkText: { fontFamily: Fonts.semibold, fontSize: Typography.md, color: WW.text },
 
-  // Tabs
-  tabsWrap: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: WW.bgSurface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: WW.border },
-  tabs: {
-    flexDirection: 'row',
-    backgroundColor: WW.bgElevated,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: WW.border,
-    padding: 3,
-    gap: 2,
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 9,
-    borderRadius: 10,
-  },
-  tabActive: { backgroundColor: WW.orange },
-  tabText:       { fontSize: Typography.sm, fontWeight: Typography.semibold, color: WW.textSub },
-  tabTextActive: { color: '#fff' },
-  content: { paddingBottom: 40 },
-  iconBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: WW.bgElevated,
-    borderWidth: 1, borderColor: WW.border,
-  },
-  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  clearBtn: { alignSelf: 'flex-end', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 0 },
-  clearBtnText: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: '#EF4444' },
-  card: {
-    marginHorizontal: 14,
-    marginTop: 10,
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: WW.border,
-    backgroundColor: WW.bgElevated,
-  },
-  cardRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  cardTitle:     { fontSize: Typography.md, fontWeight: Typography.bold, color: WW.text },
-  cardSub:       { fontSize: Typography.sm, marginTop: 2, color: WW.textSub },
-  cardMeta:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  metaChip:      { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  metaText:      { fontSize: Typography.sm, color: WW.textSub },
-  metaTextBlue:  { fontSize: Typography.sm, color: WW.orange },
-  cardRight:     { alignItems: 'flex-end', gap: 8 },
-  cardDate:      { fontSize: Typography.sm, color: WW.textSub },
-  empty: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 },
-  emptyTitle: { fontSize: Typography.xl, fontWeight: Typography.semibold, marginTop: 14, color: WW.text },
-  emptySub:   { fontSize: Typography.md, textAlign: 'center', marginTop: 8, color: WW.textSub },
-  // Places tab
-  placeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: WW.divider,
-  },
-  placeIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  placeLabel:   { fontSize: Typography.xs, fontWeight: Typography.bold, textTransform: 'uppercase', letterSpacing: 0.5, color: WW.textSub },
-  placeName:    { fontSize: Typography.md, fontWeight: Typography.semibold, marginTop: 1, color: WW.text },
-  placeAddress: { fontSize: Typography.sm, marginTop: 1, color: WW.textSub },
-  placeEditBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: 'rgba(34,197,94,0.1)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)' },
-  placeEditText: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: WW.orange },
-  favHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: WW.divider,
-    marginTop: 8,
-  },
-  favTitle: { fontSize: Typography.md, fontWeight: Typography.bold, color: WW.text },
-  // Modal
-  modal: { flex: 1, backgroundColor: WW.bg },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: WW.border,
-    backgroundColor: WW.bgSurface,
-  },
-  modalTitle: { fontSize: Typography.xl, fontWeight: Typography.bold, color: WW.text },
-  labelInput: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: WW.divider,
-  },
-  labelHint: { fontSize: Typography.sm, marginBottom: 8, color: WW.textSub },
-  labelField: {
-    fontSize: Typography.md,
-    borderWidth: 1,
-    borderColor: WW.border,
-    borderRadius: 10,
-    padding: 10,
-    color: WW.text,
-    backgroundColor: WW.bgElevated,
-  },
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: WW.divider,
-    backgroundColor: WW.bgSurface,
-  },
-  searchField: { flex: 1, fontSize: Typography.md, color: WW.text },
-  suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: WW.divider,
-  },
-  suggName: { fontSize: Typography.md, fontWeight: Typography.semibold, color: WW.text },
-  suggAddr: { fontSize: Typography.sm, marginTop: 2, color: WW.textSub },
-});
+    sheetBody: { paddingHorizontal: Space.lg, paddingBottom: Space.xl, gap: Space.md },
+    sheetTitle: { fontFamily: Fonts.extrabold, fontSize: Typography.xl, color: WW.text, letterSpacing: Tracking.tight / 2 },
+    inputWrap: {
+      height: 48, borderRadius: Radius.lg, backgroundColor: WW.bgSurface,
+      borderWidth: 2, borderColor: WW.orange,
+      flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14,
+    },
+    input: { flex: 1, fontFamily: Fonts.medium, fontSize: Typography.lg, color: WW.text, padding: 0 },
+    sugRow: { flexDirection: 'row', alignItems: 'center', gap: Space.md, minHeight: 60, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: WW.divider },
+    sugIcon: { width: 36, height: 36, borderRadius: Radius.sm, backgroundColor: WW.bgElevated, alignItems: 'center', justifyContent: 'center' },
+  });
 }

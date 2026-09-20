@@ -1,38 +1,37 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  Animated,
-  Easing,
-  Dimensions,
-  Platform,
+  View, Text, StyleSheet, Pressable, Modal, Animated, Easing, Dimensions,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../context/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
+import type { WWColors } from '../theme/colors';
+import { Fonts, Typography, Tracking } from '../theme/typography';
+import { Space, Radius } from '../theme/spacing';
 import type { TransportMode } from '../services/smartRoutingService';
+
+// "What transport dey near you?" (WakaWay Mobile canvas) — the one question
+// between picking a destination and seeing routes. A 3-up grid of the modes
+// a rider can start with; the last-used one is outlined in danfo yellow and
+// wears a "Last used" tag.
 
 interface Option {
   mode: TransportMode;
   label: string;
   pidgin: string;
-  icon: string;
-  color: string;
-  description: string;
+  short: string;
+  color: (WW: WWColors) => string;
+  onColor: (WW: WWColors) => string;
 }
 
 const OPTIONS: Option[] = [
-  { mode: 'keke',  label: 'Keke',  pidgin: 'Enter Keke',  icon: 'car-outline',      color: '#FF9800', description: 'Tricycle / Keke NAPEP' },
-  { mode: 'danfo', label: 'Danfo', pidgin: 'Enter Bus',   icon: 'bus-outline',      color: '#2196F3', description: 'Yellow bus / Danfo' },
-  { mode: 'okada', label: 'Okada', pidgin: 'Enter Okada', icon: 'bicycle-outline',  color: '#9C27B0', description: 'Motorbike / Okada' },
-  { mode: 'brt',   label: 'BRT',   pidgin: 'Enter BRT',   icon: 'bus',              color: '#22C55E', description: 'BRT / LAGBUS' },
-  { mode: 'walk',  label: 'Walk',  pidgin: 'Waka',        icon: 'walk-outline',     color: '#607D8B', description: 'On foot' },
+  { mode: 'keke',  label: 'Keke',  pidgin: 'Enter keke',  short: 'KK',  color: (W) => W.keke,  onColor: (W) => W.kekeText },
+  { mode: 'danfo', label: 'Danfo', pidgin: 'Enter bus',   short: 'DNF', color: (W) => W.danfo, onColor: (W) => W.danfoText },
+  { mode: 'okada', label: 'Okada', pidgin: 'Enter okada', short: 'OKD', color: (W) => W.okada, onColor: (W) => W.okadaText },
+  { mode: 'brt',   label: 'BRT',   pidgin: 'Enter BRT',   short: 'BRT', color: (W) => W.brt,   onColor: (W) => W.brtText },
+  { mode: 'walk',  label: 'Walk',  pidgin: 'Waka',        short: 'WK',  color: (W) => W.bgElevated, onColor: (W) => W.textSub },
 ];
 
-interface TransportModeSelectorProps {
+interface Props {
   visible: boolean;
   savedPreference?: TransportMode | null;
   onSelect: (mode: TransportMode) => void;
@@ -40,203 +39,102 @@ interface TransportModeSelectorProps {
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const EASE = Easing.bezier(0.32, 0.72, 0, 1);
 
-export default function TransportModeSelector({
-  visible,
-  savedPreference,
-  onSelect,
-  onDismiss,
-}: TransportModeSelectorProps) {
+export default function TransportModeSelector({ visible, savedPreference, onSelect, onDismiss }: Props) {
   const { WW } = useAppTheme();
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const insets = useSafeAreaInsets();
+  const s = useMemo(() => makeStyles(WW), [WW]);
+  const slide = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const scrim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        friction: 8,
-        tension: 50,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
-        duration: 220,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
-
-  const handleSelect = (mode: TransportMode) => {
-    onSelect(mode);
-  };
+    Animated.parallel([
+      Animated.timing(slide, { toValue: visible ? 0 : SCREEN_HEIGHT, duration: visible ? 500 : 260, easing: visible ? EASE : Easing.in(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(scrim, { toValue: visible ? 1 : 0, duration: 300, useNativeDriver: true }),
+    ]).start();
+  }, [visible, slide, scrim]);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onDismiss}
-      statusBarTranslucent
-    >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onDismiss}
-      />
-      <Animated.View
-        style={[
-          styles.sheet,
-          { backgroundColor: WW.bgSurface, transform: [{ translateY: slideAnim }] },
-        ]}
-      >
-        <View style={[styles.handle, { backgroundColor: WW.border }]} />
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onDismiss} statusBarTranslucent>
+      <Animated.View style={[s.scrim, { opacity: scrim }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel="Cancel" />
+      </Animated.View>
 
-        <Text style={[styles.title, { color: WW.text }]}>
-          What transport dey near you?
-        </Text>
-        <Text style={[styles.subtitle, { color: WW.textSub }]}>
-          Select what's available at your starting point
-        </Text>
+      <Animated.View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, Space.lg) + Space.md, transform: [{ translateY: slide }] }]}>
+        <View style={s.handle} />
+        <Text style={s.title}>What transport dey near you?</Text>
+        <Text style={s.sub}>Wetin dey available where you dey stand</Text>
 
-        <View style={styles.grid}>
-          {OPTIONS.map((opt) => {
-            const isSaved = savedPreference === opt.mode;
+        <View style={s.grid}>
+          {OPTIONS.map((o) => {
+            const last = savedPreference === o.mode;
+            const bg = o.color(WW);
+            const isWalk = o.mode === 'walk';
             return (
-              <TouchableOpacity
-                key={opt.mode}
-                style={[
-                  styles.option,
-                  { backgroundColor: WW.bgSurface, borderColor: isSaved ? opt.color : WW.border },
-                  isSaved && styles.optionSaved,
-                ]}
-                onPress={() => handleSelect(opt.mode)}
-                activeOpacity={0.7}
+              <Pressable
+                key={o.mode}
+                onPress={() => onSelect(o.mode)}
+                accessibilityRole="button"
+                accessibilityLabel={`${o.label}${last ? ', last used' : ''}`}
+                style={({ pressed }) => [s.tile, last && s.tileLast, pressed && s.pressed]}
               >
-                <View style={[styles.iconCircle, { backgroundColor: opt.color + '22' }]}>
-                  <Ionicons name={opt.icon as any} size={28} color={opt.color} />
+                <View style={[s.badge, { backgroundColor: isWalk ? WW.bgElevated : bg + '2E' }]}>
+                  <Text style={[s.badgeText, { color: isWalk ? WW.textSub : bg }]}>{o.short}</Text>
                 </View>
-                <Text style={[styles.optionLabel, { color: WW.text }]}>{opt.label}</Text>
-                <Text style={[styles.optionPidgin, { color: WW.textSub }]}>{opt.pidgin}</Text>
-                {isSaved && (
-                  <View style={[styles.savedBadge, { backgroundColor: opt.color }]}>
-                    <Text style={styles.savedBadgeText}>Last used</Text>
+                <Text style={s.label}>{o.label}</Text>
+                <Text style={s.pidgin}>{o.pidgin}</Text>
+                {last && (
+                  <View style={[s.tag, { backgroundColor: isWalk ? WW.textSub : bg }]}>
+                    <Text style={[s.tagText, { color: isWalk ? WW.bg : o.onColor(WW) }]}>Last used</Text>
                   </View>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
 
-        <TouchableOpacity style={styles.cancelBtn} onPress={onDismiss}>
-          <Text style={[styles.cancelText, { color: WW.textSub }]}>Cancel</Text>
-        </TouchableOpacity>
+        <Pressable onPress={onDismiss} style={({ pressed }) => [s.cancel, pressed && s.pressed]} accessibilityRole="button">
+          <Text style={s.cancelText}>Cancel</Text>
+        </Pressable>
       </Animated.View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.07)',
-    paddingHorizontal: SPACING.LG,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-    paddingTop: SPACING.MD,
-    ...Platform.select({
-      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.35, shadowRadius: 18 },
-      android: { elevation: 24 },
-    }),
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: SPACING.LG,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  title: {
-    fontSize: FONT_SIZES.HEADING_3,
-    fontWeight: '800',
-    marginBottom: SPACING.XS,
-    letterSpacing: -0.3,
-  },
-  subtitle: {
-    fontSize: FONT_SIZES.BODY,
-    marginBottom: SPACING.LG,
-    lineHeight: 20,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: SPACING.LG,
-  },
-  option: {
-    width: '28%',
-    flex: 1,
-    minWidth: 90,
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: SPACING.SM,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    position: 'relative',
-  },
-  optionSaved: {
-    borderWidth: 2,
-  },
-  iconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.SM,
-  },
-  optionLabel: {
-    fontSize: FONT_SIZES.BODY,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  optionPidgin: {
-    fontSize: 11,
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  savedBadge: {
-    position: 'absolute',
-    top: -7,
-    right: -7,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  savedBadgeText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  cancelBtn: {
-    alignItems: 'center',
-    paddingVertical: SPACING.MD,
-  },
-  cancelText: {
-    fontSize: FONT_SIZES.BODY,
-    fontWeight: '600',
-  },
-});
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+    scrim: { ...StyleSheet.absoluteFill, backgroundColor: WW.scrim },
+    sheet: {
+      position: 'absolute', left: 0, right: 0, bottom: 0,
+      backgroundColor: WW.bgSurface,
+      borderTopLeftRadius: 28, borderTopRightRadius: 28,
+      paddingHorizontal: Space.lg, paddingTop: Space.md,
+      shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 44, shadowOffset: { width: 0, height: -18 },
+      elevation: 16,
+    },
+    handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: WW.border, alignSelf: 'center', marginBottom: 18 },
+    title: { fontFamily: Fonts.extrabold, fontSize: Typography.xl, color: WW.text, letterSpacing: Tracking.tight / 2, marginBottom: 4 },
+    sub:   { fontFamily: Fonts.regular, fontSize: Typography.md, lineHeight: Typography.md * 1.35, color: WW.textSub, marginBottom: 18 },
+
+    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Space.sm },
+    tile: {
+      width: '31%', flexGrow: 1,
+      alignItems: 'center', gap: 8,
+      paddingVertical: 14, paddingHorizontal: 8,
+      borderRadius: Radius.lg, borderWidth: 1.5, borderColor: WW.border,
+      backgroundColor: WW.bgSurface,
+    },
+    tileLast: { borderColor: WW.orange },
+    badge: { width: 50, height: 50, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center' },
+    badgeText: { fontFamily: Fonts.extrabold, fontSize: Typography.md },
+    label:  { fontFamily: Fonts.bold, fontSize: Typography.md, color: WW.text },
+    pidgin: { fontFamily: Fonts.regular, fontSize: Typography.xs, color: WW.textSub },
+    tag: { position: 'absolute', top: -7, right: -4, paddingVertical: 2, paddingHorizontal: 6, borderRadius: 8 },
+    tagText: { fontFamily: Fonts.bold, fontSize: 9 },
+
+    cancel: { paddingVertical: 14, alignItems: 'center' },
+    cancelText: { fontFamily: Fonts.semibold, fontSize: Typography.md, color: WW.textSub },
+    pressed: { opacity: 0.8 },
+  });
+}

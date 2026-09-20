@@ -9,5 +9,4 @@ export { CommunityMapView } from './CommunityMapView';
 export { WakaWayMapView } from './MapView';
 
 // Map elements
-export { AlertMarkers } from './AlertMarkers';
 export { AlertBottomSheet } from './AlertBottomSheet';

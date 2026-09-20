@@ -1,7 +1,38 @@
 
 # Active Context
 
-Session memory for ongoing development. Read this first when resuming work — it's the fastest way back into where things stand. Updated 2026-09-03.
+Session memory for ongoing development. Read this first when resuming work — it's the fastest way back into where things stand. Updated 2026-09-17.
+
+## Latest session (2026-09-17) — SDK 57, calmer Home, mode accuracy
+
+**Why:** the iPhone couldn't load the app — Expo Go on the App Store only ships the current SDK (57), the project was on 54, and an iOS dev build needs a paid Apple account. Upgraded instead.
+
+- **Expo SDK 57 / RN 0.86 / React 19.2 / TS 6.** Sentry kept at 8.x (`expo.install.exclude`); `expo-module-scripts` removed (it dragged in an old `babel-preset-expo` that broke RN 0.86 codegen); `babel-preset-expo` declared directly. Map views use `PROVIDER_GOOGLE` on Android only — iOS is Apple Maps, which Expo Go supports and which needs no key. Commit `a8b716b` captured the first half; the working tree has the rest.
+- **Home simplified** (the user felt the UI "looks complex" — it showed eleven things before a tap). Now: map, "Where you dey go?", bell, alert banner only when there is an alert, and a draggable sheet with Home/Work + 3 recents only once they exist. Mode chips, hardcoded popular routes, Live pill, breathing/pulsing animations and the swap button are gone. Search overlay extracted to `components/home/SearchOverlay.tsx`.
+- **One sheet:** `components/ui/Sheet.tsx` on `@gorhom/bottom-sheet` v5 (Reanimated, UI-thread). Home uses it. **Route detail and Navigation still use their hand-rolled sheets** — convert next.
+- **Mode accuracy** — see [[Routes Data Research]] and [[0011-mode-choice-from-zones-and-distance]]. LGA polygons from OSM (`data/lagosZones.ts`, `services/lagosZones.ts`) replace the circle okada check and add keke restriction; `connectorMode` rewritten (walk ≤ 1 km, keke ≤ 4 km where legal, okada only on request outside the ban, bus for the rest); 2026 fare bands; hub-chain silliness collapsed. 13 golden trip tests in `modeChoice.test.ts`; 28 tests total.
+
+- **WakaWay Mobile canvas implemented** (claude.ai/design, artboard 1a). Tab bar is now Home · Live · Report · You. New: `LiveScreen` (community map, glyph pins from `utils/reportKinds.ts`, alert sheet with "Still dey happen / Don clear" votes), `ReportScreen` (chips, big ₦ amount, where, send → `contributions`; live `type` CHECK extended with `fare_change`, `route_down`, `stop_moved`, `new_route` via migration `contributions_add_report_types`). Rebuilt: Onboarding, TransportModeSelector, RouteDetail (full-screen, fare-led card with count-up, "Start waka · N min", heart saves), Navigation (yellow action pill, "You done reach!"), You (Trips/Saved/Places, dark-mode card; Home/Work now sync to the AsyncStorage keys Home reads). Deleted: ContributionScreen, NotificationsScreen, LiveAlertsFeed, QuickReportBar, AlertMarkers (all emoji-era, all unreferenced). `FareDisputeModal` / `FareEstimateCard` are now orphans — delete or rewire into Report.
+- **Not in the canvas, so untouched:** Login, Signup, Preferences. 1b/1c/1d Home variants not built.
+
+- **Corridor graph** — see [[0012-route-over-corridors-not-between-hubs]]. The user searched Yaba → Gbagada and was sent to Berger. Root cause: 165 of 209 stop coordinates couldn't be confirmed (Ikorodu Road shifted a stop north, Gbagada at Oworonshoki, rail 1–2 km off) and the engine drew bus legs geometrically between hubs. Now: `data/lagosRoutes.ts` (~130 checked stops, 2 BRT + 2 rail + ~30 danfo corridors) and `services/routeGraph.ts` (Dijkstra over stop×corridor states). Bus legs exist only along corridors; unreachable trips get "Ask at the park". Route card shows "via …" and stop counts. 43 tests.
+- **Repo hygiene:** `.idea/`, `server/backend/db.sqlite3`, `.claude/settings*.json` untracked and ignored (anon key was in a saved command; rotate it when convenient).
+- Search overlay now says *why* a search came back thin (no key / offline / rejected) instead of silently falling back to the 52 built-in landmarks.
+
+- **Coverage pass:** corridors expanded to every LGA — 3 BRT, 2 rail, 24 LAMATA standard routes, ~40 danfo, 11 keke feeders; every hop road-measured with OSRM. 1,190/1,190 cross-Lagos test trips route on confirmed lines. **ORS key is dead** (API "disallowed") — Navigation's road geometry silently fails until replaced.
+
+- **Competitor pass (2026-09-19):** studied Lara, Àjàlá, OrnaMap, RouteWise, Danfo.ng (Avigate/RoadPulse in the validation PDF aren't transport apps). Took: conductor call per leg (`calls` on corridors, terminal-name-doubled fallback) and instruction-style leg wording; "Simplest" option; one-line trip input "Ikeja to Lekki" (`TRIP_RE` in SearchOverlay, Home routes from the typed origin); share-as-text (`services/explainJourney.ts`, share button on Route options); "Did the route work?" on arrival/End → Report prefilled; Live pins ringed green/yellow/faded by `freshnessOf`, quiet-state pill; "Add this route" card when coverage runs out.
+
+### Next, in order
+1. **Commit the working tree** (SDK fix · Home/sheet · mode accuracy · design pass · corridors · competitor pass — six commits).
+2. More corridors (Ikorodu hinterland, Ogba–Berger, Agege–Iyana-Ipaja, Ajah inner roads) and a review path for "Route no dey work" reports.
+3. Login / Signup / Preferences on the new system (no canvas for them yet).
+3. **Corridors:** bus legs are still geometric between hubs (Festac → Ikeja renders as one 16 km danfo). Plan in [[Routes Data Research]] §Implementation plan steps 3–5.
+4. Validate the 209 stop coordinates against OSM (several hubs are 0.5–1.3 km off their namesakes).
+5. Explore tab (local businesses, OSM-backed) replacing the redundant Search tab — user's ask, after the above.
+6. Everything in the 2026-09-03 list below that is still open (live signup test, credentials, store assets).
+
+---
 
 ## Latest session (2026-09-03) — auth was broken end to end; fixed
 

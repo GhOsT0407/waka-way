@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteOption, RouteLeg, SmartRouteResult, TransportMode } from '../services/smartRoutingService';
 import { useAppTheme } from '../context/ThemeContext';
@@ -9,8 +9,9 @@ import { Space, Radius } from '../theme/spacing';
 
 // Route options for one search, as the redesign canvas draws them:
 //
-//   header card   the selected option -- lead-mode badge, the minutes figure
-//                 at 28/800, fare + arrival under it, state + distance right
+//   header card   the selected option -- lead-mode badge, the fare at 32/800
+//                 (it counts up when the option changes -- morph 4), minutes
+//                 beside it, arrival + distance under, state right
 //   other ways    the remaining options as compact rows (only when >1)
 //   timeline      the selected option's legs on a 44pt rail; mode colour
 //                 carries the rail, state colour stays semantic
@@ -24,6 +25,8 @@ interface SmartRouteOptionsProps {
   onSelectOption: (option: RouteOption) => void;
   /** Kept for API compatibility; the screen's bottom bar owns Start now. */
   onStartJourney?: (option: RouteOption) => void;
+  /** Shown when the network doesn't reach: the rider can add the line they know. */
+  onAddRoute?: () => void;
 }
 
 // ─── Mode presentation ────────────────────────────────────────────────────────
@@ -63,11 +66,39 @@ function statusFor(option: RouteOption, WW: WWColors): { text: string; color: st
   if (option.isRecommended) return { text: 'Recommended', color: WW.green };
   if (option.isFastest)     return { text: 'Fastest',     color: WW.green };
   if (option.isCheapest)    return { text: 'Cheapest',    color: WW.textMuted };
+  if (option.isSimplest)    return { text: 'Simplest',    color: WW.textMuted };
   return null;
 }
 
+// The fare figure counts from the old value to the new one and lifts a
+// touch while it does -- the canvas's morph 4.
+function useFareTween(target: number): { shown: number; lift: Animated.Value } {
+  const [shown, setShown] = useState(target);
+  const lift = useRef(new Animated.Value(0)).current;
+  const raf = useRef<number | null>(null);
+  useEffect(() => {
+    const from = shown;
+    if (from === target) return;
+    const t0 = Date.now();
+    Animated.sequence([
+      Animated.timing(lift, { toValue: 1, duration: 170, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(lift, { toValue: 0, duration: 260, easing: Easing.bezier(0.32, 0.72, 0, 1), useNativeDriver: true }),
+    ]).start();
+    const step = () => {
+      const k = Math.min(1, (Date.now() - t0) / 460);
+      const e = 1 - Math.pow(1 - k, 3);
+      setShown(Math.round(from + (target - from) * e));
+      if (k < 1) raf.current = requestAnimationFrame(step);
+    };
+    raf.current = requestAnimationFrame(step);
+    return () => { if (raf.current) cancelAnimationFrame(raf.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+  return { shown, lift };
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
-export const SmartRouteOptions: React.FC<SmartRouteOptionsProps> = ({ routeResult, onSelectOption }) => {
+export const SmartRouteOptions: React.FC<SmartRouteOptionsProps> = ({ routeResult, onSelectOption, onAddRoute }) => {
   const { WW } = useAppTheme();
   const s = useMemo(() => makeStyles(WW), [WW]);
 
@@ -87,6 +118,13 @@ export const SmartRouteOptions: React.FC<SmartRouteOptionsProps> = ({ routeResul
 
   const lead = modeCfg(WW, leadMode(selected));
   const status = statusFor(selected, WW);
+  const fare = useFareTween(selected.totalPriceMax);
+  const fareStyle = {
+    transform: [
+      { translateY: fare.lift.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) },
+      { scale: fare.lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
+    ],
+  };
 
   return (
     <View style={s.wrap}>
@@ -96,14 +134,17 @@ export const SmartRouteOptions: React.FC<SmartRouteOptionsProps> = ({ routeResul
           <Text style={[s.badgeLgText, { color: lead.text }]}>{lead.label.toUpperCase()}</Text>
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={s.headerMins}>{selected.totalDurationMins} min</Text>
+          <View style={s.headerFigures}>
+            <Animated.Text style={[s.headerFare, fareStyle]}>₦{fare.shown.toLocaleString()}</Animated.Text>
+            <Text style={s.headerMins}>{selected.totalDurationMins} min</Text>
+          </View>
           <Text style={s.headerSub} numberOfLines={1}>
-            {selected.priceFormatted} · arrive {formatArrival(selected.totalDurationMins)}
+            arrive {formatArrival(selected.totalDurationMins)} · {formatKm(selected.totalDistanceKm)}
+            {selected.totalPriceMin !== selected.totalPriceMax ? ` · from ₦${selected.totalPriceMin.toLocaleString()}` : ''}
           </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           {status && <Text style={[s.status, { color: status.color }]}>{status.text}</Text>}
-          <Text style={s.headerKm}>{formatKm(selected.totalDistanceKm)}</Text>
         </View>
       </View>
 
@@ -135,6 +176,17 @@ export const SmartRouteOptions: React.FC<SmartRouteOptionsProps> = ({ routeResul
               );
             })}
           </View>
+        </View>
+      )}
+
+      {/* ── Coverage gap — say so, and ask for the line (Àjàlá's move) ─────── */}
+      {selected.tags.includes('Unverified') && onAddRoute && (
+        <View style={s.gapCard}>
+          <Text style={s.gapTitle}>We never map this road well yet</Text>
+          <Text style={s.gapBody}>If you know the bus wey dey go here, add am so the next person no go ask.</Text>
+          <Pressable onPress={onAddRoute} accessibilityRole="button" style={({ pressed }) => [s.gapBtn, pressed && { opacity: 0.8 }]}>
+            <Text style={s.gapBtnText}>Add this route</Text>
+          </Pressable>
         </View>
       )}
 
@@ -173,7 +225,14 @@ const LegRow: React.FC<{
     `${leg.durationMins} min`,
     formatKm(leg.distanceKm),
     price,
+    leg.stopsSpanned && leg.stopsSpanned > 1 ? `${leg.stopsSpanned} stops` : null,
   ].filter(Boolean).join(' · ');
+  // "via Stadium, Iponri, Costain" — the stops a rider will hear the conductor
+  // call, so they can tell the bus is the right one. Capped so long corridors
+  // don't turn the card into a list.
+  const via = leg.viaStops && leg.viaStops.length
+    ? `via ${leg.viaStops.slice(0, 4).join(', ')}${leg.viaStops.length > 4 ? ` +${leg.viaStops.length - 4}` : ''}`
+    : null;
 
   return (
     <View style={s.legRow}>
@@ -194,8 +253,30 @@ const LegRow: React.FC<{
           {isWalk ? `Walk to ${leg.to.name}` : `${cfg.label} · ${leg.from.name} → ${leg.to.name}`}
         </Text>
         <Text style={s.legSub} numberOfLines={1}>{sub}</Text>
+        {!!leg.conductorCall && (
+          <View style={s.callRow}>
+            <Ionicons name="megaphone-outline" size={13} color={WW.textSub} />
+            <Text style={s.callText} numberOfLines={1}>Listen for “{leg.conductorCall}!”</Text>
+          </View>
+        )}
+        {!!via && <Text style={s.legVia} numberOfLines={2}>{via}</Text>}
         {!!leg.localInstruction && (
-          <Text style={s.legLocal} numberOfLines={2}>{leg.localInstruction}</Text>
+          <Text style={s.legLocal} numberOfLines={3}>{leg.localInstruction}</Text>
+        )}
+        {leg.mayBeUnavailable && leg.mode === 'keke' && (
+          <Text style={s.legNote} numberOfLines={2}>
+            Keke no dey always run for here — check at the junction, or waka
+          </Text>
+        )}
+        {leg.mayBeUnavailable && leg.mode === 'danfo' && (
+          <Text style={s.legNote} numberOfLines={2}>
+            No fixed bus for this hop — ask for any bus or keke wey dey go {leg.to.name}
+          </Text>
+        )}
+        {leg.confidence === 'likely' && (
+          <Text style={s.legNote} numberOfLines={2}>
+            We never confirm this line well — ask at the park, and tell us if e no correct
+          </Text>
         )}
       </View>
     </View>
@@ -221,12 +302,13 @@ function makeStyles(WW: WWColors) {
       alignItems: 'center', justifyContent: 'center',
     },
     badgeLgText: { fontFamily: Fonts.extrabold, fontSize: 11, letterSpacing: Tracking.tight / 2 },
-    headerMins: {
-      fontFamily: Fonts.extrabold, fontSize: Typography.xxl, lineHeight: Typography.xxl * 1.1,
-      color: WW.text, letterSpacing: Tracking.tight,
+    headerFigures: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+    headerFare: {
+      fontFamily: Fonts.extrabold, fontSize: 32, lineHeight: 36,
+      color: WW.text, letterSpacing: -1,
     },
-    headerSub: { fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textSub, marginTop: 2 },
-    headerKm:  { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textMuted, marginTop: 2 },
+    headerMins: { fontFamily: Fonts.semibold, fontSize: Typography.md, color: WW.textSub },
+    headerSub:  { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textMuted, marginTop: 4 },
     status:    { fontFamily: Fonts.bold, fontSize: Typography.sm },
 
     // other ways
@@ -251,6 +333,19 @@ function makeStyles(WW: WWColors) {
     rowTitle: { fontFamily: Fonts.bold, fontSize: Typography.lg, color: WW.text },
     rowSub:   { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textMuted, marginTop: 2 },
 
+    // coverage gap
+    gapCard: {
+      marginTop: Space.lg, padding: Space.lg, borderRadius: Radius.lg,
+      backgroundColor: WW.warningDim, gap: 6,
+    },
+    gapTitle: { fontFamily: Fonts.bold, fontSize: Typography.md, color: WW.text },
+    gapBody:  { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textSub, lineHeight: Typography.sm * 1.45 },
+    gapBtn: {
+      alignSelf: 'flex-start', marginTop: 6, paddingVertical: 10, paddingHorizontal: 16,
+      borderRadius: Radius.pill, backgroundColor: WW.orange,
+    },
+    gapBtnText: { fontFamily: Fonts.extrabold, fontSize: Typography.sm, color: WW.textOnOrange },
+
     // timeline
     timeline: { paddingTop: Space.lg + 2 },
     legRow:   { flexDirection: 'row', gap: 14 },
@@ -258,7 +353,11 @@ function makeStyles(WW: WWColors) {
     legBody:  { flex: 1, paddingBottom: Space.xl - 4, minWidth: 0 },
     legTitle: { fontFamily: Fonts.bold, fontSize: Typography.lg, color: WW.text, lineHeight: Typography.lg * 1.35 },
     legSub:   { fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textMuted, marginTop: 3 },
+    legVia:   { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textMuted, marginTop: 3, lineHeight: Typography.sm * 1.4 },
+    callRow:  { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+    callText: { fontFamily: Fonts.bold, fontSize: Typography.sm, color: WW.textSub },
     legLocal: { fontFamily: Fonts.medium, fontSize: Typography.sm, color: WW.textSub, marginTop: 6, lineHeight: Typography.sm * 1.4 },
+    legNote:  { fontFamily: Fonts.semibold, fontSize: Typography.sm, color: WW.warningText, marginTop: 4, lineHeight: Typography.sm * 1.4 },
 
     nodeRing: {
       width: 12, height: 12, borderRadius: Radius.pill,
