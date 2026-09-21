@@ -98,7 +98,9 @@ export default function SignupScreen({ navigation }: any) {
           showInfo('Check Your Email', 'We sent you a confirmation link. Please verify then sign in.');
           navigation.navigate('Login');
         } else {
-          showSuccess('Account Created!', 'Welcome to WakaWay!');
+          showSuccess('Account created', 'Welcome to WakaWay!');
+          // Signup sits on top of Login; both come off so the rider lands where they started.
+          if (navigation.canGoBack()) navigation.pop(2); else navigation.navigate('Main');
         }
       } else {
         showError('Signup Failed', result.error || 'Please try again later');

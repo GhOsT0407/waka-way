@@ -14,9 +14,9 @@ export const ONBOARDING_DONE_KEY = '@waka_onboarding_done';
 // Dark in both themes -- it reads WW_DARK directly, like Navigation.
 
 const SLIDES = [
-  { title: 'Lagos in your pocket', body: 'Danfo, keke, okada, BRT — one route, end to end.', cta: 'Continue' },
-  { title: 'See the fare first',   body: 'Real prices before you board, peak hours included.', cta: 'Continue' },
-  { title: 'Works with no data',   body: 'The routes live on your phone. No network, still waka.', cta: 'Start' },
+  { title: 'Get there like a local', body: 'Which bus, where to stand, what to tell the conductor, where to get down.', cta: 'Continue' },
+  { title: 'Know the fare first',    body: 'A range, not a guess — and how many riders confirmed it this week.', cta: 'Continue' },
+  { title: 'No account needed',      body: 'The routes live on your phone. Sign in only to save or report.', cta: 'Start' },
 ];
 
 const EASE = Easing.bezier(0.32, 0.72, 0, 1);

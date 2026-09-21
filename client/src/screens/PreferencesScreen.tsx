@@ -9,6 +9,7 @@ import {
   TextInput,
   ActivityIndicator,
   Modal,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -20,15 +21,8 @@ import type { WWColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 import { updateUserProfile } from '../services/supabaseDataService';
 
-const TRANSPORT_PREF_KEY = 'preferredFirstLegTransportMode';
+import { PREF_KEYS, getFlag, setFlag } from '../utils/prefs';
 
-const MODE_LABELS: Record<string, string> = {
-  keke:  'Keke (Tricycle)',
-  danfo: 'Danfo (Yellow bus)',
-  okada: 'Okada (Motorbike)',
-  brt:   'BRT / LAGBUS',
-  walk:  'Walk',
-};
 
 interface SettingRowProps {
   icon: string;
@@ -67,7 +61,8 @@ export default function PreferencesScreen({ navigation }: any) {
   const styles = useMemo(() => makeStyles(WW), [WW]);
   const { user, deleteAccount } = useAuth();
 
-  const [savedMode, setSavedMode]           = useState<string | null>(null);
+  const [newcomer, setNewcomer]             = useState(false);
+  const [okadaOk, setOkadaOk]               = useState(false);
   const [showNameModal, setShowNameModal]   = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [newName, setNewName]               = useState('');
@@ -78,26 +73,12 @@ export default function PreferencesScreen({ navigation }: any) {
   const [deleting, setDeleting]             = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(TRANSPORT_PREF_KEY).then((v) => setSavedMode(v));
+    getFlag(PREF_KEYS.newcomer).then(setNewcomer);
+    getFlag(PREF_KEYS.okadaOk).then(setOkadaOk);
   }, []);
 
-  const handleTransportPress = () => {
-    const modes = Object.keys(MODE_LABELS);
-    Alert.alert(
-      'Default Transport Mode',
-      'Choose your preferred first-leg transport',
-      [
-        ...modes.map((m) => ({
-          text: MODE_LABELS[m],
-          onPress: async () => {
-            await AsyncStorage.setItem(TRANSPORT_PREF_KEY, m);
-            setSavedMode(m);
-          },
-        })),
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
+  const toggleNewcomer = async (v: boolean) => { setNewcomer(v); await setFlag(PREF_KEYS.newcomer, v); await setFlag(PREF_KEYS.newcomerAsked, true); };
+  const toggleOkada = async (v: boolean) => { setOkadaOk(v); await setFlag(PREF_KEYS.okadaOk, v); };
 
   const handleClearHistory = () => {
     Alert.alert(
@@ -109,7 +90,7 @@ export default function PreferencesScreen({ navigation }: any) {
           text: 'Clear',
           style: 'destructive',
           onPress: async () => {
-            await AsyncStorage.removeItem('recentSearches');
+            await AsyncStorage.removeItem(PREF_KEYS.recentSearches);
             Alert.alert('Done', 'Search history cleared.');
           },
         },
@@ -186,15 +167,25 @@ export default function PreferencesScreen({ navigation }: any) {
       <ScrollView contentContainerStyle={styles.content}>
 
         {/* Transport */}
-        <Text style={styles.section}>TRANSPORT</Text>
+        <Text style={styles.section}>HOW WE PLAN YOUR ROUTES</Text>
         <View style={styles.group}>
           <SettingRow
-            icon="car-outline"
-            iconColor="#F97316"
-            iconBg="rgba(249,115,22,0.15)"
-            title="Default Transport Mode"
-            subtitle={savedMode ? MODE_LABELS[savedMode] : 'Ask me each time'}
-            onPress={handleTransportPress}
+            icon="compass-outline"
+            iconColor={WW.green}
+            iconBg={WW.greenDim}
+            title="New to this area"
+            subtitle="Fewer changes of vehicle, more explanation at each step"
+            onPress={() => toggleNewcomer(!newcomer)}
+            rightElement={<Switch value={newcomer} onValueChange={toggleNewcomer} trackColor={{ true: WW.orange, false: WW.borderStrong }} thumbColor={WW.bgSurface} accessibilityLabel="New to this area" />}
+          />
+          <SettingRow
+            icon="bicycle-outline"
+            iconColor={WW.okada}
+            iconBg={WW.errorDim}
+            title="Offer okada"
+            subtitle="Only where it is legal; never the default"
+            onPress={() => toggleOkada(!okadaOk)}
+            rightElement={<Switch value={okadaOk} onValueChange={toggleOkada} trackColor={{ true: WW.orange, false: WW.borderStrong }} thumbColor={WW.bgSurface} accessibilityLabel="Offer okada" />}
           />
         </View>
 

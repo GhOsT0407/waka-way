@@ -36,7 +36,6 @@ import WakaWaySplash from './screens/WakaWaySplash';
 import { ThemeProvider, useAppTheme } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
-import { wireAuthToken } from './services/api';
 import { initSentry } from './lib/sentry';
 
 SplashScreen.preventAutoHideAsync();
@@ -64,27 +63,9 @@ function MainTabs() {
   );
 }
 
-function AuthStack() {
-  return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Signup" component={SignupScreen} />
-    </Stack.Navigator>
-  );
-}
-
 function AppNavigator() {
-  const { isAuthenticated, isLoading, session } = useAuth();
+  const { isLoading } = useAuth();
   const { WW, isDark } = useAppTheme();
-
-  // Keep Django API client in sync with the Supabase access token
-  useEffect(() => {
-    wireAuthToken(session?.access_token ?? null);
-  }, [session]);
   const { isOnline } = useNetworkStatus();
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const [splashDone, setSplashDone] = useState(false);
@@ -165,41 +146,35 @@ function AppNavigator() {
           contentStyle: { backgroundColor: WW.bg },
         }}
       >
-        {isAuthenticated ? (
-          <>
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen
-              name="RouteDetail"
-              component={RouteDetailScreen}
-              options={{
-                animation: 'slide_from_bottom',
-                gestureEnabled: true,
-                gestureDirection: 'vertical',
-                contentStyle: { backgroundColor: WW.bg },
-              }}
-            />
-            <Stack.Screen
-              name="Navigation"
-              component={NavigationScreen}
-              options={{
-                animation: 'slide_from_bottom',
-                gestureEnabled: false,
-                contentStyle: { backgroundColor: WW.bg },
-              }}
-            />
-            <Stack.Screen
-              name="Preferences"
-              component={PreferencesScreen}
-              options={{ animation: 'slide_from_right', gestureEnabled: true }}
-            />
-          </>
-        ) : (
-          <Stack.Screen
-            name="Auth"
-            component={AuthStack}
-            options={{ animation: 'fade' }}
-          />
-        )}
+        {/* Finding a route needs no account. Login/Signup are reached from the
+            moment an action needs them (save, report, vote), never before. */}
+        <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen
+          name="RouteDetail"
+          component={RouteDetailScreen}
+          options={{
+            animation: 'slide_from_bottom',
+            gestureEnabled: true,
+            gestureDirection: 'vertical',
+            contentStyle: { backgroundColor: WW.bg },
+          }}
+        />
+        <Stack.Screen
+          name="Navigation"
+          component={NavigationScreen}
+          options={{
+            animation: 'slide_from_bottom',
+            gestureEnabled: false,
+            contentStyle: { backgroundColor: WW.bg },
+          }}
+        />
+        <Stack.Screen
+          name="Preferences"
+          component={PreferencesScreen}
+          options={{ animation: 'slide_from_right', gestureEnabled: true }}
+        />
+        <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: true, gestureDirection: 'vertical' }} />
+        <Stack.Screen name="Signup" component={SignupScreen} options={{ animation: 'slide_from_right' }} />
       </Stack.Navigator>
     </NavigationContainer>
     <OfflineBanner isOnline={isOnline} />

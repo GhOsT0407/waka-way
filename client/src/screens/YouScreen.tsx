@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
+import { PREF_KEYS } from '../utils/prefs';
 import { useAppTheme } from '../context/ThemeContext';
 import type { WWColors } from '../theme/colors';
 import { Fonts, Typography, Tracking } from '../theme/typography';
@@ -30,8 +31,8 @@ import { Sheet, SheetView, SheetRef } from '../components/ui/Sheet';
 // up on Home immediately and survives a reinstall.
 
 type Tab = 'history' | 'saved' | 'places';
-const HOME_PLACE_KEY = 'quickPick_home';
-const WORK_PLACE_KEY = 'quickPick_work';
+const HOME_PLACE_KEY = PREF_KEYS.homePlace;
+const WORK_PLACE_KEY = PREF_KEYS.workPlace;
 
 export default function YouScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -56,7 +57,7 @@ export default function YouScreen({ navigation }: any) {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user) { setLoading(false); setHistory([]); setSaved([]); setPlaces([]); return; }
     try {
       const [h, sv, p] = await Promise.all([getRouteHistory(user.id), getSavedRoutes(user.id), getFavoritePlaces(user.id)]);
       setHistory(h); setSaved(sv); setPlaces(p);
@@ -134,7 +135,9 @@ export default function YouScreen({ navigation }: any) {
     ]);
   };
 
-  const name = user?.email?.split('@')[0]?.replace(/[._]/g, ' ')?.replace(/\b\w/g, (c) => c.toUpperCase()) ?? 'Traveller';
+  // The name they gave at signup, else a tidy version of the email, else a guest.
+  const fromEmail = user?.email?.split('@')[0]?.replace(/[._]/g, ' ')?.replace(/\b\w/g, (c) => c.toUpperCase());
+  const name = user ? (user.name && user.name !== user.email.split('@')[0] ? user.name : (fromEmail ?? 'Traveller')) : 'Traveller';
 
   const rows = (() => {
     if (tab === 'history') return history.map((h) => ({
@@ -174,7 +177,14 @@ export default function YouScreen({ navigation }: any) {
         showsVerticalScrollIndicator={false}
       >
         <Text style={s.name}>{name}</Text>
-        <Text style={s.meta}>{user?.email ?? ''} · {history.length} {history.length === 1 ? 'trip' : 'trips'}</Text>
+        <Text style={s.meta}>{user ? `${user.email} · ${history.length} ${history.length === 1 ? 'trip' : 'trips'}` : 'Routes work without an account'}</Text>
+
+        {!user && (
+          <Pressable onPress={() => navigation.navigate('Login')} accessibilityRole="button" style={({ pressed }) => [s.signInCard, pressed && { opacity: 0.85 }]}>
+            <Text style={s.signInTitle}>Sign in to keep your trips</Text>
+            <Text style={s.signInBody}>Saved routes, Home and Work, and the reports you send to help the next rider.</Text>
+          </Pressable>
+        )}
 
         <View style={s.tabs}>
           {([['history', 'Trips'], ['saved', 'Saved'], ['places', 'Places']] as [Tab, string][]).map(([k, label]) => (
@@ -195,7 +205,7 @@ export default function YouScreen({ navigation }: any) {
             <ActivityIndicator color={WW.textMuted} style={{ marginTop: Space.xl }} />
           ) : rows.length === 0 ? (
             <Text style={s.empty}>
-              {tab === 'history' ? 'No trips yet — your first waka go show here.' : 'Nothing saved yet. Tap the heart on a route.'}
+              {!user ? 'Sign in and your trips go show here.' : tab === 'history' ? 'No trips yet — your first waka go show here.' : 'Nothing saved yet. Tap the heart on a route.'}
             </Text>
           ) : rows.map((r) => (
             <Pressable
@@ -246,13 +256,15 @@ export default function YouScreen({ navigation }: any) {
           <Text style={s.linkText}>Preferences & account</Text>
           <Ionicons name="chevron-forward" size={16} color={WW.textMuted} />
         </Pressable>
-        <Pressable
-          onPress={() => Alert.alert('Sign out', 'Sign out of WakaWay?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign out', style: 'destructive', onPress: () => logout() }])}
-          accessibilityRole="button"
-          style={({ pressed }) => [s.linkRow, pressed && { opacity: 0.7 }]}
-        >
-          <Text style={[s.linkText, { color: WW.error }]}>Sign out</Text>
-        </Pressable>
+        {user && (
+          <Pressable
+            onPress={() => Alert.alert('Sign out', 'Sign out of WakaWay?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign out', style: 'destructive', onPress: () => logout() }])}
+            accessibilityRole="button"
+            style={({ pressed }) => [s.linkRow, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={[s.linkText, { color: WW.error }]}>Sign out</Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       {/* Add-place sheet */}
@@ -325,6 +337,9 @@ function makeStyles(WW: WWColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: WW.bg },
     scroll: { paddingHorizontal: Space.lg },
+    signInCard: { marginTop: Space.md, padding: Space.lg, borderRadius: Radius.lg, backgroundColor: WW.orangeDim, borderWidth: 1, borderColor: WW.orange, gap: 4 },
+    signInTitle: { fontFamily: Fonts.bold, fontSize: Typography.md, color: WW.text },
+    signInBody: { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textSub, lineHeight: Typography.sm * 1.45 },
     name: { fontFamily: Fonts.extrabold, fontSize: Typography.hero, lineHeight: Typography.hero * 1.05, color: WW.text, letterSpacing: -1.2 },
     meta: { fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textMuted, marginTop: 4 },
 

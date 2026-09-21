@@ -96,7 +96,9 @@ export default function LoginScreen({ navigation }: any) {
     try {
       const result = await login(email.trim(), password);
       if (result.success) {
-        showSuccess('Welcome Back!', 'You have successfully signed in');
+        showSuccess('Welcome back!', 'You are signed in');
+        // Back to whatever needed the account — a save, a report, a vote.
+        if (navigation.canGoBack()) navigation.goBack(); else navigation.navigate('Main');
       } else {
         showError('Login Failed', result.error || 'Invalid email or password');
       }
@@ -112,6 +114,16 @@ export default function LoginScreen({ navigation }: any) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
+          <TouchableOpacity
+            onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
+            style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Not now"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.closeText}>Not now</Text>
+          </TouchableOpacity>
+
           {/* Header with orange-accented brand mark */}
           <View style={styles.header}>
             <View style={styles.logoGlow} />
@@ -121,7 +133,7 @@ export default function LoginScreen({ navigation }: any) {
               </View>
             </View>
             <Text style={styles.appName}>WakaWay</Text>
-            <Text style={styles.tagline}>Move Smart. Move Local.</Text>
+            <Text style={styles.tagline}>Sign in to save routes and help the next rider.</Text>
           </View>
 
           {/* Form card */}
@@ -180,6 +192,10 @@ function makeStyles(WW: WWColors) {
   return StyleSheet.create({
   container: { flex: 1, backgroundColor: WW.bg },
   scroll: { flexGrow: 1, paddingBottom: 32 },
+
+  closeBtn: { alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 4 },
+
+  closeText: { color: WW.textSub, fontSize: Typography.md, fontWeight: '600' },
 
   header: {
     alignItems: 'center',
