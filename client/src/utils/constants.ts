@@ -5,7 +5,7 @@ import { Typography } from '../theme/typography';
 
 // ── Legacy token aliases ──────────────────────────────────────────────────────
 // These three objects predate theme/spacing.ts and theme/typography.ts and are
-// still referenced from ~25 files. They now resolve to the theme scales so
+// still referenced by a few components. They now resolve to the theme scales so
 // there is one set of values; prefer Space / Radius / Typography in new code.
 
 export const SPACING = {
@@ -37,15 +37,6 @@ export const FONT_SIZES = {
   SMALL:          Typography.xs,    // was 10 → 11
 } as const;
 
-export const TRANSPORT_MODES = {
-  BUS: 'bus',
-  KEKE: 'keke',
-  OKADA: 'okada',
-  WALK: 'walk',
-} as const;
-
-
-
 // MapTiler is still used for place search/geocoding (placesService.ts) —
 // map rendering itself now runs on Google Maps via react-native-maps.
 export const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY || '';
@@ -75,33 +66,3 @@ export const GOOGLE_MAPS_DARK_STYLE = [
 ] as const;
 
 export const GOOGLE_MAPS_LIGHT_STYLE = [] as const;
-
-
-export const API_BASE_URL = __DEV__
-  ? 'http://localhost:8000/api/v1'
-  : 'https://waka-way-production.up.railway.app/api/v1';
-
-// Django backend is not required — routing runs client-side via smartRoutingService
-export const USE_MOCK_DATA = true;
-
-export const REPORT_TYPES = {
-  FARE_UPDATE: 'fare_update',
-  ROUTE_DISRUPTED: 'route_disrupted',
-  NEW_ROUTE: 'new_route',
-  STOP_MOVED: 'stop_moved',
-  ROUTE_WRONG: 'route_wrong',
-  OTHER: 'other',
-} as const;
-
-export const CITIES = {
-  LAGOS: 1,
-  ABUJA: 2,
-} as const;
-
-// Default settings
-export const DEFAULT_SETTINGS = {
-  MAX_WALK_DISTANCE_KM: 1.0,
-  DEFAULT_SEARCH_RADIUS_KM: 5.0,
-  DEFAULT_CITY_ID: CITIES.LAGOS,
-} as const;
-

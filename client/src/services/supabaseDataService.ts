@@ -62,44 +62,29 @@ export interface SavedRoute extends RouteSummary {
 
 // Shared by both inserts: the option that was actually chosen, and the summary
 // the UI renders, packed alongside the full smartRoute in route_data.
-function buildRoutePayload(
-  userId: string,
-  routeData: any,
-  smartRoute: SmartRouteResult | null,
-  selectedOption: RouteOption | null,
-) {
-  const opt = selectedOption
-    ?? smartRoute?.options.find(o => o.id === smartRoute?.recommendedOptionId)
-    ?? smartRoute?.options[0];
-  const modes = [...new Set(opt?.legs.map(l => l.mode) ?? [])];
-
-  const originCoords: Coords | null = routeData.origin_coords
-    ?? (smartRoute ? { latitude: smartRoute.origin.latitude, longitude: smartRoute.origin.longitude } : null);
-  const destCoords: Coords | null = routeData.destination_coords
-    ?? (smartRoute ? { latitude: smartRoute.destination.latitude, longitude: smartRoute.destination.longitude } : null);
-
+function buildRoutePayload(userId: string, smartRoute: SmartRouteResult, opt: RouteOption) {
+  const modes = [...new Set(opt.legs.map(l => l.mode))];
   const summary: RouteSummary = {
     transport_modes:     modes,
-    total_duration_mins: opt?.totalDurationMins ?? routeData.total_duration_mins,
-    total_distance_km:   opt?.totalDistanceKm   ?? routeData.total_distance_km,
-    total_fare_min:      opt?.totalPriceMin,
-    total_fare_max:      opt?.totalPriceMax      ?? routeData.total_fare,
+    total_duration_mins: opt.totalDurationMins,
+    total_distance_km:   opt.totalDistanceKm,
+    total_fare_min:      opt.totalPriceMin,
+    total_fare_max:      opt.totalPriceMax,
   };
-
   return {
     base: {
       user_id:            userId,
-      origin_name:        routeData.origin      ?? smartRoute?.origin.name      ?? 'Unknown',
-      destination_name:   routeData.destination ?? smartRoute?.destination.name ?? 'Unknown',
-      origin_coords:      originCoords,
-      destination_coords: destCoords,
+      origin_name:        smartRoute.origin.name,
+      destination_name:   smartRoute.destination.name,
+      origin_coords:      { latitude: smartRoute.origin.latitude, longitude: smartRoute.origin.longitude } as Coords,
+      destination_coords: { latitude: smartRoute.destination.latitude, longitude: smartRoute.destination.longitude } as Coords,
       route_data: {
         summary,
-        smartRoute: smartRoute ? JSON.parse(JSON.stringify(smartRoute)) : null,
+        selectedOptionId: opt.id,
+        smartRoute: JSON.parse(JSON.stringify(smartRoute)),
       },
     },
     summary,
-    opt,
   };
 }
 
@@ -168,13 +153,8 @@ export async function getRouteHistory(userId: string, limit = 20): Promise<Route
   return (data ?? []).map(withSummary);
 }
 
-export async function addRouteHistory(
-  userId: string,
-  routeData: any,
-  smartRoute: SmartRouteResult | null,
-  selectedOption: RouteOption | null
-): Promise<void> {
-  const { base, summary } = buildRoutePayload(userId, routeData, smartRoute, selectedOption);
+export async function addRouteHistory(userId: string, smartRoute: SmartRouteResult, option: RouteOption): Promise<void> {
+  const { base, summary } = buildRoutePayload(userId, smartRoute, option);
   const fare = summary.total_fare_min != null && summary.total_fare_max != null
     ? (summary.total_fare_min === summary.total_fare_max
         ? `₦${summary.total_fare_max}`
@@ -219,13 +199,8 @@ export async function getSavedRoutes(userId: string): Promise<SavedRoute[]> {
   return (data ?? []).map(withSummary);
 }
 
-export async function saveRoute(
-  userId: string,
-  routeData: any,
-  smartRoute: SmartRouteResult | null,
-  selectedOption: RouteOption | null
-): Promise<SavedRoute | null> {
-  const { base } = buildRoutePayload(userId, routeData, smartRoute, selectedOption);
+export async function saveRoute(userId: string, smartRoute: SmartRouteResult, option: RouteOption): Promise<SavedRoute | null> {
+  const { base } = buildRoutePayload(userId, smartRoute, option);
   const payload = base;
 
   const { data, error } = await supabase
@@ -241,52 +216,6 @@ export async function saveRoute(
 export async function deleteSavedRoute(id: string): Promise<boolean> {
   const { error } = await supabase.from('saved_routes').delete().eq('id', id);
   if (error) { console.warn('deleteSavedRoute error:', error.message); return false; }
-  return true;
-}
-
-// ============================================================
-// CONTRIBUTIONS
-// ============================================================
-
-export async function getNearbyContributions(lat: number, lng: number, radiusKm = 5) {
-  const { data, error } = await supabase.rpc('get_contributions_within_radius', {
-    lat,
-    lng,
-    radius_km: radiusKm,
-  });
-
-  if (error) { console.warn('getNearbyContributions error:', error.message); return []; }
-  return data ?? [];
-}
-
-export async function getAllContributions(limit = 50) {
-  const { data, error } = await supabase
-    .from('contributions')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit);
-
-  if (error) { console.warn('getAllContributions error:', error.message); return []; }
-  return data ?? [];
-}
-
-export async function voteOnContribution(
-  contributionId: string,
-  vote: 'confirm' | 'dismiss'
-): Promise<boolean> {
-  // Always go through the RPC: it derives the voter from auth.uid(), enforces
-  // one vote per user, and updates the counters in the same transaction.
-  // Voting by writing the tables directly bypasses all three.
-  const { data, error } = await supabase.rpc('vote_on_contribution', {
-    p_contribution_id: contributionId,
-    p_vote_type: vote,
-  });
-
-  if (error) { console.warn('voteOnContribution error:', error.message); return false; }
-  if (data && data.success === false) {
-    console.warn('voteOnContribution rejected:', data.error);
-    return false;
-  }
   return true;
 }
 
