@@ -45,6 +45,8 @@ export interface Corridor {
   confidence: Confidence;
   fullFare?: number;
   timetabled?: boolean;
+  /** Operating window as [startHour, endHour] in local time; absent = runs whenever danfos run. */
+  hours?: [number, number];
   speedKmh?: number;
   /** Road km between consecutive stops (length = stops.length - 1). */
   hops?: number[];
@@ -265,25 +267,25 @@ const EXPRESS = 20; // km/h on expressways and bridges; streets default to 14
 export const CORRIDORS: Corridor[] = [
   // ══ BRT (LAMATA) ════════════════════════════════════════════════════════
   {
-    id: 'brt_ikorodu_tbs', mode: 'brt', name: 'Ikorodu – TBS BRT', operator: 'Primero', confidence: 'verified', fullFare: 960,
+    id: 'brt_ikorodu_tbs', hours: [6, 22], mode: 'brt', name: 'Ikorodu – TBS BRT', operator: 'Primero', confidence: 'verified', fullFare: 960,
     calls: { tbs: 'TBS CMS', ikorodu: 'Ikorodu Ikorodu' },
     stops: ['ikorodu', 'benson', 'aruna', 'agric', 'ogolonto', 'majidun', 'irawo', 'idera', 'owode_onirin', 'mile12', 'ketu', 'ojota',
             'maryland', 'anthony', 'obanikoro', 'palmgrove', 'onipanu', 'fadeyi', 'jibowu', 'barracks', 'ojuelegba', 'stadium', 'iponri',
             'costain', 'cms', 'tbs'],     hops: [1.79, 0.77, 0.98, 1.29, 1.57, 5.12, 0.79, 1.07, 1.25, 2.36, 1.52, 3.65, 2.7, 1.58, 0.66, 1.32, 1.08, 0.95, 0.98, 0.77, 1.43, 1.09, 1.3, 4.99, 1.38] },
   {
-    id: 'brt_oshodi_abule_egba', mode: 'brt', name: 'Oshodi – Abule-Egba BRT', operator: 'LAMATA', confidence: 'verified', fullFare: 680,
+    id: 'brt_oshodi_abule_egba', hours: [6, 22], mode: 'brt', name: 'Oshodi – Abule-Egba BRT', operator: 'LAMATA', confidence: 'verified', fullFare: 680,
     stops: ['oshodi', 'bolade', 'shogunle', 'ikeja_along', 'mangoro', 'cement', 'dopemu', 'iyana_ipaja', 'ile_epo', 'abule_egba'],     hops: [0.86, 1.59, 4.87, 1.16, 1.62, 1.96, 2.25, 2.36, 3.14] },
   {
     // LAMATA prices Okokomaiko – Oyingbo and Mile 2 – TBS as BRT services, but
     // how much of the Badagry-expressway lane is actually running is unclear
     // from here — 'likely' until a rider confirms it.
-    id: 'brt_okokomaiko_oyingbo', mode: 'brt', name: 'Okokomaiko – Mile 2 – Oyingbo BRT', operator: 'LAMATA', confidence: 'likely', fullFare: 910, speedKmh: EXPRESS,
+    id: 'brt_okokomaiko_oyingbo', hours: [6, 22], mode: 'brt', name: 'Okokomaiko – Mile 2 – Oyingbo BRT', operator: 'LAMATA', confidence: 'likely', fullFare: 910, speedKmh: EXPRESS,
     stops: ['okokomaiko', 'ojo_barracks', 'iyana_iba', 'alaba', 'trade_fair', 'alakija', 'festac', 'mile2',
             'orile', 'costain', 'iddo', 'oyingbo'],     hops: [2.39, 4.8, 1.89, 4.04, 5.67, 1.71, 3.71, 5.3, 4.63, 3.21, 1.91] },
 
   // ══ Rail (LAMATA) ═══════════════════════════════════════════════════════
   {
-    id: 'rail_blue', mode: 'rail', name: 'Blue Line', operator: 'LAMATA', confidence: 'verified', fullFare: 750,
+    id: 'rail_blue', hours: [5.5, 23], mode: 'rail', name: 'Blue Line', operator: 'LAMATA', confidence: 'verified', fullFare: 750,
     stops: ['rail_mile2', 'rail_alaba', 'rail_iganmu', 'rail_ntheatre', 'rail_marina'],
   },
   {

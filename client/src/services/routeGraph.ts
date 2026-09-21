@@ -43,6 +43,10 @@ export interface GraphSearchOptions {
   excludeModes?: TransportMode[];
   /** Only ride corridors marked verified/local — no 'likely' ones. */
   excludeUnverified?: boolean;
+  /** Multiplier on ride minutes per mode; < 1 favours the mode, > 1 discourages it. */
+  modeWeights?: Partial<Record<TransportMode, number>>;
+  /** When the trip starts. Gates operating hours and sets the traffic factor. Default: now. */
+  at?: Date;
   /** Furthest a rider is attached to the network at either end, km. */
   reachKm?: number;
   /**
@@ -65,15 +69,19 @@ export function haversineKm(a: LatLng, b: LatLng): number {
 const ROAD_FACTOR = 1.25;
 
 // In-traffic averages, km/h (same numbers as smartRoutingService.SPEEDS).
-const SPEED: Partial<Record<TransportMode, number>> = { danfo: 14, brt: 20, rail: 60, keke: 18, walk: 4.5 };
+// BRT has a dedicated lane on most of its length and a boarding queue
+// instead of a scramble: faster and steadier than a danfo on the same road.
+const SPEED: Partial<Record<TransportMode, number>> = { danfo: 14, brt: 26, rail: 60, keke: 18, walk: 4.5 };
 
 // Minutes: waiting for the first bus, and changing to another one.
-const FIRST_WAIT = { danfo: 5, brt: 6, rail: 8, keke: 2 } as Record<string, number>;
+const FIRST_WAIT = { danfo: 5, brt: 5, rail: 8, keke: 2 } as Record<string, number>;
 const CHANGE_WAIT = { danfo: 8, brt: 7, rail: 8, keke: 3 } as Record<string, number>;
 
 // ─── Adjacency (built once) ──────────────────────────────────────────────────
-interface Edge { to: string; corridor: Corridor; km: number; minutes: number }
+interface Edge { to: string; corridor: Corridor; km: number; minutes: number; walk?: boolean }
 const ADJ: Record<string, Edge[]> = {};
+// Sentinel corridor for on-foot links between stops; never rendered as a leg.
+export const WALK_LINK: Corridor = { id: '__walk__', mode: 'walk', name: 'walk', stops: [], confidence: 'verified' };
 for (const c of CORRIDORS) {
   const speed = c.speedKmh ?? SPEED[c.mode] ?? 14;
   for (let i = 0; i < c.stops.length - 1; i++) {
@@ -82,6 +90,19 @@ for (const c of CORRIDORS) {
     const minutes = (km / speed) * 60;
     (ADJ[a.id] ??= []).push({ to: b.id, corridor: c, km, minutes });
     (ADJ[b.id] ??= []).push({ to: a.id, corridor: c, km, minutes });
+  }
+}
+// Any two stops within 450 m are one place on foot: Oshodi park and Oshodi
+// station, Ojuelegba and the BRT shelter under the bridge.
+const LINK_KM = 0.45;
+for (let i = 0; i < GRAPH_STOPS.length; i++) {
+  for (let j = i + 1; j < GRAPH_STOPS.length; j++) {
+    const a = GRAPH_STOPS[i], b = GRAPH_STOPS[j];
+    const km = haversineKm(a, b);
+    if (km > LINK_KM) continue;
+    const minutes = (km / SPEED.walk!) * 60 + 1;
+    (ADJ[a.id] ??= []).push({ to: b.id, corridor: WALK_LINK, km, minutes, walk: true });
+    (ADJ[b.id] ??= []).push({ to: a.id, corridor: WALK_LINK, km, minutes, walk: true });
   }
 }
 
@@ -111,8 +132,11 @@ function dijkstra(
   opts: Required<GraphSearchOptions>,
 ): GraphPath | null {
   const excluded = new Set(opts.excludeModes);
+  const hour = opts.at.getHours() + opts.at.getMinutes() / 60;
+  const inHours = (c: Corridor) => !c.hours || (hour >= c.hours[0] && hour <= c.hours[1]);
+  const traffic = trafficFactor(opts.at);
   const usable = (c: Corridor) => !excluded.has(c.mode) && (!c.timetabled || opts.allowTimetabled)
-    && !(opts.excludeUnverified && c.confidence === 'likely');
+    && !(opts.excludeUnverified && c.confidence === 'likely') && inHours(c);
 
   const dist = new Map<string, number>();
   const prev = new Map<string, Prev>();
@@ -150,8 +174,18 @@ function dijkstra(
     if (best && cur.d > best.d) break;
 
     for (const e of ADJ[cur.s.stop] ?? []) {
+      if (e.walk) {
+        // On foot to a neighbouring stop: allowed only after riding something
+        // (the origin already attaches to every stop in reach), and it leaves
+        // the rider "between vehicles" so the next ride pays a first wait.
+        if (!cur.s.corridor) continue;
+        push({ stop: e.to, corridor: null }, cur.d + e.minutes, { state: cur.s, edge: e });
+        continue;
+      }
       if (!usable(e.corridor)) continue;
-      let d = cur.d + e.minutes;
+      const weight = opts.modeWeights[e.corridor.mode] ?? 1;
+      const slow = e.corridor.mode === 'rail' ? 1 : traffic;   // trains don't sit in go-slow
+      let d = cur.d + e.minutes * weight * slow;
       if (cur.s.corridor === null) d += FIRST_WAIT[e.corridor.mode] ?? 5;
       else if (cur.s.corridor !== e.corridor.id) d += (CHANGE_WAIT[e.corridor.mode] ?? 8) + transferPenalty;
       push({ stop: e.to, corridor: e.corridor.id }, d, { state: cur.s, edge: e });
@@ -174,6 +208,7 @@ function dijkstra(
   let at = boardId;
   for (const step of chain) {
     const e = step.edge!;
+    if (e.walk) { at = e.to; continue; }
     if (!leg || leg.corridor.id !== e.corridor.id) {
       if (leg) legs.push(leg);
       const forward = e.corridor.stops.indexOf(e.to) > e.corridor.stops.indexOf(at);
@@ -192,11 +227,16 @@ function dijkstra(
 
   const board = STOP_BY_ID[boardId];
   const alight = STOP_BY_ID[best.state.stop];
+  // Weighted minutes steer the search; the figure reported is the honest one.
+  for (const l of legs) if (l.mode !== 'rail') l.minutes *= traffic;
+  const ride = legs.reduce((m, l) => m + l.minutes, 0);
+  const waits = legs.reduce((m, l, i) => m + (i === 0 ? (FIRST_WAIT[l.mode] ?? 5) : (CHANGE_WAIT[l.mode] ?? 8)), 0);
+  const endsMin = opts.accessMinutes(origin, board, haversineKm(origin, board)) + opts.accessMinutes(alight, dest, haversineKm(alight, dest));
   return {
     legs, board, alight,
     accessKm: haversineKm(origin, board),
     egressKm: haversineKm(alight, dest),
-    minutes: Math.round(best.d),
+    minutes: Math.round(ride + waits + endsMin),
     transfers: legs.length - 1,
   };
 }
@@ -209,17 +249,31 @@ export function searchGraph(origin: LatLng, dest: LatLng, options: GraphSearchOp
     reachKm: options.reachKm ?? 3.0,
     accessMinutes: options.accessMinutes ?? defaultAccessMinutes,
     excludeUnverified: options.excludeUnverified ?? false,
+    modeWeights: options.modeWeights ?? {},
+    at: options.at ?? new Date(),
   };
-  const variants: [number, TransportMode[], boolean][] = [
-    [0, [], false],             // fastest
-    [0, [], true],              // fastest on confirmed lines only
-    [20, [], false],            // fewest changes
-    [0, ['brt', 'rail'], false], // danfo only (usually cheapest)
+  // Each pass asks a different question, so a rider sees genuinely different
+  // ways: the fastest thing; the fastest on confirmed lines; the BRT/rail way
+  // when one exists (the formal modes are steadier, and a danfo running the
+  // same road would otherwise hide them); fewest changes; danfo only.
+  type Variant = { penalty: number; exclude: TransportMode[]; verifiedOnly?: boolean; weights?: Partial<Record<TransportMode, number>> };
+  const variants: Variant[] = [
+    { penalty: 0, exclude: [] },
+    { penalty: 0, exclude: [], verifiedOnly: true },
+    { penalty: 0, exclude: ['danfo', 'keke'] },                       // formal transit only
+    { penalty: 0, exclude: [], weights: { brt: 0.6, rail: 0.5 } },    // prefer the lane / the train
+    { penalty: 20, exclude: [] },
+    { penalty: 0, exclude: ['brt', 'rail'] },
   ];
   const out: GraphPath[] = [];
   const seen = new Set<string>();
-  for (const [penalty, exclude, verifiedOnly] of variants) {
-    const p = dijkstra(origin, dest, penalty, { ...opts, excludeModes: [...opts.excludeModes, ...exclude], excludeUnverified: opts.excludeUnverified || verifiedOnly });
+  for (const v of variants) {
+    const p = dijkstra(origin, dest, v.penalty, {
+      ...opts,
+      excludeModes: [...opts.excludeModes, ...v.exclude],
+      excludeUnverified: opts.excludeUnverified || !!v.verifiedOnly,
+      modeWeights: { ...opts.modeWeights, ...(v.weights ?? {}) },
+    });
     if (!p) continue;
     const sig = p.legs.map((l) => `${l.corridor.id}:${l.from.id}>${l.to.id}`).join('|');
     if (seen.has(sig)) continue;
@@ -247,7 +301,7 @@ export function corridorFare(c: Corridor, stopsSpanned: number): { min: number; 
   // LAMATA standard routes publish a full-line fare; a partial ride is a
   // share of it, never below a third (the boarding minimum).
   if (c.mode === 'danfo' && c.fullFare) {
-    const p = Math.round((c.fullFare * Math.max(0.35, frac)) / 10) * 10;
+    const p = Math.max(200, Math.round((c.fullFare * Math.max(0.3, frac)) / 10) * 10);
     return { min: p, max: p };
   }
   if (c.mode === 'rail') {
@@ -256,6 +310,21 @@ export function corridorFare(c: Corridor, stopsSpanned: number): { min: number; 
     return stopsSpanned <= 1 ? { min: 200, max: 250 } : stopsSpanned <= 3 ? { min: 400, max: 500 } : { min: full, max: full };
   }
   return null;
+}
+
+/**
+ * How much slower the roads are than the corridor's base speed right now.
+ * Lagos peaks are long: 06:30–10:00 and 16:00–20:30 on weekdays, a softer
+ * Saturday evening, and roads are clear after midnight.
+ */
+export function trafficFactor(d = new Date()): number {
+  const day = d.getDay();
+  const h = d.getHours() + d.getMinutes() / 60;
+  if (h < 5.5 || h >= 22) return 0.8;
+  if (day === 0) return 0.9;
+  if (day === 6) return h >= 16 && h < 20 ? 1.15 : 1.0;
+  if ((h >= 6.5 && h < 10) || (h >= 16 && h < 20.5)) return 1.4;
+  return 1.0;
 }
 
 /** Red Line runs 9 weekday trips in two windows; only offer it when one is coming up. */

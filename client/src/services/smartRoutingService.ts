@@ -103,6 +103,8 @@ export interface AvoidPoint {
 }
 
 export interface SmartRoutePreferences {
+  /** When the trip starts; gates BRT/rail hours and the traffic factor. Default: now. */
+  departAt?: Date;
   preferredFirstLegMode?: TransportMode;
   avoidPoints?: AvoidPoint[];
 }
@@ -167,8 +169,8 @@ function calcPrice(distKm: number, mode: TransportMode): { min: number; max: num
     case 'danfo':
       if (distKm <= 3)  return { min: 200, max: 300 };
       if (distKm <= 8)  return { min: 300, max: 500 };
-      if (distKm <= 15) return { min: 400, max: 700 };
-      return               { min: 600, max: 1000 };
+      if (distKm <= 15) return { min: 400, max: 600 };
+      return               { min: 500, max: 800 };
 
     case 'brt':
       if (distKm <= 5)  return { min: 450, max: 570 };
@@ -475,13 +477,20 @@ function accessMinutes(pref?: TransportMode) {
 }
 
 /** Every itinerary the corridor graph can find, as priced options. */
-function buildGraphOptions(origin: Location, destination: Location, pref?: TransportMode): RouteOption[] {
-  const paths = searchGraph(origin, destination, { allowTimetabled: redLineRunningAt(), accessMinutes: accessMinutes(pref) });
+function buildGraphOptions(origin: Location, destination: Location, pref?: TransportMode, at: Date = new Date()): RouteOption[] {
+  const paths = searchGraph(origin, destination, { allowTimetabled: redLineRunningAt(at), accessMinutes: accessMinutes(pref), at });
   return paths.map((path) => {
     const legs: RouteLeg[] = [];
     const board = toLocation(path.board), alight = toLocation(path.alight);
     if (path.accessKm >= 0.05) legs.push(buildConnector(origin, board, pref));
-    for (const gl of path.legs) legs.push(buildCorridorLeg(gl));
+    path.legs.forEach((gl, i) => {
+      const prev = path.legs[i - 1];
+      if (prev && prev.to.id !== gl.from.id) {
+        // Alighted at one stop, boarding at the one beside it: say so.
+        legs.push(buildLeg('walk', toLocation(prev.to), toLocation(gl.from)));
+      }
+      legs.push(buildCorridorLeg(gl));
+    });
     if (path.egressKm >= 0.05) legs.push(buildConnector(alight, destination, pref));
     const { name, tags } = optionNameFor(path);
     const lowest = path.legs.reduce((c, l) => (l.corridor.confidence === 'likely' ? 'likely' : c), 'local' as string);
@@ -556,7 +565,7 @@ export function calculateSmartRoute(
     const label = leg.mode === 'walk' ? 'Walk' : leg.mode === 'okada' ? 'Okada' : leg.mode === 'danfo' ? 'Bus' : 'Keke';
     options.push(assembleOption(uid(), 'direct', 'Direct', `${label} direct`, [leg], ['Short Trip']));
   }
-  if (totalDist > WALK_MAX) options.push(...buildGraphOptions(origin, destination, pref));
+  if (totalDist > WALK_MAX) options.push(...buildGraphOptions(origin, destination, pref, preferences?.departAt ?? new Date()));
   if (options.length === 0) options.push(buildUnknownRoute(origin, destination, pref));
 
   // Remove near-duplicate routes (same legs count & similar price). Confirmed
@@ -566,10 +575,15 @@ export function calculateSmartRoute(
   const rank = (o: RouteOption) =>
     (o.tags.includes('Unverified') ? 2 : 0) + (o.legs.some(l => l.mayBeUnavailable) ? 1 : 0);
   options.sort((a, b) => rank(a) - rank(b));
+  // Two options are the same choice only if they ride the same kinds of
+  // vehicle in the same order. BRT and danfo down the same road at similar
+  // time and fare are two real choices, not one.
+  const modeSig = (o: RouteOption) => o.legs.filter(l => l.mode !== 'walk').map(l => l.mode).join('>');
   const deduped: RouteOption[] = [];
   for (const opt of options) {
     const isDup = deduped.some(
       d =>
+        modeSig(d) === modeSig(opt) &&
         d.legs.length === opt.legs.length &&
         Math.abs(d.totalPriceMin - opt.totalPriceMin) < 100 &&
         Math.abs(d.totalDurationMins - opt.totalDurationMins) < 5
@@ -636,6 +650,12 @@ export function calculateSmartRoute(
   const cheapestIn = pool.reduce((a, b) => a.totalPriceMax <= b.totalPriceMax ? a : b);
   let recommended = (cheapestIn !== fastestIn && cheapestIn.totalDurationMins - fastestIn.totalDurationMins <= 10
     && cheapestIn.totalPriceMax < fastestIn.totalPriceMax) ? cheapestIn : fastestIn;
+  // A BRT or train within 10 min and ₦150 of the pick is the steadier ride —
+  // no conductor haggling, no "one chance", a queue instead of a scramble.
+  const formal = pool.find(o => o.legs.some(l => l.mode === 'brt' || l.mode === 'rail')
+    && o.totalDurationMins - recommended.totalDurationMins <= 10
+    && o.totalPriceMax - recommended.totalPriceMax <= 150);
+  if (formal && !recommended.legs.some(l => l.mode === 'brt' || l.mode === 'rail')) recommended = formal;
 
   recommended.isRecommended = true;
   recommended.recommendationReason = affectedByIncident.has(recommended.id)
