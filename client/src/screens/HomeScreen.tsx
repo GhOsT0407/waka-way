@@ -10,21 +10,20 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { BlurView } from 'expo-blur';
 
 import { WakaWayMapView } from '../components/map/MapView';
 import { getPlaceDetails, isWithinLagos } from '../services/placesService';
-import { searchRoutes } from '../services/api';
-import TransportModeSelector from '../components/TransportModeSelector';
+import { planJourney } from '../services/journeyPlanner';
 import { WakaWaySpinner } from '../components/WakaWaySpinner';
 import SearchOverlay, { SearchItem } from '../components/home/SearchOverlay';
 import { Sheet, SheetView } from '../components/ui/Sheet';
-import { useNearbyAlerts } from '../hooks/useRealtimeContributions';
-import type { TransportMode } from '../services/smartRoutingService';
+import { useLiveAlerts, TROUBLE_KINDS } from '../hooks/useLiveAlerts';
+import { PREF_KEYS, getFlag, setFlag, getJSON, setJSON } from '../utils/prefs';
 import { useAppTheme } from '../context/ThemeContext';
 import type { WWColors } from '../theme/colors';
 import { Fonts, Typography, Tracking } from '../theme/typography';
@@ -32,68 +31,56 @@ import { Space, Radius, HIT } from '../theme/spacing';
 
 // Home asks one question: where are you going? A map, the search field, and —
 // only once the user has some — Home/Work shortcuts and recent places in a
-// draggable sheet. Everything that used to compete for the first tap (mode
-// chips, hardcoded popular routes, a Live pill, a pulsing bell) is gone; the
-// alert banner still appears, but only when there is an alert.
+// draggable sheet. Picking a place plans the journey straight away; the
+// only question we ever add is "new to this area?", once.
 
-const RECENT_SEARCHES_KEY = 'recentSearches';
-const TRANSPORT_PREF_KEY  = 'preferredFirstLegTransportMode';
-const HOME_PLACE_KEY      = 'quickPick_home';
-const WORK_PLACE_KEY      = 'quickPick_work';
-const MAX_RECENT          = 8;
-const SHEET_RECENT        = 3;
-const MOCK_LOCATION       = { latitude: 6.5244, longitude: 3.3792 };
+const MAX_RECENT     = 8;
+const SHEET_RECENT   = 3;
+const LAGOS_CENTRE   = { latitude: 6.5244, longitude: 3.3792 };
+const FIX_STALE_MS   = 2 * 60_000;
+const FIX_TIMEOUT_MS = 8_000;
 
 const IOS_EASE = Easing.bezier(0.32, 0.72, 0, 1);
 
+type Coords = { latitude: number; longitude: number };
+
 // ─── Screen ──────────────────────────────────────────────────────────────────
-export default function HomeScreen({ navigation, route }: any) {
+export default function HomeScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { WW, isDark } = useAppTheme();
   const s = useMemo(() => makeStyles(WW), [WW]);
 
-  const [userCoords, setUserCoords]       = useState(MOCK_LOCATION);
-  const [locationName, setLocationName]   = useState('');
+  // Where the rider is. Null until a real fix lands — never a pretend one.
+  const [userCoords, setUserCoords]       = useState<Coords | null>(null);
+  const fixAt = useRef(0);
+  const [locationDenied, setLocationDenied] = useState(false);
 
   const [isSearchOpen, setIsSearchOpen]   = useState(false);
   const [recentItems, setRecentItems]     = useState<SearchItem[]>([]);
-  const [savedPref, setSavedPref]         = useState<TransportMode | null>(null);
-  const [showModeSelector, setShowModeSelector] = useState(false);
-  const [pendingDest, setPendingDest]     = useState<SearchItem | null>(null);
-  // Set when the rider typed "X to Y": the route starts at X, not at the GPS fix.
-  const [pendingOrigin, setPendingOrigin] = useState<SearchItem | null>(null);
   const [routeLoading, setRouteLoading]   = useState(false);
   const [homeDest, setHomeDest]           = useState<SearchItem | null>(null);
   const [workDest, setWorkDest]           = useState<SearchItem | null>(null);
-  // Measured height of the top chrome, so the alert banner can sit just under it.
   const [chromeHeight, setChromeHeight]   = useState(0);
 
-  // Most recent live community alert, surfaced as a single banner over the map.
-  const { contributions: liveAlerts } = useNearbyAlerts();
-  const topAlert = liveAlerts.find((c) => c.status !== 'rejected') ?? null;
+  // Trouble reported near the rider (5 km) — or anywhere in Lagos until we know where they are.
+  const { alerts: liveAlerts, refetch: refetchAlerts } = useLiveAlerts({
+    near: userCoords, radiusKm: userCoords ? 5 : undefined, kinds: TROUBLE_KINDS,
+  });
+  const topAlert = liveAlerts[0] ?? null;
 
-  // The map dims while the search overlay is up; the location ring is the one
-  // ambient animation kept — it says "this is you" while the map settles.
-  const recedeAnim   = useRef(new Animated.Value(0)).current;
-  const locPulseAnim = useRef(new Animated.Value(0)).current;
+  const recedeAnim = useRef(new Animated.Value(0)).current;
 
-  // ── Boot ─────────────────────────────────────────────────────────────────
-  useEffect(() => {
+  // ── Boot + focus ─────────────────────────────────────────────────────────
+  useEffect(() => { loadCurrentLocation(); }, []);
+
+  // Home stays mounted as a tab, so anything You / Preferences changed has
+  // to be re-read when the rider comes back to it.
+  useFocusEffect(useCallback(() => {
     loadRecentSearches();
-    loadCurrentLocation();
-    loadSavedPref();
     loadQuickPicks();
-
-    const locPulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(locPulseAnim, { toValue: 1, duration: 2600, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-        Animated.delay(800),
-        Animated.timing(locPulseAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ]),
-    );
-    locPulse.start();
-    return () => locPulse.stop();
-  }, []);
+    refetchAlerts();
+    if (Date.now() - fixAt.current > FIX_STALE_MS) loadCurrentLocation();
+  }, [refetchAlerts]));
 
   // ── Search overlay ────────────────────────────────────────────────────────
   const openSearch = useCallback(() => {
@@ -107,76 +94,42 @@ export default function HomeScreen({ navigation, route }: any) {
 
   const onSearchClosed = useCallback(() => setIsSearchOpen(false), []);
 
-  // The Search tab has no screen of its own — its press lands here as a
-  // timestamp param and opens the same overlay the search field does.
-  useEffect(() => {
-    if (route?.params?.openSearch) {
-      openSearch();
-      navigation.setParams({ openSearch: undefined });
-    }
-  }, [route?.params?.openSearch, openSearch, navigation]);
-
   // ── Data loaders ──────────────────────────────────────────────────────────
   const loadRecentSearches = async () => {
-    try {
-      const raw = await AsyncStorage.getItem(RECENT_SEARCHES_KEY);
-      if (raw) setRecentItems(JSON.parse(raw).slice(0, MAX_RECENT));
-    } catch {}
+    const items = await getJSON<SearchItem[]>(PREF_KEYS.recentSearches);
+    setRecentItems(items ? items.slice(0, MAX_RECENT) : []);
   };
 
   const saveRecentSearch = async (item: SearchItem) => {
-    try {
-      const updated = [item, ...recentItems.filter((r) => r.id !== item.id)].slice(0, MAX_RECENT);
-      setRecentItems(updated);
-      await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
-    } catch {}
-  };
-
-  const loadSavedPref = async () => {
-    try {
-      const raw = await AsyncStorage.getItem(TRANSPORT_PREF_KEY);
-      if (raw) setSavedPref(raw as TransportMode);
-    } catch {}
-  };
-
-  const loadCurrentLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { setLocationName('Lagos'); return; }
-      const loc = await Location.getCurrentPositionAsync({});
-      setUserCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-      setLocationName('Current location');
-    } catch {
-      setLocationName('Lagos');
-    }
+    const updated = [item, ...recentItems.filter((r) => r.id !== item.id)].slice(0, MAX_RECENT);
+    setRecentItems(updated);
+    await setJSON(PREF_KEYS.recentSearches, updated);
   };
 
   const loadQuickPicks = async () => {
+    const [home, work] = await Promise.all([getJSON<SearchItem>(PREF_KEYS.homePlace), getJSON<SearchItem>(PREF_KEYS.workPlace)]);
+    setHomeDest(home);
+    setWorkDest(work);
+  };
+
+  // Last known fix first (instant), then a fresh one with a timeout, so a
+  // slow GPS never leaves the rider routing from nowhere.
+  const loadCurrentLocation = async () => {
     try {
-      const [homeRaw, workRaw] = await Promise.all([
-        AsyncStorage.getItem(HOME_PLACE_KEY),
-        AsyncStorage.getItem(WORK_PLACE_KEY),
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') { setLocationDenied(true); return; }
+      setLocationDenied(false);
+      const last = await Location.getLastKnownPositionAsync({});
+      if (last) { setUserCoords({ latitude: last.coords.latitude, longitude: last.coords.longitude }); fixAt.current = last.timestamp; }
+      const fresh = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), FIX_TIMEOUT_MS)),
       ]);
-      if (homeRaw) setHomeDest(JSON.parse(homeRaw));
-      if (workRaw) setWorkDest(JSON.parse(workRaw));
+      if (fresh) { setUserCoords({ latitude: fresh.coords.latitude, longitude: fresh.coords.longitude }); fixAt.current = Date.now(); }
     } catch {}
   };
 
   // ── Route handlers ────────────────────────────────────────────────────────
-  const handleDestinationSelect = useCallback((item: SearchItem) => {
-    setPendingOrigin(null);
-    setPendingDest(item);
-    setShowModeSelector(true);
-  }, []);
-
-  const handleTripSelect = useCallback((origin: SearchItem, destination: SearchItem) => {
-    setPendingOrigin(origin);
-    setPendingDest(destination);
-    setShowModeSelector(true);
-  }, []);
-
-  // A search item to coordinates, resolving through the places service when
-  // the item only carries a placeId.
   const resolveCoords = async (item: SearchItem) => {
     if (item.coordinates) return item.coordinates;
     if (!item.placeId) return null;
@@ -184,14 +137,27 @@ export default function HomeScreen({ navigation, route }: any) {
     return d ? { latitude: d.latitude, longitude: d.longitude } : null;
   };
 
-  const handleModeSelected = async (mode: TransportMode) => {
-    setShowModeSelector(false);
-    if (!pendingDest) return;
-    await AsyncStorage.setItem(TRANSPORT_PREF_KEY, mode);
-    setSavedPref(mode);
+  // Once, before the first route: does the rider know this city? Fewer
+  // changes of vehicle beat a few minutes for someone who doesn't.
+  const askNewcomerOnce = () => new Promise<void>((resolve) => {
+    getFlag(PREF_KEYS.newcomerAsked).then((asked) => {
+      if (asked) return resolve();
+      Alert.alert(
+        'New to this area?',
+        'If you say yes, we pick routes with fewer changes of vehicle and explain each step a bit more. You can change this under You.',
+        [
+          { text: 'I know Lagos', onPress: () => { setFlag(PREF_KEYS.newcomer, false); setFlag(PREF_KEYS.newcomerAsked, true); resolve(); } },
+          { text: 'Yes, new here', onPress: () => { setFlag(PREF_KEYS.newcomer, true); setFlag(PREF_KEYS.newcomerAsked, true); resolve(); } },
+        ],
+        { cancelable: false },
+      );
+    });
+  });
+
+  const plan = async (dest: SearchItem, typedOrigin: SearchItem | null) => {
     setRouteLoading(true);
     try {
-      const coords = await resolveCoords(pendingDest);
+      const coords = await resolveCoords(dest);
       if (!coords) {
         Alert.alert('Location not found', "We couldn't get coordinates for this place.", [{ text: 'OK' }]);
         return;
@@ -200,65 +166,65 @@ export default function HomeScreen({ navigation, route }: any) {
         Alert.alert('Outside Lagos', 'WakaWay only covers Lagos at the moment.', [{ text: 'OK' }]);
         return;
       }
-      await saveRecentSearch({ ...pendingDest, coordinates: coords });
 
-      // Origin: the typed place if the rider gave one, else the GPS fix — which
-      // is checked too, since a stale fix would route from wherever the phone
-      // thinks it is.
-      let origin = userCoords;
+      // Origin: the typed place if the rider gave one, else a real GPS fix.
+      let origin: Coords | null = userCoords;
       let originName: string | undefined;
-      if (pendingOrigin) {
-        const o = await resolveCoords(pendingOrigin);
+      if (typedOrigin) {
+        const o = await resolveCoords(typedOrigin);
         if (!o) {
-          Alert.alert('Start not found', `We couldn't place "${pendingOrigin.name}".`, [{ text: 'OK' }]);
+          Alert.alert('Start not found', `We couldn't place "${typedOrigin.name}".`, [{ text: 'OK' }]);
           return;
         }
         origin = o;
-        originName = pendingOrigin.name;
+        originName = typedOrigin.name;
+      } else if (!origin) {
+        Alert.alert(
+          locationDenied ? 'Location is off' : "We can't find you yet",
+          'Type where you are starting from — e.g. "Ikeja to Lekki" — or turn location on and try again.',
+          [{ text: 'OK' }],
+        );
+        return;
       }
       if (!isWithinLagos(origin.latitude, origin.longitude)) {
         Alert.alert(
-          pendingOrigin ? 'Start is outside Lagos' : "You don't seem to be in Lagos",
+          typedOrigin ? 'Start is outside Lagos' : "You don't seem to be in Lagos",
           'WakaWay can only plan routes that start in Lagos.',
           [{ text: 'OK' }],
         );
         return;
       }
 
-      const result = await searchRoutes({
-        origin,
-        originName,
-        destination: coords,
-        destinationName: pendingDest.name,
-        destinationDetails: pendingDest,
-        preferredFirstLegMode: mode,
+      await saveRecentSearch({ ...dest, coordinates: coords });
+      setRouteLoading(false);
+      await askNewcomerOnce();
+      setRouteLoading(true);
+
+      const result = await planJourney({
+        origin, originName,
+        destination: coords, destinationName: dest.name,
+        alerts: liveAlerts,
       });
-      if (result?.legacyRoute) {
-        navigation.navigate('RouteDetail', {
-          routeData:      result.legacyRoute,
-          smartRouteData: result.smartRoute,
-          destination:    pendingDest,
-        });
-      }
-    } catch (err) {
-      console.error('Route search error:', err);
+      navigation.navigate('RouteDetail', { result });
+    } catch (err: any) {
+      // No made-up route, ever. Say what happened.
+      Alert.alert("Couldn't plan this trip", err?.message ?? 'Something went wrong. Try again in a moment.', [{ text: 'OK' }]);
     } finally {
       setRouteLoading(false);
-      setPendingDest(null);
-      setPendingOrigin(null);
     }
   };
 
+  const handleDestinationSelect = useCallback((item: SearchItem) => { plan(item, null); }, [userCoords, liveAlerts, recentItems, locationDenied]);
+  const handleTripSelect = useCallback((origin: SearchItem, destination: SearchItem) => { plan(destination, origin); }, [userCoords, liveAlerts, recentItems, locationDenied]);
+
   // ── Render ────────────────────────────────────────────────────────────────
-  // Translucent material: real blur on iOS, a solid frosted colour on Android
-  // where BlurView is costly and inconsistent. A frosted plate is layered over
-  // the blur so text always has a contrast floor (DESIGN_CRITIQUE 2.3).
   const Frost = Platform.OS === 'ios' ? BlurView : View;
   const frostProps = Platform.OS === 'ios' ? ({ intensity: 40, tint: isDark ? 'dark' : 'light' } as const) : {};
 
   const sheetRecents = recentItems.slice(0, SHEET_RECENT);
   const hasSheet = !!(homeDest || workDest || sheetRecents.length);
   const chromeFade = recedeAnim.interpolate({ inputRange: [0, 0.2], outputRange: [1, 0], extrapolate: 'clamp' });
+  const mapCentre = userCoords ?? LAGOS_CENTRE;
 
   return (
     <View style={s.root}>
@@ -271,21 +237,10 @@ export default function HomeScreen({ navigation, route }: any) {
       ]}>
         <WakaWayMapView
           style={StyleSheet.absoluteFill}
-          initialRegion={{
-            latitude: userCoords.latitude,
-            longitude: userCoords.longitude,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          }}
+          initialRegion={{ latitude: mapCentre.latitude, longitude: mapCentre.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 }}
+          centerOn={userCoords}
           hideCenterButton
         />
-        <View style={s.locPulseAnchor} pointerEvents="none">
-          <Animated.View style={[s.locPulseRing, {
-            transform: [{ scale: locPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 2.9] }) }],
-            opacity: locPulseAnim.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.6, 0.18, 0] }),
-          }]} />
-          <View style={s.locDot} />
-        </View>
       </Animated.View>
 
       {/* ── Top chrome — brand, bell, search field ─────────────────────── */}
@@ -307,7 +262,7 @@ export default function HomeScreen({ navigation, route }: any) {
             onPress={() => navigation.navigate('Live')}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             accessibilityRole="button"
-            accessibilityLabel={topAlert ? 'Alerts, new activity' : 'Alerts'}
+            accessibilityLabel={topAlert ? 'Live reports, new activity' : 'Live reports'}
           >
             <Ionicons name="notifications-outline" size={20} color={WW.text} />
             {topAlert && <View style={s.notifDot} />}
@@ -319,21 +274,21 @@ export default function HomeScreen({ navigation, route }: any) {
           onPress={openSearch}
           activeOpacity={0.9}
           accessibilityRole="search"
-          accessibilityLabel="Search for a destination"
+          accessibilityLabel="Where are you going?"
         >
           <Ionicons name="search" size={18} color={WW.textMuted} />
           <Text style={s.searchPlaceholder} numberOfLines={1}>Where you dey go?</Text>
         </TouchableOpacity>
       </Animated.View>
 
-      {/* ── Live alert banner — the newest community report, one line ──── */}
+      {/* ── Live alert banner — the newest trouble near the rider ─────── */}
       {topAlert && !isSearchOpen && chromeHeight > 0 && (
         <TouchableOpacity
           style={[s.alertBanner, { top: chromeHeight + Space.sm }]}
           onPress={() => navigation.navigate('Live')}
           activeOpacity={0.9}
           accessibilityRole="button"
-          accessibilityLabel={`Live alert: ${topAlert.title}`}
+          accessibilityLabel={`Live report: ${topAlert.title}`}
         >
           <View style={s.alertDot} />
           <Text style={s.alertText} numberOfLines={1}>{topAlert.title}</Text>
@@ -399,13 +354,6 @@ export default function HomeScreen({ navigation, route }: any) {
           onClosed={onSearchClosed}
         />
       )}
-
-      <TransportModeSelector
-        visible={showModeSelector}
-        savedPreference={savedPref}
-        onSelect={handleModeSelected}
-        onDismiss={() => { setShowModeSelector(false); setPendingDest(null); setPendingOrigin(null); }}
-      />
     </View>
   );
 }
@@ -437,7 +385,6 @@ function makeStyles(WW: WWColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: WW.bg },
 
-    // ── Top chrome ────────────────────────────────────────────────────────────
     topChrome: {
       position: 'absolute', top: 0, left: 0, right: 0,
       paddingHorizontal: Space.lg, paddingBottom: Space.md, gap: Space.md,
@@ -468,7 +415,6 @@ function makeStyles(WW: WWColors) {
     },
     searchPlaceholder: { flex: 1, fontFamily: Fonts.medium, fontSize: Typography.lg, color: WW.textMuted },
 
-    // ── Alert banner ──────────────────────────────────────────────────────────
     alertBanner: {
       position: 'absolute', left: Space.lg, right: Space.lg,
       height: HIT, borderRadius: Radius.md,
@@ -480,7 +426,6 @@ function makeStyles(WW: WWColors) {
     alertDot:  { width: 6, height: 6, borderRadius: Radius.pill, backgroundColor: WW.textOnWarning },
     alertText: { flex: 1, fontFamily: Fonts.bold, fontSize: Typography.md, color: WW.textOnWarning },
 
-    // ── Shortcuts sheet ───────────────────────────────────────────────────────
     sheetContent: { paddingHorizontal: Space.lg, paddingBottom: Space.lg, gap: Space.lg },
     shortcutRow:  { flexDirection: 'row', gap: 10 },
     shortcut: {
@@ -508,23 +453,10 @@ function makeStyles(WW: WWColors) {
     recentName:    { fontFamily: Fonts.semibold, fontSize: Typography.md, color: WW.text },
     recentAddress: { fontFamily: Fonts.regular, fontSize: Typography.sm, color: WW.textMuted, marginTop: 1 },
 
-    // ── Loading overlay ───────────────────────────────────────────────────────
     loadingOverlay: {
       ...StyleSheet.absoluteFill,
       backgroundColor: WW.scrim,
       alignItems: 'center', justifyContent: 'center', zIndex: 100,
-    },
-
-    // ── Location pulse (map overlay) ──────────────────────────────────────────
-    locPulseAnchor: {
-      position: 'absolute', left: '50%', top: '55%',
-      marginLeft: -17, marginTop: -17, width: 34, height: 34,
-      alignItems: 'center', justifyContent: 'center',
-    },
-    locPulseRing: { ...StyleSheet.absoluteFill, borderRadius: 17, backgroundColor: WW.green },
-    locDot: {
-      width: 13, height: 13, borderRadius: 6.5,
-      backgroundColor: WW.green, borderWidth: 2.5, borderColor: WW.bg,
     },
   });
 }

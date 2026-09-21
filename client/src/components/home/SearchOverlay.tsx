@@ -208,10 +208,10 @@ export default function SearchOverlay({ recentItems, homeDest, workDest, onSelec
           <Ionicons name={problem === 'offline' ? 'cloud-offline-outline' : 'key-outline'} size={15} color={WW.warningText} />
           <Text style={s.problemText}>
             {problem === 'offline'
-              ? 'No internet — showing saved places only'
+              ? 'No internet — showing places WakaWay already knows'
               : problem === 'no_key'
-                ? 'Search key not loaded — start Metro from the client folder so .env is read'
-                : 'Place search rejected the request — check the MapTiler key'}
+                ? 'Place search is not set up on this build — recent places still work'
+                : 'Place search is not answering right now — recent places still work'}
           </Text>
         </View>
       )}

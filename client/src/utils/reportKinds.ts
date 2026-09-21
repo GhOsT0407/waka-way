@@ -9,7 +9,9 @@ import type { WWColors } from '../theme/colors';
 export type ReportKind =
   | 'fare_change' | 'route_down' | 'stop_moved' | 'new_route'
   | 'traffic' | 'security' | 'danger_zone' | 'hazard' | 'construction'
-  | 'bus_stop' | 'taxi_stand' | 'other';
+  | 'bus_stop' | 'taxi_stand' | 'other'
+  // Confirmations, not alerts: never pins, they roll up into corridor_signals.
+  | 'fare_paid' | 'route_ok';
 
 export interface KindMeta {
   label: string;      // "Fare change"
@@ -32,6 +34,8 @@ export const REPORT_KINDS: Record<ReportKind, KindMeta> = {
   bus_stop:     { label: 'Bus stop',     pidgin: 'Bus stop',           glyph: 'B', color: (W) => W.brt,     onColor: (W) => W.brtText },
   taxi_stand:   { label: 'Taxi stand',   pidgin: 'Taxi stand',         glyph: 'T', color: (W) => W.keke,    onColor: (W) => W.kekeText },
   other:        { label: 'Other',        pidgin: 'Something else',     glyph: '•', color: (W) => W.textMuted, onColor: (W) => W.bg },
+  fare_paid:    { label: 'Fare paid',    pidgin: 'Wetin I pay',        glyph: '₦', color: (W) => W.green,   onColor: (W) => W.textOnGreen },
+  route_ok:     { label: 'Route worked', pidgin: 'E work',             glyph: '✓', color: (W) => W.green,   onColor: (W) => W.textOnGreen },
 };
 
 /** The four kinds a rider can file from the Report tab, in chip order. */

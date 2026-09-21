@@ -91,6 +91,7 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
             onPress={() => cast('CONFIRM')}
             disabled={!!voting}
             accessibilityRole="button"
+            accessibilityLabel="Yes, this is still happening"
             accessibilityState={{ selected: vote === 'CONFIRM' }}
             style={({ pressed }) => [s.confirm, vote === 'CONFIRM' && s.confirmActive, pressed && s.pressed]}
           >
@@ -102,6 +103,7 @@ export const AlertBottomSheet: React.FC<AlertBottomSheetProps> = ({
             onPress={() => cast('DISMISS')}
             disabled={!!voting}
             accessibilityRole="button"
+            accessibilityLabel="No, it has cleared"
             accessibilityState={{ selected: vote === 'DISMISS' }}
             style={({ pressed }) => [s.dismiss, vote === 'DISMISS' && s.dismissActive, pressed && s.pressed]}
           >

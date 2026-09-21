@@ -6,7 +6,10 @@ import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useContributions, Contribution } from '../../hooks/useContributions';
 import { AlertBottomSheet } from './AlertBottomSheet';
-import { configureProximityNotifications, calculateDistance } from '../../services/proximityAlertService';
+import { haversineKm } from '../../utils/geo';
+import { useAuth } from '../../context/AuthContext';
+import { useRequireSignIn } from '../../hooks/useRequireSignIn';
+import { useToast } from '../../context/ToastContext';
 import { useAppTheme } from '../../context/ThemeContext';
 import type { WWColors } from '../../theme/colors';
 import { Fonts, Typography, Tracking } from '../../theme/typography';
@@ -35,6 +38,7 @@ const DEFAULT_REGION: Region = {
 
 // Kinds that mean "avoid this area" get a radius so the danger reads at a glance.
 const RADIUS_M: Partial<Record<string, number>> = { security: 500, danger_zone: 300, hazard: 200 };
+const NOOP = () => {};
 
 interface CommunityMapViewProps {
   initialRegion?: Region;
@@ -68,13 +72,24 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
     enableProximityAlerts,
     proximityRadius,
     filterTypes,
-    onNewContribution: () => {},
-    onProximityAlert: () => {},
+    onNewContribution: NOOP,
+    onProximityAlert: NOOP,
   });
+  const { user } = useAuth();
+  const requireSignIn = useRequireSignIn();
+  const { showError } = useToast();
+
+  // Voting needs an account (the RPC checks auth.uid()); a failed vote says so
+  // instead of leaving the button unchanged.
+  const castVote = useCallback(async (id: string, type: 'CONFIRM' | 'DISMISS') => {
+    if (!user) { requireSignIn('say whether this is still happening'); return false; }
+    const ok = await vote(id, type);
+    if (!ok) showError('Vote no send', 'Check your connection and try again.');
+    return ok;
+  }, [user, requireSignIn, vote, showError]);
 
   useEffect(() => {
     (async () => {
-      if (enableProximityAlerts) await configureProximityNotifications();
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
@@ -95,7 +110,7 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
 
   const distanceTo = useCallback((c: Contribution): number | undefined => {
     if (!userLocation) return undefined;
-    return calculateDistance(userLocation.latitude, userLocation.longitude, c.latitude, c.longitude);
+    return haversineKm(userLocation, c);
   }, [userLocation]);
 
   if (loading) {
@@ -162,8 +177,8 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
           <View style={s.liveDot} />
           <Text style={s.liveText} numberOfLines={1}>
             {live.length === 0
-              ? 'QUIET · NO REPORTS NEAR YOU IN THE LAST FEW HOURS'
-              : `LIVE · ${live.length} ${live.length === 1 ? 'REPORT' : 'REPORTS'} NEAR YOU`}
+              ? 'QUIET · NO REPORTS IN LAGOS IN THE LAST FEW HOURS'
+              : `LIVE · ${live.length} ${live.length === 1 ? 'REPORT' : 'REPORTS'} IN LAGOS`}
           </Text>
           {alertsLoading && <ActivityIndicator size="small" color={WW.textMuted} />}
         </View>
@@ -179,11 +194,11 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
       </View>
 
       <AlertBottomSheet
-        contribution={selected}
+        contribution={selected ? (live.find((a) => a.id === selected.id) ?? selected) : null}
         visible={!!selected}
         onClose={() => setSelected(null)}
         userVote={selected ? getUserVote(selected.id) : null}
-        onVote={vote}
+        onVote={castVote}
         distance={selected ? distanceTo(selected) : undefined}
       />
     </View>

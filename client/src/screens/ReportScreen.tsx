@@ -13,12 +13,14 @@ import { Fonts, Typography, Tracking } from '../theme/typography';
 import { Space, Radius, HIT } from '../theme/spacing';
 import { supabase } from '../lib/supabase';
 import { REPORT_KINDS, REPORTABLE_KINDS, ReportKind } from '../utils/reportKinds';
+import { expiresAt } from '../services/contribute';
+import { useRequireSignIn } from '../hooks/useRequireSignIn';
 
 // The Report tab (WakaWay Mobile canvas): WETIN HAPPEN chips, the NEW FARE
 // figure with quick amounts, WHERE, one yellow Send. A report is a row in
-// `contributions`; the kind is its `type`, the amount and route go into the
-// title/description so the Live sheet and Notifications can show them
-// without a schema change.
+// `contributions`: the kind is its `type`, the fare is a number in fare_ngn,
+// and when the report comes off a journey the corridor and stops ride along
+// as ids — so the next rider's route screen can add it up.
 
 const AMOUNTS = [150, 250, 400, 600, 800, 1000];
 
@@ -26,20 +28,28 @@ interface RouteContext {
   origin?: string;
   destination?: string;
   mode?: string;
+  /** The fare the app estimated — shown as "was ₦X", never pre-filled as the new fare. */
   fare?: number;
   /** Preselect a kind — e.g. the post-journey check sends 'route_down'. */
   kind?: ReportKind;
+  corridorId?: string;
+  legFrom?: string;
+  legTo?: string;
+  tripKey?: string;
 }
 
 export default function ReportScreen({ route }: any) {
   const insets = useSafeAreaInsets();
   const { WW, isDark } = useAppTheme();
   const { user } = useAuth();
+  const requireSignIn = useRequireSignIn();
   const s = useMemo(() => makeStyles(WW), [WW]);
   const ctx: RouteContext = route?.params ?? {};
 
   const [kind, setKind] = useState<ReportKind>(ctx.kind ?? 'fare_change');
-  const [amount, setAmount] = useState<string>(ctx.fare ? String(ctx.fare) : '250');
+  // Empty on purpose when it comes off a journey: the rider types what they
+  // actually paid; the estimate is shown beside it as "was ₦X".
+  const [amount, setAmount] = useState<string>(ctx.fare ? '' : '250');
   const [where, setWhere] = useState<string>(
     ctx.origin && ctx.destination ? `${ctx.origin} → ${ctx.destination}` : '',
   );
@@ -53,7 +63,7 @@ export default function ReportScreen({ route }: any) {
   useEffect(() => {
     if (ctx.kind) setKind(ctx.kind);
     if (ctx.origin && ctx.destination) setWhere(`${ctx.origin} → ${ctx.destination}`);
-    if (ctx.fare) setAmount(String(ctx.fare));
+    if (ctx.fare) setAmount('');
     setSent(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.kind, ctx.origin, ctx.destination, ctx.fare]);
@@ -99,6 +109,12 @@ export default function ReportScreen({ route }: any) {
 
   const submit = useCallback(async () => {
     if (!canSend) return;
+    // RLS: inserts need auth.uid(). Ask now, not with a silent failure later.
+    if (!requireSignIn('send this report') || !user) return;
+    if (!coords) {
+      Alert.alert('No location yet', 'We pin the report where you are. Turn location on, or wait a moment and try again.');
+      return;
+    }
     setSending(true);
     try {
       const description = [
@@ -110,11 +126,18 @@ export default function ReportScreen({ route }: any) {
         type: kind,
         title,
         description,
-        latitude: coords?.latitude ?? 6.5244,
-        longitude: coords?.longitude ?? 3.3792,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
         address: where.trim(),
         status: 'pending',
-        ...(user ? { user_id: user.id } : {}),
+        user_id: user.id,
+        expires_at: expiresAt(kind),
+        fare_ngn: isFare ? Number(amount) : null,
+        mode: ctx.mode ?? null,
+        corridor_id: ctx.corridorId ?? null,
+        leg_from: ctx.legFrom ?? null,
+        leg_to: ctx.legTo ?? null,
+        trip_key: ctx.tripKey ?? null,
       });
       if (error) throw error;
       setSent(true);
@@ -123,7 +146,7 @@ export default function ReportScreen({ route }: any) {
     } finally {
       setSending(false);
     }
-  }, [canSend, details, isFare, ctx.fare, kind, title, coords, where, user]);
+  }, [canSend, details, isFare, ctx.fare, ctx.mode, ctx.corridorId, ctx.legFrom, ctx.legTo, ctx.tripKey, kind, title, coords, where, user, requireSignIn, amount]);
 
   const reset = () => {
     setSent(false);
