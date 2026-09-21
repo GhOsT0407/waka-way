@@ -36,6 +36,7 @@ export interface WWColors {
   keke: string; kekeText: string;
   okada: string; okadaText: string;
   walk: string; walkText: string;
+  rail: string; railText: string;
   ferry: string; ferryText: string;
 }
 
@@ -56,6 +57,8 @@ const BRAND = {
   kekeText:      '#14161A',
   okada:         '#EF4444',   // ink on this: 4.94:1 — white only clears large-text
   okadaText:     '#1A1200',
+  rail:          '#7C3AED',   // Blue Line violet; white on this: 5.63:1
+  railText:      '#FFFFFF',
   // Ferry routes were removed from the engine (76ca3e7); tokens kept until the
   // product decision is made either way.
   ferry:         '#0EA5E9',

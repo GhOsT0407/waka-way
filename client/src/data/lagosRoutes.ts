@@ -32,7 +32,47 @@ export interface GraphStop {
   longitude: number;
   source: 'osm' | 'known';
   interchange?: boolean;
+  /**
+   * Local knowledge — what a friend would add to the stop name. Only written
+   * where it is common knowledge; an empty field is honest, a guess is not.
+   */
+  /** What the place looks like: "the park under the Obalende bridge". */
+  landmark?: string;
+  /**
+   * Where to stand for buses heading to a terminal, keyed by that terminal's
+   * stop id ('*' = any direction). Carries the "cross to the other side" a
+   * newcomer never knows.
+   */
+  boardAt?: Record<string, string>;
 }
+
+/** Local notes per stop, merged into GRAPH_STOPS at module load (see below). */
+const STOP_NOTES: Record<string, Pick<GraphStop, 'landmark' | 'boardAt'>> = {
+  obalende: {
+    landmark: 'The big park under the Obalende bridge (Ring Road), at the Falomo end of Lagos Island',
+    boardAt: {
+      lekki_phase1: 'Buses to Lekki and Ajah load at the Falomo end of the park — listen for "Lekki Ajah"',
+      ajah:         'Buses to Lekki and Ajah load at the Falomo end of the park — listen for "Lekki Ajah"',
+      vi:           'Buses to Victoria Island load at the Falomo end of the park',
+    },
+  },
+  cms: {
+    landmark: 'Beside the Cathedral Church on Marina, opposite the CMS BRT terminal',
+    boardAt: {
+      obalende:     'Outer Marina, under the CMS bridge — the "Obalende Lekki Ajah" buses',
+      lekki_phase1: 'Outer Marina, under the CMS bridge — the "Obalende Lekki Ajah" buses',
+      ajah:         'Outer Marina, under the CMS bridge — the "Obalende Lekki Ajah" buses',
+    },
+  },
+  ojuelegba: { landmark: 'Under the Ojuelegba bridge — the flyover on Western Avenue; each side of the road loads for the direction it faces' },
+  oshodi:    { landmark: 'Oshodi interchange under the Oshodi bridge — BRT inside the terminal buildings, danfos along the expressway' },
+  ikeja:     { landmark: 'The danfo park under the bridge at Ikeja, by the Computer Village end of Obafemi Awolowo Way' },
+  yaba:      { landmark: 'Yaba bus stop beside Tejuosho Market' },
+  mile2:     { landmark: 'Under the Mile 2 bridge, where the Badagry and Apapa–Oshodi expressways cross' },
+  berger:    { landmark: 'The park under the Berger bridge on the Lagos–Ibadan expressway' },
+  ketu:      { landmark: 'Ketu bus stop on Ikorodu Road, by Ketu market' },
+  lekki_phase1: { landmark: 'The Lekki Phase 1 gate roundabout at Admiralty Way' },
+};
 
 export type Confidence = 'verified' | 'local' | 'likely';
 
@@ -541,10 +581,17 @@ export const CORRIDORS: Corridor[] = [
 ];
 
 // ─── Lookups ─────────────────────────────────────────────────────────────────
+for (const s of GRAPH_STOPS) Object.assign(s, STOP_NOTES[s.id]);
 export const STOP_BY_ID: Record<string, GraphStop> = Object.fromEntries(GRAPH_STOPS.map((s) => [s.id, s]));
 
 // Every corridor stop id must exist — fail loudly at module load, not on a
 // rider's phone in the middle of a search.
+for (const id of Object.keys(STOP_NOTES)) {
+  if (!STOP_BY_ID[id]) throw new Error(`lagosRoutes: STOP_NOTES references unknown stop '${id}'`);
+  for (const t of Object.keys(STOP_NOTES[id].boardAt ?? {})) {
+    if (t !== '*' && !STOP_BY_ID[t]) throw new Error(`lagosRoutes: boardAt on '${id}' references unknown terminal '${t}'`);
+  }
+}
 for (const c of CORRIDORS) {
   for (const id of c.stops) {
     if (!STOP_BY_ID[id]) throw new Error(`lagosRoutes: corridor ${c.id} references unknown stop '${id}'`);

@@ -4,12 +4,16 @@
  * Lagos multimodal routing over real corridors (data/lagosRoutes.ts):
  *   - BRT: Ikorodu – TBS and Oshodi – Abule-Egba (LAMATA)
  *   - Rail: Blue Line Mile 2 – Marina; Red Line Agbado – Oyingbo (timetabled)
- *   - ~30 danfo corridors, each an ordered list of real stops
+ *   - LAMATA standard routes and ~40 danfo corridors, each an ordered list of real stops
  *   - Walk / keke / okada for first and last mile (decisions/0011)
  *
  * A bus leg can only exist along a corridor; the engine no longer draws a
  * "danfo" between two hubs no bus connects. Trips the network doesn't reach
  * get an honest "ask at the park" option instead of an invented line.
+ *
+ * Every leg carries what a friend would add to the map: the conductor's
+ * call, the stops you'll hear on the way, where to stand, and how sure we
+ * are of the fare. Every option says how hard the journey is.
  *
  * Sources: wakaway/Routes Data Research.md
  */
@@ -28,6 +32,9 @@ export interface Location {
   type?: string;
 }
 
+/** Where a fare figure comes from — shown to the rider, never hidden. */
+export type FareSource = 'table' | 'band' | 'free';
+
 export interface RouteLeg {
   id: string;
   mode: TransportMode;
@@ -37,20 +44,34 @@ export interface RouteLeg {
   durationMins: number;
   priceMin: number;
   priceMax: number;
+  /** 'table' = LAMATA published fare; 'band' = rider-reported range for the distance. */
+  fareSource: FareSource;
   instruction: string;
   localInstruction: string;
   icon: string;
   /** Keke inside a restricted LGA: inner streets only, may not be there. */
   mayBeUnavailable?: boolean;
   /** For bus/rail legs: the corridor ridden and how many stops it spans. */
+  corridorId?: string;
   corridorName?: string;
   stopsSpanned?: number;
   /** Intermediate stop names, in order, for "via …" captions. */
   viaStops?: string[];
-  /** What the conductor shouts for this bus — "Oshodi Oshodi!" */
+  /** What the conductor shouts for this bus — "Oshodi Oshodi!" (danfo only). */
   conductorCall?: string;
+  /** Where the vehicle is heading — what to look for on the windscreen / ask for. */
+  terminalName?: string;
   confidence?: 'verified' | 'local' | 'likely';
+  /** Corridor stop ids at each end, for structured reports. */
+  fromStopId?: string;
+  toStopId?: string;
+  /** Local knowledge, when the data has it. */
+  landmark?: string;         // what the boarding place looks like
+  boardAt?: string;          // where to stand for this direction
+  alightLandmark?: string;   // what the get-down place looks like
 }
+
+export type Complexity = 'easy' | 'moderate' | 'complex';
 
 export interface RouteOption {
   id: string;
@@ -63,9 +84,16 @@ export interface RouteOption {
   totalPriceMin: number;
   totalPriceMax: number;
   priceFormatted: string;
+  /** Vehicle changes: rides minus one, never below zero. */
+  transfers: number;
+  walkMins: number;
+  walkKm: number;
+  complexity: Complexity;
+  /** Why it is rated that way, in the rider's words: "1 change of vehicle", "14 min walking". */
+  complexityReasons: string[];
   isCheapest: boolean;
   isFastest: boolean;
-  /** Fewest changes of vehicle among the options. */
+  /** Fewest vehicle changes (then least walking) among the options. */
   isSimplest: boolean;
   isRecommended: boolean;
   recommendationReason?: string;
@@ -105,8 +133,15 @@ export interface AvoidPoint {
 export interface SmartRoutePreferences {
   /** When the trip starts; gates BRT/rail hours and the traffic factor. Default: now. */
   departAt?: Date;
+  /** Okada is offered only when the rider asks for it and only where it is legal. */
   preferredFirstLegMode?: TransportMode;
+  /** Live community reports to route around (security, danger zones, closures). */
   avoidPoints?: AvoidPoint[];
+  /**
+   * "New to this area": trade a few minutes and a little money for fewer
+   * changes of vehicle. The recommendation moves, the options do not.
+   */
+  newcomer?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -135,8 +170,9 @@ function uid(): string {
 // CONFIGURATION
 // ─────────────────────────────────────────────────────────────
 
-// km/h, in-traffic averages. BRT's 28 was the dedicated-lane design speed;
-// 20 is what the Ikorodu corridor actually does across a day.
+// km/h, in-traffic averages for first/last-mile legs. Corridor legs take
+// their minutes from the graph (routeGraph.SPEED), which knows about the
+// BRT lane and the time of day.
 const SPEEDS: Record<TransportMode, number> = {
   walk:  4.5,
   keke:  18,
@@ -144,8 +180,6 @@ const SPEEDS: Record<TransportMode, number> = {
   danfo: 14,
   brt:   20,
   rail:  60,
-  uber:  35,
-  bolt:  35,
 };
 
 // Fare bands, April 2026 (wakaway/Routes Data Research.md). BRT and rail
@@ -182,12 +216,6 @@ function calcPrice(distKm: number, mode: TransportMode): { min: number; max: num
       if (distKm <= 15) return { min: 500, max: 1000 };
       return               { min: 1000, max: 1500 };
 
-    case 'uber':
-    case 'bolt':
-      return distKm <= 5
-        ? { min: 2500, max: 4000 }
-        : { min: 4000, max: 8000 };
-
     default:
       return { min: 0, max: 0 };
   }
@@ -207,42 +235,44 @@ function modeIcon(mode: TransportMode): string {
     danfo: 'bus-outline',
     brt:   'bus',
     rail:  'train-outline',
-    uber:  'car-sport-outline',
-    bolt:  'car-sport-outline',
   };
   return map[mode];
+}
+
+/** The word a Lagosian uses for the vehicle. */
+export function vehicleWord(mode: TransportMode): string {
+  switch (mode) {
+    case 'danfo': return 'danfo';
+    case 'brt':   return 'BRT';
+    case 'rail':  return 'train';
+    case 'keke':  return 'keke';
+    case 'okada': return 'okada';
+    default:      return 'walk';
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
 // INFRASTRUCTURE DATA  (imported from centralised data file)
 // ─────────────────────────────────────────────────────────────
 
-import { Stop } from '../data/lagosStops';
 import { GRAPH_STOPS, GraphStop } from '../data/lagosRoutes';
 import { isKekeRestricted, isOkadaBanned } from './lagosZones';
 import { searchGraph, corridorFare, redLineRunningAt, GraphLeg, GraphPath } from './routeGraph';
+
+interface Stop { name: string; latitude: number; longitude: number }
 
 // The graph's stops double as the "nearest stop" pool: they are the ones
 // whose coordinates were checked, and the ones a bus actually serves.
 const ALL_STOPS: Stop[] = GRAPH_STOPS.map((g) => ({ name: g.name, latitude: g.latitude, longitude: g.longitude }));
 
-// ─────────────────────────────────────────────────────────────
-// STOP SEARCH HELPERS
-// ─────────────────────────────────────────────────────────────
-
-function nearestStop(lat: number, lng: number, pool: Stop[], excludeNames: string[] = []): Stop | null {
+function nearestStop(lat: number, lng: number, pool: Stop[]): Stop | null {
   let best: Stop | null = null;
   let bestDist = Infinity;
   for (const s of pool) {
-    if (excludeNames.includes(s.name)) continue;
     const d = calculateDistance(lat, lng, s.latitude, s.longitude);
     if (d < bestDist) { bestDist = d; best = s; }
   }
   return best;
-}
-
-export function findNearestBusStop(lat: number, lng: number): Stop | null {
-  return nearestStop(lat, lng, ALL_STOPS);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -268,6 +298,7 @@ function buildLeg(mode: TransportMode, from: Location, to: Location, mayBeUnavai
     durationMins,
     priceMin: price.min,
     priceMax: price.max,
+    fareSource: mode === 'walk' ? 'free' : 'band',
     instruction,
     localInstruction,
     icon: modeIcon(mode),
@@ -281,10 +312,8 @@ function lagosInstruction(mode: TransportMode, from: string, to: string): string
     case 'keke':  return `At ${from}, enter a keke going to ${to}.`;
     case 'okada': return `At ${from}, take an okada to ${to}.`;
     case 'danfo': return `At ${from}, ask for any bus going to ${to}.`;
-    case 'brt':   return `Enter BRT at ${from}, alight at ${to}`;
-    case 'rail':  return `Board train at ${from} station, alight at ${to}`;
-    case 'uber':
-    case 'bolt':  return `Take ${mode === 'uber' ? 'Uber' : 'Bolt'} from ${from} to ${to}`;
+    case 'brt':   return `Enter BRT at ${from}, get down at ${to}`;
+    case 'rail':  return `Board the train at ${from} station, get down at ${to}`;
     default:      return `Travel from ${from} to ${to}`;
   }
 }
@@ -297,16 +326,12 @@ function lagosPidginInstruction(mode: TransportMode, from: string, to: string): 
     case 'danfo': return `For ${from}, ask for any bus wey dey go ${to} side`;
     case 'brt':   return `Enter BRT for ${from} busstop, come down for ${to}`;
     case 'rail':  return `Enter train for ${from} station, come down for ${to}`;
-    case 'uber':
-    case 'bolt':  return `Call ${mode === 'uber' ? 'Uber' : 'Bolt'} from ${from} go ${to}`;
     default:      return `Travel from ${from} to ${to}`;
   }
 }
 
 // ─────────────────────────────────────────────────────────────
 // TRIP CLASSIFICATION
-// Gates which route builders run based on straight-line distance.
-// Prevents a 1.5km trip from attempting Rail/BRT lookups.
 // ─────────────────────────────────────────────────────────────
 
 export type TripBand = 'micro' | 'short' | 'medium' | 'long';
@@ -318,7 +343,6 @@ export function classifyTrip(distKm: number): TripBand {
   return 'long';                      // All modes: Rail, BRT, Ferry, Danfo
 }
 
-// Human-readable label shown in the UI
 export const TRIP_BAND_LABEL: Record<TripBand, string> = {
   micro:  'Short walk nearby',
   short:  'Local trip',
@@ -380,6 +404,35 @@ function buildConnector(from: Location, to: Location, preferred?: TransportMode)
 // ROUTE OPTION BUILDERS
 // ─────────────────────────────────────────────────────────────
 
+const isRide = (l: RouteLeg) => l.mode !== 'walk';
+
+/**
+ * How hard this journey is for someone who has never made it. A green
+ * journey is one vehicle and a short walk; red is anything with two
+ * changes, a long walk, or a line we have not confirmed.
+ */
+function rateComplexity(legs: RouteLeg[], tags: string[]): { complexity: Complexity; reasons: string[] } {
+  const rides = legs.filter(isRide);
+  const transfers = Math.max(0, rides.length - 1);
+  const walkMins = legs.filter((l) => l.mode === 'walk').reduce((m, l) => m + l.durationMins, 0);
+  const unconfirmed = tags.includes('Unverified') || legs.some((l) => l.confidence === 'likely');
+  const shaky = legs.some((l) => l.mayBeUnavailable);
+  const reasons: string[] = [];
+
+  if (rides.length === 1) reasons.push('One vehicle, no changes');
+  if (transfers === 1) reasons.push('1 change of vehicle');
+  if (transfers >= 2) reasons.push(`${transfers} changes of vehicle`);
+  if (walkMins >= 8) reasons.push(`${walkMins} min walking`);
+  if (unconfirmed) reasons.push('A line we never confirm');
+  if (shaky) reasons.push(legs.some((l) => l.mayBeUnavailable && l.mode === 'keke') ? 'Keke may not be there' : 'No fixed bus for one hop');
+  if (rides.length === 0) reasons.push('Just a walk');
+
+  let complexity: Complexity = 'moderate';
+  if (transfers >= 2 || walkMins > 25 || unconfirmed || shaky) complexity = 'complex';
+  else if (transfers === 0 && walkMins <= 12) complexity = 'easy';
+  return { complexity, reasons };
+}
+
 function assembleOption(
   id: string,
   type: 'direct' | 'segmented',
@@ -392,6 +445,8 @@ function assembleOption(
   const totalDurationMins = legs.reduce((s, l) => s + l.durationMins, 0);
   const totalPriceMin     = legs.reduce((s, l) => s + l.priceMin,     0);
   const totalPriceMax     = legs.reduce((s, l) => s + l.priceMax,     0);
+  const walkLegs          = legs.filter((l) => l.mode === 'walk');
+  const { complexity, reasons } = rateComplexity(legs, tags);
   return {
     id,
     type,
@@ -403,6 +458,11 @@ function assembleOption(
     totalPriceMin,
     totalPriceMax,
     priceFormatted: formatPrice(totalPriceMin, totalPriceMax),
+    transfers: Math.max(0, legs.filter(isRide).length - 1),
+    walkMins: walkLegs.reduce((m, l) => m + l.durationMins, 0),
+    walkKm: Math.round(walkLegs.reduce((m, l) => m + l.distanceKm, 0) * 100) / 100,
+    complexity,
+    complexityReasons: reasons,
     isCheapest: false, isFastest: false, isSimplest: false, isRecommended: false,
     tags: [...tags],
   };
@@ -415,50 +475,76 @@ function buildCorridorLeg(gl: GraphLeg): RouteLeg {
   const from = toLocation(gl.from), to = toLocation(gl.to);
   const distanceKm = Math.round(gl.distanceKm * 100) / 100;
   const stopsSpanned = gl.via.length + 1;
-  const price = corridorFare(gl.corridor, stopsSpanned) ?? calcPrice(distanceKm, gl.mode);
+  const table = corridorFare(gl.corridor, stopsSpanned);
+  const price = table ?? calcPrice(distanceKm, gl.mode);
   const leg = buildLeg(gl.mode, from, to);
   const call = conductorCall(gl);
-  const vehicle = gl.mode === 'brt' ? 'BRT' : gl.mode === 'rail' ? 'train' : gl.mode === 'keke' ? 'keke' : 'danfo';
+  const vehicle = vehicleWord(gl.mode);
   const stopsNote = stopsSpanned > 1 ? ` (${stopsSpanned} stops)` : '';
   // The instruction is what a friend would tell you, not a label: where to
-  // stand, which bus to look for, what to tell the conductor.
-  const instruction = gl.mode === 'rail'
-    ? `At ${from.name}, board the ${gl.corridor.name} toward ${gl.terminal.name}. Get off at ${to.name}${stopsNote}.`
-    : gl.mode === 'keke'
-      ? `At ${from.name}, enter a keke going to ${to.name}.`
-      : `At ${from.name}, enter the ${vehicle} calling "${call}". Tell the conductor you're dropping at ${to.name}${stopsNote}.`;
-  const localInstruction = gl.mode === 'rail'
-    ? `For ${from.name} station, enter ${gl.corridor.name} wey dey go ${gl.terminal.name}. Come down for ${to.name}.`
-    : gl.mode === 'keke'
-      ? `For ${from.name}, enter keke wey dey go ${to.name}.`
-      : `For ${from.name}, enter ${vehicle} wey dey shout "${call}!". Tell conductor say you go drop for ${to.name}.`;
+  // stand, which bus to look for, what to tell the conductor. BRT is a
+  // ticketed queue, not a scramble — nobody shouts, you join the line.
+  let instruction: string;
+  let localInstruction: string;
+  switch (gl.mode) {
+    case 'rail':
+      instruction = `At ${from.name} station, board the ${gl.corridor.name} toward ${gl.terminal.name}. Get down at ${to.name}${stopsNote}.`;
+      localInstruction = `For ${from.name} station, enter ${gl.corridor.name} wey dey go ${gl.terminal.name}. Come down for ${to.name}.`;
+      break;
+    case 'brt':
+      instruction = `At ${from.name}, join the BRT queue for buses toward ${gl.terminal.name}. Get down at ${to.name}${stopsNote}.`;
+      localInstruction = `For ${from.name}, enter the BRT queue wey dey go ${gl.terminal.name}. Come down for ${to.name}.`;
+      break;
+    case 'keke':
+      instruction = `At ${from.name}, enter a keke going to ${to.name}.`;
+      localInstruction = `For ${from.name}, enter keke wey dey go ${to.name}.`;
+      break;
+    default:
+      instruction = `At ${from.name}, enter the ${vehicle} calling "${call}". Tell the conductor you're dropping at ${to.name}${stopsNote}.`;
+      localInstruction = `For ${from.name}, enter ${vehicle} wey dey shout "${call}!". Tell conductor say you go drop for ${to.name}.`;
+  }
+  const boardAt = gl.from.boardAt?.[gl.terminal.id] ?? gl.from.boardAt?.[gl.to.id] ?? gl.from.boardAt?.['*'];
   return {
     ...leg,
     distanceKm,
     durationMins: Math.max(1, Math.ceil(gl.minutes)),
     priceMin: price.min,
     priceMax: price.max,
+    fareSource: table ? 'table' : 'band',
     instruction,
     localInstruction,
+    corridorId: gl.corridor.id,
     corridorName: gl.corridor.name,
     stopsSpanned,
     viaStops: gl.via.map((v) => v.name),
-    conductorCall: gl.mode === 'rail' || gl.mode === 'keke' ? undefined : call,
+    conductorCall: gl.mode === 'danfo' ? call : undefined,
+    terminalName: gl.terminal.name,
     confidence: gl.corridor.confidence,
+    fromStopId: gl.from.id,
+    toStopId: gl.to.id,
+    ...(gl.from.landmark ? { landmark: gl.from.landmark } : {}),
+    ...(boardAt ? { boardAt } : {}),
+    ...(gl.to.landmark ? { alightLandmark: gl.to.landmark } : {}),
   };
 }
 
-/** "Oshodi Oshodi" — the corridor's own call for that terminal, else the Lagos default of the name said twice. */
+/**
+ * "Oshodi Oshodi" — the corridor's own call for that terminal, else the
+ * Lagos default of a name said twice. On a long line the conductor calls
+ * the big park the bus passes through as much as the far end, so when the
+ * rider gets down at an interchange that is the call to listen for.
+ */
 function conductorCall(gl: GraphLeg): string {
   const explicit = gl.corridor.calls?.[gl.terminal.id];
   if (explicit) return explicit;
-  const short = gl.terminal.name.replace(/\s*\(.*\)$/, '').replace(/ Garage$| Terminal$| Station$/i, '');
+  const stop = gl.to.interchange ? gl.to : gl.terminal;
+  const short = stop.name.replace(/\s*\(.*\)$/, '').replace(/ Garage$| Terminal$| Station$/i, '');
   return `${short} ${short}`;
 }
 
 function optionNameFor(path: GraphPath): { name: string; tags: string[] } {
   const modes = new Set(path.legs.map((l) => l.mode));
-  if (modes.has('rail')) return { name: path.legs.find((l) => l.mode === 'rail')!.corridor.name, tags: ['Rail', 'Fast'] };
+  if (modes.has('rail')) return { name: path.legs.find((l) => l.mode === 'rail')!.corridor.name, tags: ['Rail'] };
   if (modes.has('brt'))  return { name: 'BRT', tags: ['BRT'] };
   const busChanges = path.legs.filter((l) => l.mode !== 'keke').length - 1;
   const lead = modes.has('danfo') ? 'Danfo' : 'Keke';
@@ -487,7 +573,9 @@ function buildGraphOptions(origin: Location, destination: Location, pref?: Trans
       const prev = path.legs[i - 1];
       if (prev && prev.to.id !== gl.from.id) {
         // Alighted at one stop, boarding at the one beside it: say so.
-        legs.push(buildLeg('walk', toLocation(prev.to), toLocation(gl.from)));
+        const walk = buildLeg('walk', toLocation(prev.to), toLocation(gl.from));
+        if (gl.from.landmark) walk.alightLandmark = gl.from.landmark;
+        legs.push(walk);
       }
       legs.push(buildCorridorLeg(gl));
     });
@@ -536,22 +624,15 @@ export function calculateSmartRoute(
   const pref = preferences?.preferredFirstLegMode;
   const options: RouteOption[] = [];
 
-  // Pre-compute nearest stop to each endpoint across all stop types.
-  // Exposed in the result so the UI can show "Nearest stop: X — 5 min walk".
-  const _originStop = nearestStop(originLat, originLng, ALL_STOPS);
-  const _destStop   = nearestStop(destLat, destLng, ALL_STOPS);
-
+  // Nearest stop to each endpoint, exposed so the UI can say "Nearest stop: X — 5 min walk".
   const toStopInfo = (stop: Stop | null, fromLat: number, fromLng: number): NearestStopInfo | undefined => {
     if (!stop) return undefined;
     const distanceKm = calculateDistance(fromLat, fromLng, stop.latitude, stop.longitude);
     return { name: stop.name, distanceKm: Math.round(distanceKm * 100) / 100, walkMins: Math.max(1, Math.ceil((distanceKm / SPEEDS.walk) * 60)) };
   };
+  const originNearestStop = toStopInfo(nearestStop(originLat, originLng, ALL_STOPS), originLat, originLng);
+  const destinationNearestStop = toStopInfo(nearestStop(destLat, destLng, ALL_STOPS), destLat, destLng);
 
-  const originNearestStop = toStopInfo(_originStop, originLat, originLng);
-  const destinationNearestStop = toStopInfo(_destStop, destLat, destLng);
-
-  // Classify the trip so we only run builders that make sense for the distance.
-  // A 1.5km trip should never attempt a rail lookup; a 40km trip should always try rail.
   const totalDist = calculateDistance(originLat, originLng, destLat, destLng);
   const tripBand  = classifyTrip(totalDist);
 
@@ -578,7 +659,7 @@ export function calculateSmartRoute(
   // Two options are the same choice only if they ride the same kinds of
   // vehicle in the same order. BRT and danfo down the same road at similar
   // time and fare are two real choices, not one.
-  const modeSig = (o: RouteOption) => o.legs.filter(l => l.mode !== 'walk').map(l => l.mode).join('>');
+  const modeSig = (o: RouteOption) => o.legs.filter(isRide).map(l => l.mode).join('>');
   const deduped: RouteOption[] = [];
   for (const opt of options) {
     const isDup = deduped.some(
@@ -594,27 +675,26 @@ export function calculateSmartRoute(
   // Limit to 3 most useful options
   const finalOptions = deduped.slice(0, 3);
 
-  // Tag cheapest and fastest
-  const cheapest = finalOptions.reduce((a, b) => a.totalPriceMax < b.totalPriceMax ? a : b);
-  const fastest  = finalOptions.reduce((a, b) => a.totalDurationMins < b.totalDurationMins ? a : b);
-
+  // Roles. Every option gets its true flags; an option can be all three.
+  // Simplest = fewest vehicles, then least walking, then quickest.
+  const cheapest = finalOptions.reduce((a, b) => b.totalPriceMax < a.totalPriceMax ? b : a);
+  const fastest  = finalOptions.reduce((a, b) => b.totalDurationMins < a.totalDurationMins ? b : a);
+  const simplest = finalOptions.reduce((a, b) => {
+    if (b.transfers !== a.transfers) return b.transfers < a.transfers ? b : a;
+    if (b.walkMins !== a.walkMins)   return b.walkMins < a.walkMins ? b : a;
+    return b.totalDurationMins < a.totalDurationMins ? b : a;
+  });
   for (const opt of finalOptions) {
     opt.isCheapest = opt.id === cheapest.id;
     opt.isFastest  = opt.id === fastest.id;
+    opt.isSimplest = opt.id === simplest.id;
     if (opt.isCheapest) opt.tags.push('Cheapest');
-    if (opt.isFastest && opt.id !== cheapest.id) opt.tags.push('Fastest');
-  }
-  // Simplest = fewest vehicle changes, when that is a different option from
-  // the fastest and cheapest (otherwise the label adds nothing).
-  const rides = (o: RouteOption) => o.legs.filter(l => l.mode !== 'walk').length;
-  const simplest = finalOptions.reduce((a, b) => rides(a) <= rides(b) ? a : b);
-  if (finalOptions.length > 1 && simplest.id !== cheapest.id && simplest.id !== fastest.id) {
-    simplest.isSimplest = true;
-    simplest.tags.push('Simplest');
+    if (opt.isFastest && !opt.isCheapest) opt.tags.push('Fastest');
+    if (opt.isSimplest && finalOptions.length > 1 && !opt.isCheapest && !opt.isFastest) opt.tags.push('Simplest');
   }
 
   // ── Incident avoidance reranking ──────────────────────────────────────
-  // If the caller supplied avoidPoints (from community incident reports),
+  // Live community reports the caller wants avoided (security, closures):
   // demote options whose legs pass through those regions.
   const avoidPoints = preferences?.avoidPoints ?? [];
   const affectedByIncident = new Set<string>();
@@ -625,7 +705,6 @@ export function calculateSmartRoute(
         avoidPoints.some((ap) => {
           const distFrom = calculateDistance(leg.from.latitude, leg.from.longitude, ap.latitude, ap.longitude);
           const distTo   = calculateDistance(leg.to.latitude,   leg.to.longitude,   ap.latitude, ap.longitude);
-          // Point-to-segment approximation: check endpoints + midpoint
           const midLat = (leg.from.latitude  + leg.to.latitude)  / 2;
           const midLng = (leg.from.longitude + leg.to.longitude) / 2;
           const distMid = calculateDistance(midLat, midLng, ap.latitude, ap.longitude);
@@ -650,23 +729,35 @@ export function calculateSmartRoute(
   const cheapestIn = pool.reduce((a, b) => a.totalPriceMax <= b.totalPriceMax ? a : b);
   let recommended = (cheapestIn !== fastestIn && cheapestIn.totalDurationMins - fastestIn.totalDurationMins <= 10
     && cheapestIn.totalPriceMax < fastestIn.totalPriceMax) ? cheapestIn : fastestIn;
+  let reason: string | undefined;
   // A BRT or train within 10 min and ₦150 of the pick is the steadier ride —
   // no conductor haggling, no "one chance", a queue instead of a scramble.
   const formal = pool.find(o => o.legs.some(l => l.mode === 'brt' || l.mode === 'rail')
     && o.totalDurationMins - recommended.totalDurationMins <= 10
     && o.totalPriceMax - recommended.totalPriceMax <= 150);
   if (formal && !recommended.legs.some(l => l.mode === 'brt' || l.mode === 'rail')) recommended = formal;
+  // Someone new to the area will happily spend a few minutes and a little
+  // money to change vehicles less. Move the recommendation, not the options.
+  if (preferences?.newcomer) {
+    const simplestIn = pool.reduce((a, b) => (b.transfers < a.transfers || (b.transfers === a.transfers && b.walkMins < a.walkMins)) ? b : a);
+    if (simplestIn !== recommended && simplestIn.transfers < recommended.transfers
+      && simplestIn.totalDurationMins - recommended.totalDurationMins <= 15
+      && simplestIn.totalPriceMax - recommended.totalPriceMax <= 300) {
+      recommended = simplestIn;
+      reason = simplestIn.transfers === 0 ? 'One vehicle, no changes — easiest for a first time' : 'Fewer changes — easier for a first time';
+    }
+  }
 
   recommended.isRecommended = true;
-  recommended.recommendationReason = affectedByIncident.has(recommended.id)
-    ? pickRecommendationReason(recommended)
-    : affectedByIncident.size > 0
-      ? 'Avoids reported incidents on your route'
-      : pickRecommendationReason(recommended);
+  recommended.recommendationReason = reason
+    ?? (affectedByIncident.size > 0 && !affectedByIncident.has(recommended.id)
+      ? 'Avoids reported trouble on the other way'
+      : pickRecommendationReason(recommended));
 
   if (affectedByIncident.size > 0 && !affectedByIncident.has(recommended.id)) {
     if (!recommended.tags.includes('Incident-free')) recommended.tags.push('Incident-free');
   }
+  for (const o of finalOptions) if (affectedByIncident.has(o.id) && !o.tags.includes('Reported trouble')) o.tags.push('Reported trouble');
 
   // Sort: recommended first, then clean options, then by price
   finalOptions.sort((a, b) => {
@@ -708,8 +799,10 @@ export function calculateSmartRoute(
 function pickRecommendationReason(opt: RouteOption): string {
   if (opt.tags.includes('Rail')) return 'The train skips the traffic entirely';
   if (opt.tags.includes('BRT'))  return 'BRT runs on its own lane — steadier in traffic';
+  if (opt.transfers === 0 && opt.isFastest) return 'One vehicle and the quickest way';
   if (opt.isFastest && opt.isCheapest) return 'Fastest and cheapest for this trip';
   if (opt.isFastest)             return 'Quickest route for this trip';
   if (opt.isCheapest)            return 'Cheapest, and only a few minutes longer';
+  if (opt.transfers === 0)       return 'One vehicle, no changes';
   return 'Best balance of speed and cost for Lagos';
 }
