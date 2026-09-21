@@ -1,9 +1,31 @@
 
 # Active Context
 
-Session memory for ongoing development. Read this first when resuming work — it's the fastest way back into where things stand. Updated 2026-09-17.
+Session memory for ongoing development. Read this first when resuming work — it's the fastest way back into where things stand. Updated 2026-09-21.
 
-## Latest session (2026-09-17) — SDK 57, calmer Home, mode accuracy
+## Latest session (2026-09-21) — full audit, then "explain the journey"
+
+**Why:** the user asked for a full audit of the app against the product strategy, ranked contradictions, and the fixes. See [[Product Audit 2026-09-21]] for the findings and [[0013-explain-the-journey-not-the-map]] for what changed and why.
+
+- **Audit method:** a 7-reader / 9-auditor workflow hit the subagent session limit after the six subsystem maps; the audit itself was done by hand from those maps plus a first-hand read of the engine, route, navigation and report code. Verdict: the engine was right, the explanation was missing.
+- **Foundation:** 48 dead files (legacy engine, three fare models, mock plumbing, Django client, second Supabase client, orphan components, the Home map's own report/vote path) moved to `attic/client-src/` — **run `git rm -r attic` after review**; the auto-mode classifier refused the delete. Mock-route-on-error is gone: `services/journeyPlanner.ts` is the one door into the engine and Home shows an honest failure. Auth is optional: Main renders for everyone, `hooks/useRequireSignIn.ts` asks at save / report / vote.
+- **Data model:** `GraphStop.landmark` / `boardAt` (seeded for ten interchanges), `RouteLeg` carries terminal, corridor and stop ids, local notes and `fareSource`; `RouteOption` carries `complexity`, `complexityReasons`, `transfers`, `walkMins`; uber/bolt removed; BRT legs no longer told to "listen for the conductor".
+- **Supabase (applied via MCP, migration `contributions_structured_signals`):** `contributions` + `corridor_id, stop_id, mode, fare_ngn, leg_from, leg_to, trip_key`; new kinds `fare_paid`, `route_ok` (excluded from `get_active_contributions`); new RPC `corridor_signals(text[])` → per-corridor fare percentiles / ok / down counts over 7 days. `services/signals.ts` turns it into 🟢 verified / 🟡 reported / published / estimate labels.
+- **Screens:** `components/journey/JourneyExplainer.tsx` replaces `SmartRouteOptions` — fare range headline, difficulty chip, reason, option cards (Recommended / Simplest / Cheapest / Fastest), "Right now on this route" with Still-happening votes, "What to expect", numbered steps (walk / take / get down / arrive) with where-to-stand, listen-for, tell-the-conductor, fare trust per leg, newcomer tips. `NavigationScreen` is instruction-first Wakaway Mode (GPS + thumb advance, approach vibration, stops-to-go, keep-awake, corridor-chain geometry fallback, last-metres bearing, one-tap fare after "Yes, e work"). Home: no per-search modal; "New to this area?" once; focus refresh; real GPS handling. Preferences: newcomer + okada switches replace the dead "default mode". Report: structured columns, sign-in at Send, NEW FARE empty with "was ₦X" beside it, `expires_at` per kind.
+- **Tests:** 79 (was 55) — `explain.test.ts` covers complexity, roles, newcomer steering, local notes, steps, share text, fare trust, route-scoped alerts. `jest.config.js` now mocks AsyncStorage and ignores `attic/`.
+- **Added dependency:** `expo-keep-awake`.
+
+### Next, in order
+1. `git rm -r attic` once reviewed; delete the drifted root `.sql` files and outdated root `*.md`.
+2. Seed `landmark` / `boardAt` for more interchanges from someone who knows them (Oshodi terminals, Ojuelegba sides, Mile 2 park layout).
+3. Replace the dead ORS key or drop `directionsService` — the corridor-chain fallback now draws the route either way.
+4. Give Wakaway Mode a real device test on one corridor (Ikorodu Road BRT) and tune the advance thresholds.
+5. Login / Signup / Preferences visual pass on the new system; `maxFontSizeMultiplier` policy.
+6. Everything still open from the 2026-09-17 list below (more corridors, review path for "Route no dey work", Explore tab).
+
+---
+
+## Previous session (2026-09-17) — SDK 57, calmer Home, mode accuracy
 
 **Why:** the iPhone couldn't load the app — Expo Go on the App Store only ships the current SDK (57), the project was on 54, and an iOS dev build needs a paid Apple account. Upgraded instead.
 
