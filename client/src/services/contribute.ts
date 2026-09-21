@@ -25,9 +25,18 @@ export const tripKey = (r: SmartRouteResult) => `${r.origin.name} > ${r.destinat
 
 const rides = (o: RouteOption) => o.legs.filter((l) => l.mode !== 'walk');
 
+/** Who is reporting — RLS needs a session, and the row should say whose it is. */
+async function reporterId(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? null;
+}
+
 /** "Yes, e work" — one row per ride so every corridor the rider used gets the credit. */
 export async function confirmRouteWorked(result: SmartRouteResult, option: RouteOption): Promise<boolean> {
+  const user_id = await reporterId();
+  if (!user_id) return false;
   const rows = rides(option).map((leg) => ({
+    user_id,
     type: 'route_ok',
     title: `Route worked · ${leg.from.name} → ${leg.to.name}`,
     latitude: leg.to.latitude,
@@ -48,7 +57,10 @@ export async function confirmRouteWorked(result: SmartRouteResult, option: Route
 
 /** "How much did you pay?" — the amount, on the corridor, from where to where. */
 export async function reportFarePaid(result: SmartRouteResult, leg: RouteLeg, amount: number): Promise<boolean> {
+  const user_id = await reporterId();
+  if (!user_id) return false;
   const { error } = await supabase.from('contributions').insert({
+    user_id,
     type: 'fare_paid',
     title: `Paid ₦${amount} · ${leg.from.name} → ${leg.to.name}`,
     latitude: leg.from.latitude,
