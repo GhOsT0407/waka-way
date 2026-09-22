@@ -1,9 +1,27 @@
 
 # Active Context
 
-Session memory for ongoing development. Read this first when resuming work — it's the fastest way back into where things stand. Updated 2026-09-21.
+Session memory for ongoing development. Read this first when resuming work — it's the fastest way back into where things stand. Updated 2026-09-22.
 
-## Latest session (2026-09-21) — full audit, then "explain the journey"
+## Latest session (2026-09-22) — close the audit's loose ends
+
+**Why:** the 2026-09-21 handoff left four follow-ups; the user said "do what you need to do".
+
+- **`attic/` removed** (48 files; still in history at `8b5906e`). `jest.config.js` no longer ignores it.
+- **OpenRouteService dropped** — see [[0014-draw-legs-from-the-corridor-not-a-directions-api]]. `directionsService.ts`, `ORS_API_KEY` and the env var are gone; `legFallbackGeometry` is now `legGeometry` and is the only leg geometry. Privacy policy (in-app §5 and `privacy-policy.html`) no longer lists ORS; "Last updated" moved to 22 September 2026.
+- **Wakaway Mode thresholds** are one named block at the top of `NavigationScreen.tsx` (`NEAR_STOP_M`, `ALIGHT_DEFAULT_M` added for the two literals that were inline). Still untuned — one real ride needed.
+- Branch `chore/expo-sdk-57` pushed and opened as a PR to `master`.
+
+### Next, in order
+1. Ride the Ikorodu Road BRT once with Wakaway Mode on; tune the thresholds block.
+2. Retire the drifted root `.sql` files and outdated root `*.md` (`Architecture.md` in the vault describes the July code, too).
+3. Seed `landmark` / `boardAt` for more interchanges from someone who knows them (Oshodi terminals, Ojuelegba sides, Mile 2 park layout).
+4. Login / Signup / Preferences visual pass on the new system; `maxFontSizeMultiplier` policy.
+5. Everything still open from the 2026-09-17 list below (more corridors, review path for "Route no dey work", Explore tab).
+
+---
+
+## Previous session (2026-09-21) — full audit, then "explain the journey"
 
 **Why:** the user asked for a full audit of the app against the product strategy, ranked contradictions, and the fixes. See [[Product Audit 2026-09-21]] for the findings and [[0013-explain-the-journey-not-the-map]] for what changed and why.
 
@@ -15,10 +33,10 @@ Session memory for ongoing development. Read this first when resuming work — i
 - **Tests:** 79 (was 55) — `explain.test.ts` covers complexity, roles, newcomer steering, local notes, steps, share text, fare trust, route-scoped alerts. `jest.config.js` now mocks AsyncStorage and ignores `attic/`.
 - **Added dependency:** `expo-keep-awake`.
 
-### Next, in order
-1. `git rm -r attic` once reviewed; delete the drifted root `.sql` files and outdated root `*.md`.
+### Next, in order (as of 2026-09-21; items 1 and 3 done 2026-09-22)
+1. ~~Empty the attic once reviewed~~; retire the drifted root `.sql` files and outdated root `*.md`.
 2. Seed `landmark` / `boardAt` for more interchanges from someone who knows them (Oshodi terminals, Ojuelegba sides, Mile 2 park layout).
-3. Replace the dead ORS key or drop `directionsService` — the corridor-chain fallback now draws the route either way.
+3. ~~Replace the dead ORS key or drop `directionsService`~~ — dropped, [[0014-draw-legs-from-the-corridor-not-a-directions-api]].
 4. Give Wakaway Mode a real device test on one corridor (Ikorodu Road BRT) and tune the advance thresholds.
 5. Login / Signup / Preferences visual pass on the new system; `maxFontSizeMultiplier` policy.
 6. Everything still open from the 2026-09-17 list below (more corridors, review path for "Route no dey work", Explore tab).
