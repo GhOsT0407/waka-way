@@ -40,7 +40,6 @@ export const FONT_SIZES = {
 // MapTiler is still used for place search/geocoding (placesService.ts) —
 // map rendering itself now runs on Google Maps via react-native-maps.
 export const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY || '';
-export const ORS_API_KEY = process.env.EXPO_PUBLIC_ORS_API_KEY || '';
 
 // Google Maps custom style (dark mode) — matches the WW_DARK brand palette.
 // Light mode uses Google's default style (pass an empty array).

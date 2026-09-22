@@ -11,8 +11,7 @@ import { Space, Radius, HIT } from '../theme/spacing';
 import type { RouteOption, RouteLeg, SmartRouteResult } from '../services/smartRoutingService';
 import { vehicleWord } from '../services/smartRoutingService';
 import { journeySteps, type JourneyStep } from '../services/explainJourney';
-import { fetchAllLegGeometries } from '../services/directionsService';
-import { legStops, legFallbackGeometry } from '../services/routeGeometry';
+import { legStops, legGeometry } from '../services/routeGeometry';
 import { confirmRouteWorked, reportFarePaid, fareChoices } from '../services/contribute';
 import { useAuth } from '../context/AuthContext';
 import { useRequireSignIn } from '../hooks/useRequireSignIn';
@@ -24,10 +23,14 @@ import { GOOGLE_MAPS_DARK_STYLE } from '../utils/constants';
 // here, take this, get down there, cross over, walk the last bit. Steps
 // advance from GPS when they can and from a thumb when they can't.
 
+// Advance thresholds, in metres. Reasoned, not yet tuned on a real ride —
+// change them here only, after one trip on the Ikorodu Road BRT.
 const ARRIVE_M      = 50;    // destination reached
 const WALK_DONE_M   = 60;    // reached the stop on foot
-const BOARDED_M     = 300;   // moved this far from the boarding stop: you're on the vehicle
+const NEAR_STOP_M   = 150;   // came at least this close to the boarding stop…
+const BOARDED_M     = 300;   // …then moved this far from it: you're on the vehicle
 const ALIGHT_M: Record<string, number> = { brt: 120, rail: 150, danfo: 80, keke: 60, okada: 60 };
+const ALIGHT_DEFAULT_M = 80; // a mode not listed above
 const APPROACH_M    = 450;   // "get ready" cue
 const NAV_ZOOM      = 16.5;
 
@@ -103,7 +106,6 @@ export default function NavigationScreen({ route, navigation }: any) {
   const [approach, setApproach] = useState(false);
   const [arrived, setArrived] = useState(false);
   const [locationDenied, setLocationDenied] = useState(false);
-  const [geometries, setGeometries] = useState<LatLng[][]>(() => legs.map(legFallbackGeometry));
   const [asked, setAsked] = useState(false);
   const [fareLeg, setFareLeg] = useState<RouteLeg | null>(null);
   const [thanks, setThanks] = useState<string | null>(null);
@@ -113,25 +115,15 @@ export default function NavigationScreen({ route, navigation }: any) {
   const nextStep = steps[stepIdx + 1];
   const remainingMins = legs.slice(step.legIndex).reduce((m, l) => m + l.durationMins, 0);
 
-  // ── Geometry: road-following if the directions API answers, corridor chains if not ──
-  useEffect(() => {
-    let alive = true;
-    fetchAllLegGeometries(legs.map((l) => ({ from: l.from, to: l.to, mode: l.mode })))
-      .then((geo) => {
-        if (!alive) return;
-        setGeometries(legs.map((l, i) => (geo[i] && geo[i]!.length > 1 ? geo[i]! : legFallbackGeometry(l))));
-      })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [legs]);
+  // ── Geometry: the corridor's own stop chain, drawn from the data we ride on (ADR 0014) ──
+  const geometries = useMemo<LatLng[][]>(() => legs.map(legGeometry), [legs]);
 
   useEffect(() => {
     const all = geometries.flat();
     if (all.length > 1 && mapRef.current) {
       mapRef.current.fitToCoordinates(all, { edgePadding: { top: 40, right: 40, bottom: 40, left: 40 }, animated: false });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geometries.length]);
+  }, [geometries]);
 
   // ── Advancing ──────────────────────────────────────────────────────────────
   const goTo = useCallback((idx: number) => {
@@ -171,7 +163,7 @@ export default function NavigationScreen({ route, navigation }: any) {
           if (st.kind === 'board') {
             const fromStop = haversineM(me, lg.from);
             boardMinRef.current = Math.min(boardMinRef.current, fromStop);
-            if (boardMinRef.current < 150 && fromStop > BOARDED_M) return goTo(i + 1);
+            if (boardMinRef.current < NEAR_STOP_M && fromStop > BOARDED_M) return goTo(i + 1);
           }
 
           if (st.kind === 'alight') {
@@ -187,7 +179,7 @@ export default function NavigationScreen({ route, navigation }: any) {
               setApproach(true);
               Vibration.vibrate([0, 300, 150, 300]);
             }
-            if (d < (ALIGHT_M[lg.mode] ?? 80)) return goTo(i + 1);
+            if (d < (ALIGHT_M[lg.mode] ?? ALIGHT_DEFAULT_M)) return goTo(i + 1);
           }
 
           if (st.kind === 'arrive' && d < ARRIVE_M) { setArrived(true); locationSub.current?.remove(); }

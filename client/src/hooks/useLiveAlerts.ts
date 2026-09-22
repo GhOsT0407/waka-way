@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import type { Contribution } from './useContributions';
 import type { RouteOption, AvoidPoint } from '../services/smartRoutingService';
 import { haversineKm, distanceToSegmentKm, type LatLng } from '../utils/geo';
-import { legFallbackGeometry } from '../services/routeGeometry';
+import { legGeometry } from '../services/routeGeometry';
 
 /**
  * Live community reports, light enough for a banner and a route card.
@@ -82,7 +82,7 @@ export function alertsAlongRoute(alerts: LiveAlert[], option: RouteOption): { al
       // A bus leg follows its corridor, not the chord between its ends —
       // measure against the stop chain so a report at Ojota lands on the
       // Ikorodu Road leg it actually sits on.
-      const pts = legFallbackGeometry(leg);
+      const pts = legGeometry(leg);
       let km = Infinity;
       for (let k = 0; k < pts.length - 1; k++) km = Math.min(km, distanceToSegmentKm(a, pts[k], pts[k + 1]));
       if (km <= reach && (!best || km < best.km)) best = { legIndex: i, km };

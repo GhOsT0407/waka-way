@@ -279,7 +279,7 @@ export default function PreferencesScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.privacyScroll} showsVerticalScrollIndicator={false}>
-              <Text style={styles.privacySection}>Last updated: 10 September 2026</Text>
+              <Text style={styles.privacySection}>Last updated: 22 September 2026</Text>
 
               <Text style={styles.privacyHeading}>1. Data We Collect</Text>
               <Text style={styles.privacyBody}>
@@ -303,7 +303,7 @@ export default function PreferencesScreen({ navigation }: any) {
 
               <Text style={styles.privacyHeading}>5. Third-Party Services</Text>
               <Text style={styles.privacyBody}>
-                WakaWay uses Supabase for sign-in and data storage, MapTiler for map tiles and place search, and OpenRouteService for walking directions. Each operates under its own privacy policy.
+                WakaWay uses Supabase for sign-in and data storage, and MapTiler for map tiles and place search. Each operates under its own privacy policy. Routes and directions are computed on your phone from WakaWay's own corridor data.
               </Text>
 
               <Text style={styles.privacyHeading}>6. Data Security</Text>
