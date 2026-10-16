@@ -7,6 +7,7 @@
  */
 
 import { MAPTILER_KEY } from '../utils/constants';
+import { GRAPH_STOPS } from '../data/lagosRoutes';
 
 export interface PlacePrediction {
   placeId: string;
@@ -94,29 +95,182 @@ LAGOS_POIS.forEach(poi => {
   coordCache.set(poi.id, { lat: poi.latitude, lon: poi.longitude, name: poi.name, address: poi.address });
 });
 
-// ─── Local fuzzy search ───────────────────────────────────────────────────────
+// ─── Matching ─────────────────────────────────────────────────────────────────
+//
+// Lagos place names arrive misspelt ("beger"), shortened ("cms") or with the
+// bus-stop words around them, and the geocoder knows almost none of the bus
+// stops — it answers "berger" with the centroid of Lagos, which sits on CMS.
+// That is how every search used to start or end at CMS. So every name the
+// app knows (the landmarks above and the routing engine's own stops) is
+// matched here first, tolerant of a typo or two, and a remote result only
+// survives if it actually resembles what was typed.
+
+const norm = (s: string) =>
+  s.toLowerCase().replace(/[().,'’\-/&]/g, ' ').replace(/\s+/g, ' ').trim();
+
+// Words that describe a place rather than name it. "allen roundabout" must
+// match on "allen", not merely on "roundabout" — the geocoder's answer to it
+// was Thompson Roundabout in Eti-Osa.
+const GENERIC = new Set([
+  'bus', 'stop', 'busstop', 'bustop', 'park', 'garage', 'junction', 'roundabout',
+  'road', 'rd', 'street', 'st', 'station', 'terminal', 'market', 'lagos', 'the',
+  'under', 'bridge', 'gate', 'area', 'by', 'at', 'near',
+]);
+
+/** Edit distance with transpositions ("bregre"), capped: anything past 2 is "far". */
+function editDistance(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 2) return 3;
+  const d: number[][] = [];
+  for (let i = 0; i <= a.length; i++) d.push([i, ...new Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+  }
+  return d[a.length][b.length];
+}
+
+/** How many typos a word of this length may carry and still be the same word. */
+const typoAllowance = (len: number) => (len <= 3 ? 0 : len <= 6 ? 1 : 2);
+
+/** 0–1: how well one typed word matches one word of a place name. */
+function wordMatch(typed: string, word: string): number {
+  if (typed === word) return 1;
+  if (typed.length >= 3 && word.startsWith(typed)) return 0.85;
+  const allow = typoAllowance(Math.max(typed.length, word.length));
+  if (!allow) return 0;
+  const d = editDistance(typed, word);
+  return d === 1 ? 0.7 : d === 2 && allow >= 2 ? 0.55 : 0;
+}
+
+/**
+ * 0–100: how well a typed query names a place. Every naming word typed has
+ * to be found in the place — one strong word is not enough — so "allen
+ * roundabout" cannot become any roundabout at all.
+ */
+export function placeNameScore(query: string, candidate: string): number {
+  const q = norm(query), c = norm(candidate);
+  if (!q || !c) return 0;
+  if (q === c) return 100;
+  if (c.startsWith(q + ' ')) return 90;
+  const qWords = q.split(' ');
+  const cWords = c.split(' ');
+  const naming = qWords.filter((w) => !GENERIC.has(w));
+  const required = naming.length ? naming : qWords;
+  let total = 0;
+  for (const w of required) {
+    let best = 0;
+    for (const cw of cWords) best = Math.max(best, wordMatch(w, cw));
+    // Written as one word: "ojoduberger", "mile2".
+    best = Math.max(best, wordMatch(w, cWords.join('')) * 0.95);
+    if (best === 0) return 0;
+    total += best;
+  }
+  return Math.round((80 * total) / required.length);
+}
+
+// ─── Local index: landmarks + every stop the routing engine knows ─────────────
+
+interface IndexedPlace {
+  id: string;
+  name: string;
+  aliases: string[];
+  address: string;
+  latitude: number;
+  longitude: number;
+  type: string;
+}
+
+// A transit stop is what a rider means by a bare area name — "ikeja" is the
+// bus stop under the bridge, not Ikeja City Mall — so on a tie it wins.
+const TYPE_BONUS: Record<string, number> = { transit_stop: 6, bus_stop: 4, bus_terminal: 4, area: 2 };
+
+function stopAliases(name: string): string[] {
+  // "Ikeja (Under Bridge)" is also just "Ikeja"; "Gbagada (Ifako)" is also "Ifako".
+  const m = name.match(/^(.*?)\s*\((.*)\)\s*$/);
+  return m ? [m[1], m[2]] : [];
+}
+
+const STOP_PLACES: IndexedPlace[] = GRAPH_STOPS.map((s) => ({
+    id: `g:${s.id}`,
+    name: s.name,
+    aliases: stopAliases(s.name),
+    address: s.landmark ?? 'Bus stop, Lagos',
+    latitude: s.latitude,
+    longitude: s.longitude,
+    type: 'transit_stop',
+}));
+
+const kmBetween = (a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) => {
+  const t = (x: number) => (x * Math.PI) / 180;
+  const h = Math.sin(t(b.latitude - a.latitude) / 2) ** 2
+    + Math.cos(t(a.latitude)) * Math.cos(t(b.latitude)) * Math.sin(t(b.longitude - a.longitude) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+};
+
+// Where the engine has a checked stop, a landmark entry of the same name is a
+// duplicate with older coordinates — "Berger Bus Stop" sat 1.4 km west of the
+// Ojodu Berger stop the routes actually use. The stop supersedes it.
+// The stop inherits the landmark's other names, so "vi" still finds Victoria
+// Island once the landmark has gone.
+// The best-named match wins, then the nearest: "Ikeja" belongs to Ikeja
+// (Under Bridge), not to the first stop that merely starts with "Ikeja".
+function supersededBy(poi: IndexedPlace): IndexedPlace | undefined {
+  let best: { stop: IndexedPlace; score: number; km: number } | undefined;
+  for (const s of STOP_PLACES) {
+    const km = kmBetween(poi, s);
+    if (km >= 2.0) continue;
+    let score = 0;
+    for (const n of [poi.name, ...poi.aliases]) {
+      for (const sn of [s.name, ...stopAliases(s.name)]) score = Math.max(score, placeNameScore(n, sn));
+    }
+    if (score < 90) continue;
+    if (!best || score > best.score || (score === best.score && km < best.km)) best = { stop: s, score, km };
+  }
+  return best?.stop;
+}
+
+const keptPois: IndexedPlace[] = [];
+for (const poi of LAGOS_POIS) {
+  const stop = supersededBy(poi);
+  if (stop) stop.aliases.push(poi.name, ...poi.aliases);
+  else keptPois.push(poi);
+}
+
+const LOCAL_INDEX: IndexedPlace[] = [...keptPois, ...STOP_PLACES];
+
+// Stops resolve instantly through getPlaceDetails, the same as landmarks.
+LOCAL_INDEX.forEach((p) => {
+  if (!coordCache.has(p.id)) coordCache.set(p.id, { lat: p.latitude, lon: p.longitude, name: p.name, address: p.address });
+});
+
+const MIN_SCORE = 40;
 
 function searchLocal(query: string): PlacePrediction[] {
-  const q = query.toLowerCase().trim();
-  if (!q) return [];
+  if (!norm(query)) return [];
 
-  return LAGOS_POIS
-    .map(poi => {
-      const nameStart  = poi.name.toLowerCase().startsWith(q);
-      const nameMatch  = poi.name.toLowerCase().includes(q);
-      const aliasMatch = poi.aliases.some(a => a.includes(q));
-      const score      = nameStart ? 3 : nameMatch ? 2 : aliasMatch ? 1 : 0;
-      return { poi, score };
+  const scored = LOCAL_INDEX
+    .map((p) => {
+      const base = Math.max(placeNameScore(query, p.name), ...p.aliases.map((a) => placeNameScore(query, a)));
+      return { p, base, score: base ? base + (TYPE_BONUS[p.type] ?? 0) : 0 };
     })
-    .filter(({ score }) => score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
-    .map(({ poi }) => ({
-      placeId: poi.id,
-      name:    poi.name,
-      address: poi.address,
-      types:   [poi.type],
-    }));
+    .filter((x) => x.base >= MIN_SCORE)
+    .sort((a, b) => b.score - a.score);
+
+  // A landmark and the stop beside it are one answer, not two.
+  const kept: typeof scored = [];
+  for (const x of scored) {
+    if (kept.some((k) => kmBetween(k.p, x.p) < 0.3)) continue;
+    kept.push(x);
+    if (kept.length === 5) break;
+  }
+
+  return kept.map(({ p }) => ({ placeId: p.id, name: p.name, address: p.address, types: [p.type] }));
 }
 
 // ─── Maptiler Geocoding API ───────────────────────────────────────────────────
@@ -147,7 +301,17 @@ async function searchMaptiler(query: string): Promise<PlacePrediction[]> {
     const json = await res.json();
     lastSearchProblem = null;
 
-    return (json.features ?? []).map((f: any) => {
+    // The geocoder pads a miss with the city itself ("Lagos", whose centre is
+    // CMS), the state, and streets that merely contain "Lagos". None of those
+    // is the place asked for, and starting a route at CMS is worse than
+    // saying we could not find it.
+    const COARSE = new Set(['country', 'region', 'subregion', 'county']);
+    const relevant = (json.features ?? []).filter((f: any) =>
+      !(f.place_type ?? []).some((t: string) => COARSE.has(t))
+      && norm(f.text ?? '') !== 'lagos'
+      && placeNameScore(query, f.text ?? '') >= MIN_SCORE);
+
+    return relevant.map((f: any) => {
       const placeId   = `mt:${f.id}`;
       const [lng, lat] = f.geometry?.coordinates ?? [0, 0];
 
