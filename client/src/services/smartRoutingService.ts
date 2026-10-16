@@ -86,6 +86,8 @@ export interface RouteOption {
   priceFormatted: string;
   /** Vehicle changes: rides minus one, never below zero. */
   transfers: number;
+  /** Minutes waiting to board, already inside totalDurationMins. */
+  waitMins?: number;
   walkMins: number;
   walkKm: number;
   complexity: Complexity;
@@ -204,7 +206,16 @@ function calcPrice(distKm: number, mode: TransportMode): { min: number; max: num
       if (distKm <= 3)  return { min: 200, max: 300 };
       if (distKm <= 8)  return { min: 300, max: 500 };
       if (distKm <= 15) return { min: 400, max: 600 };
-      return               { min: 500, max: 800 };
+      if (distKm <= 25) return { min: 600, max: 900 };
+      // Past the longest banded hop the table used to go flat, so the 70 km
+      // Ajah → Epe run was quoted ₦800 — about a third of what it costs. The
+      // rate below settles at roughly ₦18–28/km, which is where the long
+      // inter-town runs sit. Extrapolated, not observed: riders should
+      // correct it, and fareSource stays 'band' so the app says so.
+      return {
+        min: Math.round((300 + distKm * 18) / 50) * 50,
+        max: Math.round((400 + distKm * 28) / 50) * 50,
+      };
 
     case 'brt':
       if (distKm <= 5)  return { min: 450, max: 570 };
@@ -257,7 +268,7 @@ export function vehicleWord(mode: TransportMode): string {
 
 import { GRAPH_STOPS, GraphStop } from '../data/lagosRoutes';
 import { isKekeRestricted, isOkadaBanned } from './lagosZones';
-import { searchGraph, corridorFare, redLineRunningAt, GraphLeg, GraphPath } from './routeGraph';
+import { searchGraph, corridorFare, redLineRunningAt, boardingWaitMins, GraphLeg, GraphPath } from './routeGraph';
 
 interface Stop { name: string; latitude: number; longitude: number }
 
@@ -442,7 +453,11 @@ function assembleOption(
   tags: string[]
 ): RouteOption {
   const totalDistanceKm   = Math.round(legs.reduce((s, l) => s + l.distanceKm,   0) * 100) / 100;
-  const totalDurationMins = legs.reduce((s, l) => s + l.durationMins, 0);
+  // Door-to-door means the waiting too. Summing ride minutes alone told a
+  // rider "4 min" for a BRT hop they would queue ten minutes to board, and
+  // made a three-vehicle trip look better than it is: each vehicle is a wait.
+  const waitMins = legs.filter(isRide).reduce((m, l, i) => m + boardingWaitMins(l.mode, i === 0), 0);
+  const totalDurationMins = legs.reduce((s, l) => s + l.durationMins, 0) + waitMins;
   const totalPriceMin     = legs.reduce((s, l) => s + l.priceMin,     0);
   const totalPriceMax     = legs.reduce((s, l) => s + l.priceMax,     0);
   const walkLegs          = legs.filter((l) => l.mode === 'walk');
@@ -459,6 +474,7 @@ function assembleOption(
     totalPriceMax,
     priceFormatted: formatPrice(totalPriceMin, totalPriceMax),
     transfers: Math.max(0, legs.filter(isRide).length - 1),
+    waitMins,
     walkMins: walkLegs.reduce((m, l) => m + l.durationMins, 0),
     walkKm: Math.round(walkLegs.reduce((m, l) => m + l.distanceKm, 0) * 100) / 100,
     complexity,
@@ -718,34 +734,52 @@ export function calculateSmartRoute(
   // Pick recommended: unaffected and verified first; among those, the fastest
   // unless a cheaper one is within 10 min of it (Lagosians trade minutes for naira).
   // Confirmed corridors beat an ad-hoc connector, which beats an unconfirmed line.
-  const solid = (o: RouteOption) => !o.tags.includes('Unverified') && !o.legs.some(l => l.mayBeUnavailable);
-  const confirmed = (o: RouteOption) => !o.tags.includes('Unverified');
-  const clean = finalOptions.filter(o => !affectedByIncident.has(o.id) && solid(o));
-  const pool = clean.length ? clean
-    : finalOptions.filter(solid).length ? finalOptions.filter(solid)
-    : finalOptions.filter(confirmed).length ? finalOptions.filter(confirmed)
-    : finalOptions;
-  const fastestIn = pool.reduce((a, b) => a.totalDurationMins <= b.totalDurationMins ? a : b);
-  const cheapestIn = pool.reduce((a, b) => a.totalPriceMax <= b.totalPriceMax ? a : b);
-  let recommended = (cheapestIn !== fastestIn && cheapestIn.totalDurationMins - fastestIn.totalDurationMins <= 10
-    && cheapestIn.totalPriceMax < fastestIn.totalPriceMax) ? cheapestIn : fastestIn;
+  // Doubt is a cost, not a veto.
+  //
+  // This used to filter the candidates down to the "solid" ones — nothing
+  // unverified, no keke that might not be there — and recommend the fastest
+  // of whatever survived. One possibly-absent last-mile keke could therefore
+  // bury a route that was 82 minutes faster and ₦1,060 cheaper, which is how
+  // the app came to recommend plainly worse journeys on 8.5% of sampled trips.
+  //
+  // Instead every option is scored in one currency, equivalent minutes, the
+  // way the graph search now scores edges: time, plus fare at the rate a
+  // Lagos rider actually trades it, plus what each change really costs, plus
+  // a penalty for what we are not sure about. The best score wins, so a pick
+  // can no longer lose to something that beats it on every axis.
+  const MINUTES_PER_NAIRA = 0.05;             // ₦200 ≈ 10 minutes
+  const UNVERIFIED_PENALTY = 25;              // a line we have not confirmed
+  const MAYBE_GONE_PENALTY = 12;              // per leg that may not be running
+  // A ride leg with no corridor behind it is the engine guessing that some
+  // bus covers this gap. A keke or okada will in fact go anywhere, so only a
+  // guessed *bus* is charged: it is the least trustworthy thing we can print,
+  // below a confirmed corridor and below an unverified line.
+  const ADHOC_BUS_PENALTY = 20;
+  const INCIDENT_PENALTY = 60;                // reported trouble on the way
+  const FORMAL_BONUS = 8;                     // a queue beats a scramble
+  // Someone new to the area will spend minutes and naira to change less often.
+  const changePenalty = preferences?.newcomer ? 25 : 10;
+
+  const score = (o: RouteOption): number =>
+    o.totalDurationMins
+    + o.totalPriceMax * MINUTES_PER_NAIRA
+    + o.transfers * changePenalty
+    + (o.tags.includes('Unverified') ? UNVERIFIED_PENALTY : 0)
+    // One doubt per leg: a guessed bus is usually also flagged as maybe-gone,
+    // and charging both counted the same uncertainty twice.
+    + o.legs.reduce((sum, l) => sum + Math.max(
+        l.mayBeUnavailable ? MAYBE_GONE_PENALTY : 0,
+        !l.corridorId && (l.mode === 'danfo' || l.mode === 'brt' || l.mode === 'rail') ? ADHOC_BUS_PENALTY : 0,
+      ), 0)
+    + (affectedByIncident.has(o.id) ? INCIDENT_PENALTY : 0)
+    - (o.legs.some((l) => l.mode === 'brt' || l.mode === 'rail') ? FORMAL_BONUS : 0);
+
+  let recommended = finalOptions.reduce((a, b) => (score(b) < score(a) ? b : a));
   let reason: string | undefined;
-  // A BRT or train within 10 min and ₦150 of the pick is the steadier ride —
-  // no conductor haggling, no "one chance", a queue instead of a scramble.
-  const formal = pool.find(o => o.legs.some(l => l.mode === 'brt' || l.mode === 'rail')
-    && o.totalDurationMins - recommended.totalDurationMins <= 10
-    && o.totalPriceMax - recommended.totalPriceMax <= 150);
-  if (formal && !recommended.legs.some(l => l.mode === 'brt' || l.mode === 'rail')) recommended = formal;
-  // Someone new to the area will happily spend a few minutes and a little
-  // money to change vehicles less. Move the recommendation, not the options.
-  if (preferences?.newcomer) {
-    const simplestIn = pool.reduce((a, b) => (b.transfers < a.transfers || (b.transfers === a.transfers && b.walkMins < a.walkMins)) ? b : a);
-    if (simplestIn !== recommended && simplestIn.transfers < recommended.transfers
-      && simplestIn.totalDurationMins - recommended.totalDurationMins <= 15
-      && simplestIn.totalPriceMax - recommended.totalPriceMax <= 300) {
-      recommended = simplestIn;
-      reason = simplestIn.transfers === 0 ? 'One vehicle, no changes — easiest for a first time' : 'Fewer changes — easier for a first time';
-    }
+  if (preferences?.newcomer && recommended.transfers <= 1) {
+    reason = recommended.transfers === 0
+      ? 'One vehicle, no changes — easiest for a first time'
+      : 'Fewer changes — easier for a first time';
   }
 
   recommended.isRecommended = true;

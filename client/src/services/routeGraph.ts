@@ -68,14 +68,75 @@ export function haversineKm(a: LatLng, b: LatLng): number {
 // Lagos roads don't run straight; a corridor hop is ~25 % longer than the chord.
 const ROAD_FACTOR = 1.25;
 
-// In-traffic averages, km/h (same numbers as smartRoutingService.SPEEDS).
+// In-traffic averages, km/h.
 // BRT has a dedicated lane on most of its length and a boarding queue
 // instead of a scramble: faster and steadier than a danfo on the same road.
+// (smartRoutingService.SPEEDS only times first/last-mile connectors, which are
+// never BRT, so its brt figure does not have to match this one.)
 const SPEED: Partial<Record<TransportMode, number>> = { danfo: 14, brt: 26, rail: 60, keke: 18, walk: 4.5 };
 
 // Minutes: waiting for the first bus, and changing to another one.
-const FIRST_WAIT = { danfo: 5, brt: 5, rail: 8, keke: 2 } as Record<string, number>;
-const CHANGE_WAIT = { danfo: 8, brt: 7, rail: 8, keke: 3 } as Record<string, number>;
+// The BRT waits longer than a danfo: you buy or tap a ticket, join a queue,
+// and at the big terminals the bus fills before it leaves. That is why a
+// danfo still wins a one- or two-stop hop down the same road.
+const FIRST_WAIT = { danfo: 5, brt: 10, rail: 8, keke: 2, okada: 2 } as Record<string, number>;
+const CHANGE_WAIT = { danfo: 8, brt: 10, rail: 8, keke: 3, okada: 2 } as Record<string, number>;
+
+/**
+ * Minutes spent waiting to board a vehicle — the first one of the trip, or a
+ * change. Exported so the times a rider is shown include the same waits the
+ * search reasoned with, instead of ride minutes alone.
+ */
+export function boardingWaitMins(mode: TransportMode, first: boolean): number {
+  return (first ? FIRST_WAIT[mode] ?? 5 : CHANGE_WAIT[mode] ?? 8);
+}
+
+/**
+ * What a ride costs the search, in naira.
+ *
+ * The search used to minimise minutes alone, which let it send a rider 31 km
+ * across Lagos to save a notional minute: fare never entered the arithmetic,
+ * so a five-vehicle chain looked free. These are the fares the search reasons
+ * with, not the fares the rider is shown — displayed fares still come from
+ * corridorFare() and calcPrice(). Boarding is charged once per vehicle, which
+ * is how Lagos actually works, then distance on top.
+ *
+ * Calibrated against calcPrice's bands: 3 km danfo lands at ₦275 against a
+ * ₦200–300 band, 8 km at ₦400 against ₦300–500, 15 km BRT at ₦675 against
+ * ₦570–680.
+ */
+const BOARD_FARE: Partial<Record<TransportMode, number>> = { danfo: 200, brt: 450, rail: 200, keke: 200, okada: 200, walk: 0 };
+const FARE_PER_KM: Partial<Record<TransportMode, number>> = { danfo: 25, brt: 15, rail: 25, keke: 100, okada: 200, walk: 0 };
+
+/**
+ * How many minutes of travel a rider will trade for one naira saved.
+ *
+ * 0.05 makes ₦200 worth about ten minutes — the same weighting the WakaWay
+ * demo engine uses (`W.fare = 1/20`), and the trade most Lagos commuters
+ * visibly make when they pick a danfo over the BRT queue.
+ */
+const MINUTES_PER_NAIRA = 0.05;
+
+/**
+ * How much of the road's go-slow a mode actually sits in.
+ *
+ * Rail sits in none of it. The BRT runs a dedicated lane for most of its
+ * length and only meets mixed traffic at junctions and the ends — so it
+ * catches a fraction of the rush hour, not all of it. It used to take the
+ * full 1.4× like a danfo, which threw away the one advantage the lane exists
+ * for and had the engine recommending a 163-minute danfo down Ikorodu Road
+ * at 7:30 instead of the BRT beside it.
+ */
+const TRAFFIC_EXPOSURE: Partial<Record<TransportMode, number>> = { rail: 0, brt: 0.35 };
+export function trafficFor(mode: TransportMode, traffic: number): number {
+  return 1 + (traffic - 1) * (TRAFFIC_EXPOSURE[mode] ?? 1);
+}
+
+/** Naira for one first/last-mile connector hop; under a kilometre is walked. */
+function connectorFare(km: number): number {
+  if (km <= 1.0) return 0;
+  return (BOARD_FARE.keke ?? 200) + km * (FARE_PER_KM.keke ?? 100);
+}
 
 // ─── Adjacency (built once) ──────────────────────────────────────────────────
 interface Edge { to: string; corridor: Corridor; km: number; minutes: number; walk?: boolean }
@@ -122,6 +183,13 @@ export function stopsNear(p: LatLng, reachKm: number, max = 6): { stop: GraphSto
 
 // ─── Dijkstra ────────────────────────────────────────────────────────────────
 interface State { stop: string; corridor: string | null }
+/**
+ * `corridor` is the vehicle the rider is sitting on: null at the origin, a
+ * corridor id while riding, and WALKED after crossing to a neighbouring stop
+ * on foot. WALKED matches no real corridor, so boarding from it is correctly
+ * priced as a change rather than a first boarding.
+ */
+const WALKED = '__walked__';
 const key = (s: State) => `${s.stop}|${s.corridor ?? ''}`;
 
 interface Prev { state: State; edge?: Edge }
@@ -155,7 +223,12 @@ function dijkstra(
   if (!access.length || !egress.length) return null;
   const egressKm = new Map(egress.map((e) => [e.stop.id, e.km]));
 
-  for (const a of access) push({ stop: a.stop.id, corridor: null }, opts.accessMinutes(origin, a.stop, a.km));
+  // The first mile pays its fare the same as the last. Leaving it out let the
+  // search reach three kilometres down the road on a guessed bus hop for free,
+  // instead of boarding the real corridor at the rider's own stop.
+  for (const a of access) {
+    push({ stop: a.stop.id, corridor: null }, opts.accessMinutes(origin, a.stop, a.km) + connectorFare(a.km) * MINUTES_PER_NAIRA);
+  }
 
   let best: { state: State; d: number } | null = null;
   const closed = new Set<string>();
@@ -167,27 +240,40 @@ function dijkstra(
     closed.add(cur.k);
 
     // Reaching the destination from this stop (only after riding something).
+    // The last mile costs money as well as minutes, and leaving the fare out
+    // was why the search would ride a stop past the rider's destination and
+    // send them back on a keke: two more minutes looked free.
     if (cur.s.corridor && egressKm.has(cur.s.stop)) {
-      const total = cur.d + opts.accessMinutes(STOP_BY_ID[cur.s.stop], dest, egressKm.get(cur.s.stop)!);
+      const km = egressKm.get(cur.s.stop)!;
+      const total = cur.d
+        + opts.accessMinutes(STOP_BY_ID[cur.s.stop], dest, km)
+        + connectorFare(km) * MINUTES_PER_NAIRA;
       if (!best || total < best.d) best = { state: cur.s, d: total };
     }
     if (best && cur.d > best.d) break;
 
     for (const e of ADJ[cur.s.stop] ?? []) {
       if (e.walk) {
-        // On foot to a neighbouring stop: allowed only after riding something
-        // (the origin already attaches to every stop in reach), and it leaves
-        // the rider "between vehicles" so the next ride pays a first wait.
+        // On foot to a neighbouring stop: allowed only after riding something,
+        // since the origin already attaches to every stop in reach. The WALKED
+        // marker keeps that distinct from standing at the origin — otherwise
+        // the next ride pays a 5-minute first wait instead of a change, and
+        // walking 400 m becomes a cheap way to dodge the transfer penalty.
         if (!cur.s.corridor) continue;
-        push({ stop: e.to, corridor: null }, cur.d + e.minutes, { state: cur.s, edge: e });
+        push({ stop: e.to, corridor: WALKED }, cur.d + e.minutes, { state: cur.s, edge: e });
         continue;
       }
       if (!usable(e.corridor)) continue;
       const weight = opts.modeWeights[e.corridor.mode] ?? 1;
-      const slow = e.corridor.mode === 'rail' ? 1 : traffic;   // trains don't sit in go-slow
-      let d = cur.d + e.minutes * weight * slow;
+      const slow = trafficFor(e.corridor.mode, traffic);
+      const boarding = cur.s.corridor !== e.corridor.id;
+      // Fare is charged in equivalent minutes: boarding once per vehicle,
+      // then distance. This is what stops a long ride looking free.
+      const fare = (boarding ? BOARD_FARE[e.corridor.mode] ?? 200 : 0)
+        + e.km * (FARE_PER_KM[e.corridor.mode] ?? 25);
+      let d = cur.d + e.minutes * weight * slow + fare * MINUTES_PER_NAIRA;
       if (cur.s.corridor === null) d += FIRST_WAIT[e.corridor.mode] ?? 5;
-      else if (cur.s.corridor !== e.corridor.id) d += (CHANGE_WAIT[e.corridor.mode] ?? 8) + transferPenalty;
+      else if (boarding) d += (CHANGE_WAIT[e.corridor.mode] ?? 8) + transferPenalty;
       push({ stop: e.to, corridor: e.corridor.id }, d, { state: cur.s, edge: e });
     }
   }
@@ -228,7 +314,7 @@ function dijkstra(
   const board = STOP_BY_ID[boardId];
   const alight = STOP_BY_ID[best.state.stop];
   // Weighted minutes steer the search; the figure reported is the honest one.
-  for (const l of legs) if (l.mode !== 'rail') l.minutes *= traffic;
+  for (const l of legs) l.minutes *= trafficFor(l.mode, traffic);
   const ride = legs.reduce((m, l) => m + l.minutes, 0);
   const waits = legs.reduce((m, l, i) => m + (i === 0 ? (FIRST_WAIT[l.mode] ?? 5) : (CHANGE_WAIT[l.mode] ?? 8)), 0);
   const endsMin = opts.accessMinutes(origin, board, haversineKm(origin, board)) + opts.accessMinutes(alight, dest, haversineKm(alight, dest));
@@ -257,13 +343,18 @@ export function searchGraph(origin: LatLng, dest: LatLng, options: GraphSearchOp
   // when one exists (the formal modes are steadier, and a danfo running the
   // same road would otherwise hide them); fewest changes; danfo only.
   type Variant = { penalty: number; exclude: TransportMode[]; verifiedOnly?: boolean; weights?: Partial<Record<TransportMode, number>> };
+  // Every change of vehicle costs a real penalty now. At zero — which five of
+  // these six used to carry — the search would chain five danfos to shave a
+  // minute, because only the change-wait pushed back. A change is worse than
+  // its wait: you lose your seat, you re-negotiate the fare, and you may not
+  // get on the first bus that comes.
   const variants: Variant[] = [
-    { penalty: 0, exclude: [] },
-    { penalty: 0, exclude: [], verifiedOnly: true },
-    { penalty: 0, exclude: ['danfo', 'keke'] },                       // formal transit only
-    { penalty: 0, exclude: [], weights: { brt: 0.6, rail: 0.5 } },    // prefer the lane / the train
-    { penalty: 20, exclude: [] },
-    { penalty: 0, exclude: ['brt', 'rail'] },
+    { penalty: 10, exclude: [] },
+    { penalty: 10, exclude: [], verifiedOnly: true },
+    { penalty: 10, exclude: ['danfo', 'keke'] },                      // formal transit only
+    { penalty: 10, exclude: [], weights: { brt: 0.6, rail: 0.5 } },   // prefer the lane / the train
+    { penalty: 30, exclude: [] },                                     // fewest changes
+    { penalty: 10, exclude: ['brt', 'rail'] },
   ];
   const out: GraphPath[] = [];
   const seen = new Set<string>();

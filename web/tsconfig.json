@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["vite/client", "node"],
+    // No baseUrl: since TS 4.1 `paths` resolves relative to this file's own
+    // directory, which is what we want, and baseUrl is removed in TS 7.
+    "paths": {
+      "@engine/*": ["../client/src/*"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}
