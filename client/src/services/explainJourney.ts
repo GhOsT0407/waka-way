@@ -45,6 +45,7 @@ function caveat(leg: RouteLeg): string | undefined {
   if (leg.confidence === 'likely') return 'We never confirm this line well — ask at the park, and tell us if e no correct';
   if (leg.mayBeUnavailable && leg.mode === 'keke') return 'Keke no dey always run for here — check at the junction, or waka';
   if (leg.mayBeUnavailable && leg.mode === 'danfo') return `No fixed bus for this hop — ask for any bus or keke wey dey go ${leg.to.name}`;
+  if (leg.mode === 'okada') return 'Agree the price before you climb, and ask for the helmet';
   return undefined;
 }
 

@@ -115,8 +115,30 @@ describe('keke availability', () => {
 });
 
 describe('okada', () => {
-  it('is never proposed unless asked for', () => {
-    const trips = [route(P.ikoroduGarage, P.ikorodu5km), route(P.festac, P.ikoroduGarage), route(P.yaba, P.cms)];
+  // The rule changed on 2026-10-16 at the product owner's request: okada used
+  // to appear only when the rider had switched it on, which in practice meant
+  // "danfo, danfo, danfo". Now it is suggested where it is legal and worth it,
+  // as a labelled extra option — and still never inside the ban, and never
+  // for a rider who has said no.
+
+  it('unprompted, is never proposed inside the ban zones', () => {
+    const trips = [route(P.yaba, P.cms), route(P.falomo, P.ekoHotel), route(P.ikejaGRA, P.computerVillage)];
+    expect(allLegs(trips.flatMap((t) => t.options)).some((l) => l.mode === 'okada')).toBe(false);
+  });
+
+  it('unprompted, appears only as a labelled extra choice, and only where it is legal', () => {
+    const r = route(P.ikoroduGarage, P.ikorodu5km);
+    for (const o of r.options) {
+      for (const l of o.legs.filter((x) => x.mode === 'okada')) {
+        expect(isOkadaBanned({ fromLat: l.from.latitude, fromLng: l.from.longitude, toLat: l.to.latitude, toLng: l.to.longitude })).toBe(false);
+        expect(o.tags.includes('Okada') || o.type === 'direct').toBe(true);
+      }
+    }
+  });
+
+  it('is never proposed to a rider who has said no', () => {
+    const trips = [[P.ikoroduGarage, P.ikorodu5km], [P.festac, P.ikoroduGarage]].map(([a, b]) =>
+      calculateSmartRoute(a.lat, a.lng, a.name, b.lat, b.lng, b.name, { okada: 'never' }));
     expect(allLegs(trips.flatMap((t) => t.options)).some((l) => l.mode === 'okada')).toBe(false);
   });
 

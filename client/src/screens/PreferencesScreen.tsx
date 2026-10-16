@@ -182,10 +182,10 @@ export default function PreferencesScreen({ navigation }: any) {
             icon="bicycle-outline"
             iconColor={WW.okada}
             iconBg={WW.errorDim}
-            title="Offer okada"
-            subtitle="Only where it is legal; never the default"
+            title="Prefer okada"
+            subtitle="On: wherever it is legal. Off: only when no keke can reach and it is too far to walk"
             onPress={() => toggleOkada(!okadaOk)}
-            rightElement={<Switch value={okadaOk} onValueChange={toggleOkada} trackColor={{ true: WW.orange, false: WW.borderStrong }} thumbColor={WW.bgSurface} accessibilityLabel="Offer okada" />}
+            rightElement={<Switch value={okadaOk} onValueChange={toggleOkada} trackColor={{ true: WW.orange, false: WW.borderStrong }} thumbColor={WW.bgSurface} accessibilityLabel="Prefer okada" />}
           />
         </View>
 

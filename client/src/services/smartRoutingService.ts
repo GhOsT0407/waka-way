@@ -135,8 +135,15 @@ export interface AvoidPoint {
 export interface SmartRoutePreferences {
   /** When the trip starts; gates BRT/rail hours and the traffic factor. Default: now. */
   departAt?: Date;
-  /** Okada is offered only when the rider asks for it and only where it is legal. */
+  /** 'okada' = the rider prefers okada for the first/last mile wherever it is legal. */
   preferredFirstLegMode?: TransportMode;
+  /**
+   * When an okada may be suggested, always only where it is legal.
+   * 'when-needed' (default): when walking is too far and no keke can do the
+   * hop — otherwise the answer is a guessed bus. 'prefer': wherever legal.
+   * 'never': not at all.
+   */
+  okada?: OkadaPolicy;
   /** Live community reports to route around (security, danger zones, closures). */
   avoidPoints?: AvoidPoint[];
   /**
@@ -268,7 +275,7 @@ export function vehicleWord(mode: TransportMode): string {
 
 import { GRAPH_STOPS, GraphStop } from '../data/lagosRoutes';
 import { isKekeRestricted, isOkadaBanned } from './lagosZones';
-import { searchGraph, corridorFare, redLineRunningAt, boardingWaitMins, GraphLeg, GraphPath } from './routeGraph';
+import { searchGraph, corridorFare, redLineRunningAt, boardingWaitMins, trafficFactor, trafficFor, GraphLeg, GraphPath } from './routeGraph';
 
 interface Stop { name: string; latitude: number; longitude: number }
 
@@ -290,11 +297,16 @@ function nearestStop(lat: number, lng: number, pool: Stop[]): Stop | null {
 // LEG BUILDER
 // ─────────────────────────────────────────────────────────────
 
-function buildLeg(mode: TransportMode, from: Location, to: Location, mayBeUnavailable?: boolean): RouteLeg {
+// Streets do not run straight: the same 1.25 the corridor graph uses. First-
+// and last-mile legs used to be timed and priced as the crow flies, which
+// made every keke and every walk about a quarter shorter than the ride.
+const CONNECTOR_ROAD_FACTOR = 1.25;
+
+function buildLeg(mode: TransportMode, from: Location, to: Location, mayBeUnavailable?: boolean, traffic = 1): RouteLeg {
   const distanceKm = Math.round(
-    calculateDistance(from.latitude, from.longitude, to.latitude, to.longitude) * 100
+    calculateDistance(from.latitude, from.longitude, to.latitude, to.longitude) * CONNECTOR_ROAD_FACTOR * 100
   ) / 100;
-  const durationMins = Math.max(1, Math.ceil((distanceKm / SPEEDS[mode]) * 60));
+  const durationMins = Math.max(1, Math.ceil((distanceKm / SPEEDS[mode]) * 60 * trafficFor(mode, traffic)));
   const price = calcPrice(distanceKm, mode);
 
   const instruction = lagosInstruction(mode, from.name, to.name);
@@ -376,27 +388,39 @@ const OKADA_MAX         = 6.0;
 
 interface ConnectorChoice { mode: TransportMode; mayBeUnavailable?: boolean }
 
+export type OkadaPolicy = 'when-needed' | 'prefer' | 'never';
+
+/** How the rider wants the first and last mile handled. */
+interface ConnectorPrefs { preferred?: TransportMode; okada: OkadaPolicy }
+
 function connectorMode(
   fromLat: number, fromLng: number,
   toLat: number, toLng: number,
   distKm: number,
-  preferred?: TransportMode
+  prefs: ConnectorPrefs = { okada: 'when-needed' }
 ): ConnectorChoice {
   if (distKm <= WALK_MAX) return { mode: 'walk' };
 
   const hop = { fromLat, fromLng, toLat, toLng };
   const kekeOk  = !isKekeRestricted(hop);
   const okadaOk = !isOkadaBanned(hop);
+  const policy: OkadaPolicy = prefs.preferred === 'okada' ? 'prefer' : prefs.okada;
 
-  // Okada only when asked for, and only where it is not impounded on sight.
-  if (preferred === 'okada' && okadaOk && distKm <= OKADA_MAX) return { mode: 'okada' };
+  // Legality first, always: never an okada where it is impounded on sight.
+  if (policy === 'prefer' && okadaOk && distKm <= OKADA_MAX) return { mode: 'okada' };
 
   if (kekeOk && distKm <= KEKE_MAX) return { mode: 'keke' };
 
-  if (!kekeOk) {
-    if (distKm <= WALK_MAX_NO_KEKE) return { mode: 'walk' };
-    if (distKm <= KEKE_LAST_MILE)   return { mode: 'keke', mayBeUnavailable: true };
-  }
+  if (!kekeOk && distKm <= WALK_MAX_NO_KEKE) return { mode: 'walk' };
+
+  // Okada when it is needed: too far to walk and no keke for this hop (it is
+  // restricted here, or the gap is past a keke's range). The only other
+  // answer is guessing that some bus covers it. This used to require the
+  // rider to have switched okada on, so outside the ban zones the app sent
+  // people to look for a bus that may not exist, or nothing but danfo.
+  if (policy !== 'never' && okadaOk && distKm <= OKADA_MAX) return { mode: 'okada' };
+
+  if (!kekeOk && distKm <= KEKE_LAST_MILE) return { mode: 'keke', mayBeUnavailable: true };
 
   // Too far to walk, keke unavailable or too far: a bus hop — but between
   // two arbitrary points there may be no bus that does exactly this, so it
@@ -405,10 +429,10 @@ function connectorMode(
 }
 
 /** Build the first/last-mile leg between two points, choosing the mode. */
-function buildConnector(from: Location, to: Location, preferred?: TransportMode): RouteLeg {
+function buildConnector(from: Location, to: Location, prefs?: ConnectorPrefs, traffic = 1): RouteLeg {
   const distKm = calculateDistance(from.latitude, from.longitude, to.latitude, to.longitude);
-  const c = connectorMode(from.latitude, from.longitude, to.latitude, to.longitude, distKm, preferred);
-  return buildLeg(c.mode, from, to, c.mayBeUnavailable);
+  const c = connectorMode(from.latitude, from.longitude, to.latitude, to.longitude, distKm, prefs);
+  return buildLeg(c.mode, from, to, c.mayBeUnavailable, traffic);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -569,25 +593,36 @@ function optionNameFor(path: GraphPath): { name: string; tags: string[] } {
 
 // What a first/last-mile gap costs, by the same rules that will build the
 // leg: walking is free of fuss, a keke needs finding, a bus hop needs waiting.
-function accessMinutes(pref?: TransportMode) {
+function accessMinutes(pref?: ConnectorPrefs, traffic = 1) {
   return (from: { latitude: number; longitude: number }, to: { latitude: number; longitude: number }, km: number): number => {
     const c = connectorMode(from.latitude, from.longitude, to.latitude, to.longitude, km, pref);
-    const ride = (km / SPEEDS[c.mode]) * 60;
+    const ride = ((km * CONNECTOR_ROAD_FACTOR) / SPEEDS[c.mode]) * 60 * trafficFor(c.mode, traffic);
     const fuss = c.mode === 'walk' ? 0 : c.mode === 'danfo' ? 18 : c.mayBeUnavailable ? 12 : 8;
     return ride + fuss;
   };
 }
 
 /** Every itinerary the corridor graph can find, as priced options. */
-function buildGraphOptions(origin: Location, destination: Location, pref?: TransportMode, at: Date = new Date()): RouteOption[] {
-  const paths = searchGraph(origin, destination, { allowTimetabled: redLineRunningAt(at), accessMinutes: accessMinutes(pref), at });
+function buildGraphOptions(
+  origin: Location, destination: Location, pref?: ConnectorPrefs, at: Date = new Date(),
+  /** How far a first/last-mile connector may reach, km. An okada goes further than a keke. */
+  reachKm?: number,
+): RouteOption[] {
+  const traffic = trafficFactor(at);
+  const paths = searchGraph(origin, destination, {
+    allowTimetabled: redLineRunningAt(at), accessMinutes: accessMinutes(pref, traffic), at,
+    ...(reachKm ? { reachKm } : {}),
+  });
   return paths.map((path) => {
     const legs: RouteLeg[] = [];
     const board = toLocation(path.board), alight = toLocation(path.alight);
-    if (path.accessKm >= 0.05) legs.push(buildConnector(origin, board, pref));
+    if (path.accessKm >= 0.05) legs.push(buildConnector(origin, board, pref, traffic));
     path.legs.forEach((gl, i) => {
       const prev = path.legs[i - 1];
-      if (prev && prev.to.id !== gl.from.id) {
+      // Two stops at the same spot (the danfo park and the station beside it)
+      // are one place: a "walk 0 m" step only reads as a mistake.
+      const apart = prev ? calculateDistance(prev.to.latitude, prev.to.longitude, gl.from.latitude, gl.from.longitude) : 0;
+      if (prev && prev.to.id !== gl.from.id && apart >= 0.04) {
         // Alighted at one stop, boarding at the one beside it: say so.
         const walk = buildLeg('walk', toLocation(prev.to), toLocation(gl.from));
         if (gl.from.landmark) walk.alightLandmark = gl.from.landmark;
@@ -595,7 +630,7 @@ function buildGraphOptions(origin: Location, destination: Location, pref?: Trans
       }
       legs.push(buildCorridorLeg(gl));
     });
-    if (path.egressKm >= 0.05) legs.push(buildConnector(alight, destination, pref));
+    if (path.egressKm >= 0.05) legs.push(buildConnector(alight, destination, pref, traffic));
     const { name, tags } = optionNameFor(path);
     const lowest = path.legs.reduce((c, l) => (l.corridor.confidence === 'likely' ? 'likely' : c), 'local' as string);
     if (lowest === 'likely') tags.push('Unverified');
@@ -608,7 +643,7 @@ function buildGraphOptions(origin: Location, destination: Location, pref?: Trans
  * Nothing in the corridor data reaches one end of this trip. Say so, with the
  * nearest known park, rather than draw a line no bus follows.
  */
-function buildUnknownRoute(origin: Location, destination: Location, pref?: TransportMode): RouteOption {
+function buildUnknownRoute(origin: Location, destination: Location, pref?: ConnectorPrefs): RouteOption {
   const totalDist = calculateDistance(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
   if (totalDist <= OKADA_MAX) {
     const leg = buildConnector(origin, destination, pref);
@@ -637,7 +672,10 @@ export function calculateSmartRoute(
   const origin:      Location = { latitude: originLat, longitude: originLng, name: originName || 'Your Location' };
   const destination: Location = { latitude: destLat,   longitude: destLng,   name: destName   || 'Destination'   };
 
-  const pref = preferences?.preferredFirstLegMode;
+  const pref: ConnectorPrefs = {
+    preferred: preferences?.preferredFirstLegMode,
+    okada: preferences?.okada ?? 'when-needed',
+  };
   const options: RouteOption[] = [];
 
   // Nearest stop to each endpoint, exposed so the UI can say "Nearest stop: X — 5 min walk".
@@ -654,13 +692,18 @@ export function calculateSmartRoute(
 
   // Short trips are a walk or one keke where legal (decisions/0011); anything
   // longer rides a corridor. If the network doesn't reach, say so.
-  const directLimit = isKekeRestricted({
-    fromLat: originLat, fromLng: originLng, toLat: destLat, toLng: destLng,
-  }) ? KEKE_LAST_MILE : KEKE_MAX;
+  // A short trip can also be one okada where keke cannot go but okada may;
+  // it is offered as an option and the ranking decides whether it leads.
+  const tripHop = { fromLat: originLat, fromLng: originLng, toLat: destLat, toLng: destLng };
+  const directLimit = !isKekeRestricted(tripHop) ? KEKE_MAX
+    : pref.okada !== 'never' && !isOkadaBanned(tripHop) ? OKADA_MAX
+    : KEKE_LAST_MILE;
   if (totalDist <= directLimit) {
-    const leg = buildConnector(origin, destination, pref);
+    const leg = buildConnector(origin, destination, pref, trafficFactor(preferences?.departAt ?? new Date()));
     const label = leg.mode === 'walk' ? 'Walk' : leg.mode === 'okada' ? 'Okada' : leg.mode === 'danfo' ? 'Bus' : 'Keke';
-    options.push(assembleOption(uid(), 'direct', 'Direct', `${label} direct`, [leg], ['Short Trip']));
+    // Named for the vehicle, so "keke all the way" reads as a choice beside the bus.
+    const name = label === 'Walk' ? 'Walk it' : `${label} all the way`;
+    options.push(assembleOption(uid(), 'direct', name, `${label} direct`, [leg], ['Short Trip']));
   }
   if (totalDist > WALK_MAX) options.push(...buildGraphOptions(origin, destination, pref, preferences?.departAt ?? new Date()));
   if (options.length === 0) options.push(buildUnknownRoute(origin, destination, pref));
@@ -690,6 +733,26 @@ export function calculateSmartRoute(
 
   // Limit to 3 most useful options
   const finalOptions = deduped.slice(0, 3);
+
+  // The bike, offered where it is legal and worth it. Under Lagos law okada
+  // is banned everywhere keke is restricted (and in four more LGAs), so it is
+  // never the only way through — but in outer Lagos it beats the go-slow, and
+  // a rider should see that choice rather than danfo after danfo. It is an
+  // extra option, not a replacement; the ranking below charges it for the
+  // risk, so it only leads when it clearly saves time.
+  if (pref.okada !== 'never' && pref.preferred !== 'okada' && totalDist > WALK_MAX && finalOptions.length) {
+    // An okada's real use is reaching past the slow feeder: up to 6 km to the
+    // expressway or the BRT, where a keke would crawl.
+    const byOkada = buildGraphOptions(origin, destination, { preferred: 'okada', okada: 'prefer' }, preferences?.departAt ?? new Date(), OKADA_MAX)
+      .filter((o) => o.legs.some((l) => l.mode === 'okada'))
+      .sort((a, b) => a.totalDurationMins - b.totalDurationMins)[0];
+    const fastestSoFar = Math.min(...finalOptions.map((o) => o.totalDurationMins));
+    if (byOkada && fastestSoFar - byOkada.totalDurationMins >= 5) {
+      byOkada.name = 'Faster by okada';
+      byOkada.tags.push('Okada');
+      finalOptions.push(byOkada);
+    }
+  }
 
   // Roles. Every option gets its true flags; an option can be all three.
   // Simplest = fewest vehicles, then least walking, then quickest.
@@ -757,6 +820,10 @@ export function calculateSmartRoute(
   const ADHOC_BUS_PENALTY = 20;
   const INCIDENT_PENALTY = 60;                // reported trouble on the way
   const FORMAL_BONUS = 8;                     // a queue beats a scramble
+  // Per okada leg, unless the rider asked for okada: the crash risk, the rain,
+  // the fare you settle on the roadside. Enough that it leads only when it
+  // genuinely saves time.
+  const OKADA_PENALTY = preferences?.preferredFirstLegMode === 'okada' ? 0 : 10;
   // Someone new to the area will spend minutes and naira to change less often.
   const changePenalty = preferences?.newcomer ? 25 : 10;
 
@@ -772,6 +839,7 @@ export function calculateSmartRoute(
         !l.corridorId && (l.mode === 'danfo' || l.mode === 'brt' || l.mode === 'rail') ? ADHOC_BUS_PENALTY : 0,
       ), 0)
     + (affectedByIncident.has(o.id) ? INCIDENT_PENALTY : 0)
+    + o.legs.filter((l) => l.mode === 'okada').length * OKADA_PENALTY
     - (o.legs.some((l) => l.mode === 'brt' || l.mode === 'rail') ? FORMAL_BONUS : 0);
 
   let recommended = finalOptions.reduce((a, b) => (score(b) < score(a) ? b : a));

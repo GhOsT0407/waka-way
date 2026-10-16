@@ -127,7 +127,9 @@ const MINUTES_PER_NAIRA = 0.05;
  * for and had the engine recommending a 163-minute danfo down Ikorodu Road
  * at 7:30 instead of the BRT beside it.
  */
-const TRAFFIC_EXPOSURE: Partial<Record<TransportMode, number>> = { rail: 0, brt: 0.35 };
+// Walking ignores the go-slow; an okada weaves through most of it; a keke
+// squeezes past some of it; a danfo sits in all of it.
+const TRAFFIC_EXPOSURE: Partial<Record<TransportMode, number>> = { rail: 0, walk: 0, brt: 0.35, okada: 0.3, keke: 0.8 };
 export function trafficFor(mode: TransportMode, traffic: number): number {
   return 1 + (traffic - 1) * (TRAFFIC_EXPOSURE[mode] ?? 1);
 }
