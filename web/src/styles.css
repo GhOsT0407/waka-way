@@ -181,6 +181,92 @@ button {
   margin: 12px 2px 0;
 }
 
+/* Where the trip will start — always said before the rider commits. */
+.locline {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--cream-sub);
+  margin: 12px 2px 0;
+}
+
+.locline.bad {
+  color: var(--danfo);
+}
+
+/* ── What we understood ───────────────────────────────────────────────────── */
+
+/* The places the search settled on, always visible, so a wrong guess is
+   caught before anyone follows the route. */
+.resolved {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 16px 0 0;
+}
+
+.pick {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pick-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cream-mute);
+}
+
+.pick-current {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed var(--line-strong);
+  border-radius: 0;
+  padding: 2px 0;
+  min-height: 32px;
+  color: var(--cream);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.pick-current:not([disabled]):hover {
+  color: var(--danfo);
+  border-bottom-color: var(--danfo);
+}
+
+.pick-static,
+.pick-current[disabled] {
+  cursor: default;
+  border-bottom-color: transparent;
+}
+
+.pick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.pick-option {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 14px;
+  border-radius: 12px;
+  text-align: left;
+  white-space: normal;
+}
+
+.pick-sub {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--cream-mute);
+}
+
 /* ── Messages ─────────────────────────────────────────────────────────────── */
 
 .notice {

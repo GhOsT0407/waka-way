@@ -61,6 +61,18 @@ over these variables would quietly undo the choice.
   trust layer is only worth anything if one person cannot vote a corridor up a
   hundred times.
 
+## Location
+
+The rider types only the destination; the trip starts from their phone's
+location. "Yaba to Ikeja" still plans from a typed start.
+
+- Location is asked for when the rider taps the search box, not on page load.
+- **Browsers only share location over HTTPS** (or `localhost` in dev). Any
+  real host — Vercel, Netlify, Cloudflare Pages — serves HTTPS by default; a
+  plain `http://` deploy will show "Location only works on a secure link".
+- Blocked, unavailable, rough (±500 m+) or outside-Lagos fixes each get a plain
+  message and fall back to typing the start. The fix stays in the browser.
+
 ## What it deliberately does not do
 
 **No map.** The product thesis is that the explanation is the thing
