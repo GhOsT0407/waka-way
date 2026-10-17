@@ -725,6 +725,24 @@ export default function App() {
           </>
         )}
 
+        {/* What WakaWay is, said once before the first search. Riders new to
+            the site need it, and it is the words a search engine reads. */}
+        {!result && !busy && !error && (
+          <section className="about">
+            <h2 className="about-h">How to move around Lagos, before you leave</h2>
+            <p>
+              Type where you dey go. WakaWay works out which danfo, BRT, keke, okada or train will
+              get you there, where to stand at the park, what the conductor will call, what to tell
+              them, and what the fare should be — from Ikorodu to Ajah, Berger to CMS, Festac to Ikeja.
+            </p>
+            <p>
+              Lagos has no official danfo map, so the routes come from LAMATA lines, OpenStreetMap
+              and riders. If one is wrong, tell us after you ride — it makes the next person’s
+              route better.
+            </p>
+          </section>
+        )}
+
         <p className="foot">Fares are ranges, not promises. Tell us when one is wrong.</p>
       </main>
 

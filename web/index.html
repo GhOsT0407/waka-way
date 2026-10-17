@@ -10,6 +10,39 @@
     />
     <title>WakaWay — Move Smart. Move Local.</title>
 
+    <!-- Google Search Console: paste the google-site-verification meta tag here. -->
+
+    <!-- How the link looks when shared on WhatsApp, X, Facebook. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="WakaWay" />
+    <meta property="og:title" content="WakaWay — how to move around Lagos" />
+    <meta
+      property="og:description"
+      content="Type where you dey go. WakaWay tells you which danfo, BRT, keke or train to take, where to stand, what to tell the conductor, and what it should cost."
+    />
+    <meta property="og:locale" content="en_NG" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="WakaWay — how to move around Lagos" />
+    <meta
+      name="twitter:description"
+      content="Danfo, BRT, keke, okada and rail directions for Lagos, with fares and the words to say to the conductor."
+    />
+
+    <!-- What this site is, in a form search engines read directly. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "WakaWay",
+        "applicationCategory": "TravelApplication",
+        "operatingSystem": "Any",
+        "inLanguage": "en-NG",
+        "description": "Public transport directions for Lagos, Nigeria: which danfo, BRT, keke, okada or train to take, where to board, what to tell the conductor, and the fare range.",
+        "areaServed": { "@type": "City", "name": "Lagos" },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "NGN" }
+      }
+    </script>
+
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%23F5C518%27/%3E%3Ctext x=%2732%27 y=%2745%27 text-anchor=%27middle%27 font-family=%27Arial Black,Arial%27 font-weight=%27900%27 font-size=%2738%27 fill=%27%23111%27%3EW%3C/text%3E%3C/svg%3E"
@@ -24,6 +57,11 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <p style="font-family: system-ui, sans-serif; color: #f4efe1; background: #0b0f0c; padding: 24px">
+        WakaWay needs JavaScript to plan your Lagos trip. Turn it on in your browser settings and reload.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

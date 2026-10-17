@@ -9,6 +9,16 @@ import './styles.css';
 // sign-in code Supabase adds when the emailed link brings the admin back.
 const isAdmin = new URLSearchParams(window.location.search).has('admin');
 
+// The admin page has no business in search results. vercel.json also sends
+// an X-Robots-Tag header for it; this covers any host that does not.
+if (isAdmin) {
+  const robots = document.createElement('meta');
+  robots.name = 'robots';
+  robots.content = 'noindex, nofollow';
+  document.head.appendChild(robots);
+  document.title = 'WakaWay — Admin';
+}
+
 /**
  * No token publishing here.
  *

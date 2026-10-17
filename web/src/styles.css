@@ -640,6 +640,28 @@ button {
   text-align: center;
 }
 
+/* ── What WakaWay is (before the first search) ────────────────────────────── */
+
+.about {
+  margin-top: 36px;
+  color: var(--cream-sub);
+  font-size: 14.5px;
+}
+
+.about-h {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--cream);
+  margin: 0 0 10px;
+}
+
+.about p {
+  margin: 0 0 12px;
+}
+
 /* ── "Confirm with someone who knows" ─────────────────────────────────────── */
 
 .caution {
