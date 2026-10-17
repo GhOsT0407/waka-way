@@ -21,7 +21,11 @@ const P = {
   badagry:    { lat: 6.4150, lng: 2.8850, name: 'Badagry' },
 };
 type Pt = { lat: number; lng: number; name: string };
-const route = (a: Pt, b: Pt) => calculateSmartRoute(a.lat, a.lng, a.name, b.lat, b.lng, b.name);
+// A fixed weekday off-peak departure, as modeMix.test.ts does. Without one the
+// suite planned at whatever time it ran, so a morning-rush run could pick the
+// rush-hour BRT and fail a midday expectation.
+const TUE_1100 = new Date(2026, 8, 22, 11, 0);
+const route = (a: Pt, b: Pt) => calculateSmartRoute(a.lat, a.lng, a.name, b.lat, b.lng, b.name, { departAt: TUE_1100 });
 const rec = (r: ReturnType<typeof route>): RouteOption => r.options.find((o) => o.id === r.recommendedOptionId)!;
 const stopNames = (o: RouteOption) => o.legs.flatMap((l) => [l.from.name, ...(l.viaStops ?? []), l.to.name]);
 const busLegs = (o: RouteOption) => o.legs.filter((l) => l.mode === 'danfo' || l.mode === 'brt' || l.mode === 'rail');
@@ -145,14 +149,21 @@ describe('well-known trips', () => {
 describe('when the network does not reach', () => {
   it('says so instead of inventing a bus', () => {
     const r = calculateSmartRoute(6.7300, 3.2650, 'Rock Canaan, Ota road', P.cms.lat, P.cms.lng, 'CMS');
-    // Either a real corridor was within 3 km, or the fallback is explicitly unverified.
+    // Real lines, reached by at most a short hop to a stop we know — or no
+    // route at all. Never one made-up bus for the whole trip, which is what
+    // the old "Ask at the park" card amounted to on screen.
     for (const o of r.options) {
-      if (o.tags.includes('Unverified')) {
-        expect(o.name).toBe('Ask at the park');
-      } else {
-        for (const l of busLegs(o)) expect(l.corridorName).toBeTruthy();
-      }
+      const lines = busLegs(o).filter((l) => l.corridorName);
+      const guessed = busLegs(o).filter((l) => !l.corridorName);
+      expect(lines.length).toBeGreaterThan(0);
+      expect(guessed.length).toBeLessThanOrEqual(2);
+      for (const l of guessed) expect(l.distanceKm).toBeLessThanOrEqual(13);
     }
+  });
+
+  it('a start far outside the network gets no route, not a guess', () => {
+    const r = calculateSmartRoute(6.9, 3.9, 'Far away', P.cms.lat, P.cms.lng, 'CMS');
+    expect(r.options).toHaveLength(0);
   });
 
   it('the raw graph returns nothing for a point far outside the network', () => {

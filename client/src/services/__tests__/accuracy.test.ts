@@ -108,6 +108,42 @@ describe('a long danfo run is not priced like a short one', () => {
   });
 });
 
+describe('no pointless round trips', () => {
+  // From a rider's report (17 Oct 2026): starting north of Berger on the
+  // expressway side, going to Ojodu Berger, the app sent them by bus to
+  // Berger and then on a keke from Berger to Ogba and straight back to
+  // Berger — "once you get to ojodu berger you dont need to enter keke again".
+  it('a trip that arrives at Berger ends at Berger', () => {
+    const r = calculateSmartRoute(6.704, 3.405, 'Your location', 6.644, 3.364, 'Ojodu Berger', { departAt: FRI_0730 });
+    const o = rec(r);
+    const rides = o.legs.filter((l) => l.mode !== 'walk');
+    expect(rides).toHaveLength(1);
+    expect(rides[0].to.name).toBe('Ojodu Berger');
+    expect(uses(o, 'keke')).toBe(false);
+  });
+
+  it('no ride anywhere ends at the stop it started from', () => {
+    let seed = 99;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    const bad: string[] = [];
+    for (let i = 0; i < 120; i++) {
+      const s = GRAPH_STOPS[Math.floor(rnd() * GRAPH_STOPS.length)];
+      const t = GRAPH_STOPS[Math.floor(rnd() * GRAPH_STOPS.length)];
+      // Half the starts are off the network, where the widened search runs.
+      const off = i % 2 ? 0 : 4 + rnd() * 5, th = rnd() * 6.28;
+      const a = { latitude: s.latitude + (off / 111) * Math.cos(th), longitude: s.longitude + (off / 110) * Math.sin(th) };
+      if (haversineKm(a, t) < 1.5) continue;
+      const r = calculateSmartRoute(a.latitude, a.longitude, 'A', t.latitude, t.longitude, t.name, { departAt: FRI_1200 });
+      for (const o of r.options) {
+        for (const l of o.legs) {
+          if (l.mode !== 'walk' && l.fromStopId && l.fromStopId === l.toStopId) bad.push(`${l.mode} ${l.from.name} -> ${l.to.name} on ${l.corridorId}`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});
+
 describe('changing vehicle costs something', () => {
   it('Iyana-Ipaja → Obalende takes the one LAMATA bus that runs it, not a chain', () => {
     const o = rec(route(stop('iyana_ipaja'), stop('obalende'), FRI_0730));

@@ -55,6 +55,14 @@ export interface GraphSearchOptions {
    * legality rules the produced legs follow; default is walk-or-keke.
    */
   accessMinutes?: (from: LatLng, to: LatLng, km: number) => number;
+  /**
+   * Let the trip end at a stop reached by the first-mile ride itself, when
+   * that stop is the destination. Only for the widened "far from known
+   * stops" search: there the first mile can be several km, and forcing a
+   * ride on a known line afterwards produced a keke from Berger to Ogba and
+   * straight back to Berger.
+   */
+  arriveOnFirstMile?: boolean;
 }
 
 // ─── Geometry ────────────────────────────────────────────────────────────────
@@ -141,7 +149,20 @@ function connectorFare(km: number): number {
 }
 
 // ─── Adjacency (built once) ──────────────────────────────────────────────────
-interface Edge { to: string; corridor: Corridor; km: number; minutes: number; walk?: boolean }
+/**
+ * dir: +1 travels toward the corridor's last stop, -1 toward its first. A
+ * vehicle keeps its direction for the whole ride; see vehicleOf().
+ */
+interface Edge { to: string; corridor: Corridor; km: number; minutes: number; walk?: boolean; dir?: 1 | -1 }
+
+/**
+ * Which vehicle an edge is ridden on: the line *and* the way it is heading.
+ * A danfo does not turn round mid-trip; going back the other way means
+ * getting down, crossing, and boarding another — a change, priced as one.
+ * Treating the line alone as the vehicle let a keke ride Berger → Ogba →
+ * Berger as a single ride.
+ */
+const vehicleOf = (e: Edge) => `${e.corridor.id}${e.dir === -1 ? '<' : '>'}`;
 const ADJ: Record<string, Edge[]> = {};
 // Sentinel corridor for on-foot links between stops; never rendered as a leg.
 export const WALK_LINK: Corridor = { id: '__walk__', mode: 'walk', name: 'walk', stops: [], confidence: 'verified' };
@@ -151,13 +172,15 @@ for (const c of CORRIDORS) {
     const a = STOP_BY_ID[c.stops[i]], b = STOP_BY_ID[c.stops[i + 1]];
     const km = c.hops?.[i] ?? haversineKm(a, b) * ROAD_FACTOR;
     const minutes = (km / speed) * 60;
-    (ADJ[a.id] ??= []).push({ to: b.id, corridor: c, km, minutes });
-    (ADJ[b.id] ??= []).push({ to: a.id, corridor: c, km, minutes });
+    (ADJ[a.id] ??= []).push({ to: b.id, corridor: c, km, minutes, dir: 1 });
+    (ADJ[b.id] ??= []).push({ to: a.id, corridor: c, km, minutes, dir: -1 });
   }
 }
 // Any two stops within 450 m are one place on foot: Oshodi park and Oshodi
 // station, Ojuelegba and the BRT shelter under the bridge.
 const LINK_KM = 0.45;
+// Within this of the destination, a stop *is* the destination.
+const ARRIVED_KM = 0.3;
 for (let i = 0; i < GRAPH_STOPS.length; i++) {
   for (let j = i + 1; j < GRAPH_STOPS.length; j++) {
     const a = GRAPH_STOPS[i], b = GRAPH_STOPS[j];
@@ -245,7 +268,11 @@ function dijkstra(
     // The last mile costs money as well as minutes, and leaving the fare out
     // was why the search would ride a stop past the rider's destination and
     // send them back on a keke: two more minutes looked free.
-    if (cur.s.corridor && egressKm.has(cur.s.stop)) {
+    // Or, in the widened search, when the first-mile ride itself has brought
+    // the rider to their destination stop: the trip is that ride.
+    const arrivedByFirstMile = !cur.s.corridor && opts.arriveOnFirstMile
+      && (egressKm.get(cur.s.stop) ?? Infinity) <= ARRIVED_KM;
+    if ((cur.s.corridor || arrivedByFirstMile) && egressKm.has(cur.s.stop)) {
       const km = egressKm.get(cur.s.stop)!;
       const total = cur.d
         + opts.accessMinutes(STOP_BY_ID[cur.s.stop], dest, km)
@@ -268,7 +295,8 @@ function dijkstra(
       if (!usable(e.corridor)) continue;
       const weight = opts.modeWeights[e.corridor.mode] ?? 1;
       const slow = trafficFor(e.corridor.mode, traffic);
-      const boarding = cur.s.corridor !== e.corridor.id;
+      const vehicle = vehicleOf(e);
+      const boarding = cur.s.corridor !== vehicle;
       // Fare is charged in equivalent minutes: boarding once per vehicle,
       // then distance. This is what stops a long ride looking free.
       const fare = (boarding ? BOARD_FARE[e.corridor.mode] ?? 200 : 0)
@@ -276,7 +304,7 @@ function dijkstra(
       let d = cur.d + e.minutes * weight * slow + fare * MINUTES_PER_NAIRA;
       if (cur.s.corridor === null) d += FIRST_WAIT[e.corridor.mode] ?? 5;
       else if (boarding) d += (CHANGE_WAIT[e.corridor.mode] ?? 8) + transferPenalty;
-      push({ stop: e.to, corridor: e.corridor.id }, d, { state: cur.s, edge: e });
+      push({ stop: e.to, corridor: vehicle }, d, { state: cur.s, edge: e });
     }
   }
   if (!best) return null;
@@ -293,12 +321,16 @@ function dijkstra(
   const boardId = node.stop;
   const legs: GraphLeg[] = [];
   let leg: GraphLeg | null = null;
+  let legVehicle = '';
   let at = boardId;
   for (const step of chain) {
     const e = step.edge!;
     if (e.walk) { at = e.to; continue; }
-    if (!leg || leg.corridor.id !== e.corridor.id) {
+    // A new leg whenever the vehicle changes — including the same line
+    // ridden back the other way.
+    if (!leg || legVehicle !== vehicleOf(e)) {
       if (leg) legs.push(leg);
+      legVehicle = vehicleOf(e);
       const forward = e.corridor.stops.indexOf(e.to) > e.corridor.stops.indexOf(at);
       const terminal = STOP_BY_ID[forward ? e.corridor.stops[e.corridor.stops.length - 1] : e.corridor.stops[0]];
       leg = { corridor: e.corridor, mode: e.corridor.mode, from: STOP_BY_ID[at], to: STOP_BY_ID[e.to], via: [], distanceKm: e.km, minutes: e.minutes, terminal };
@@ -311,7 +343,8 @@ function dijkstra(
     at = e.to;
   }
   if (leg) legs.push(leg);
-  if (!legs.length) return null;
+  // No line ridden is only a trip when the first mile itself arrived.
+  if (!legs.length && !(opts.arriveOnFirstMile && best.state.corridor === null)) return null;
 
   const board = STOP_BY_ID[boardId];
   const alight = STOP_BY_ID[best.state.stop];
@@ -325,7 +358,7 @@ function dijkstra(
     accessKm: haversineKm(origin, board),
     egressKm: haversineKm(alight, dest),
     minutes: Math.round(ride + waits + endsMin),
-    transfers: legs.length - 1,
+    transfers: Math.max(0, legs.length - 1),
   };
 }
 
@@ -337,6 +370,7 @@ export function searchGraph(origin: LatLng, dest: LatLng, options: GraphSearchOp
     reachKm: options.reachKm ?? 3.0,
     accessMinutes: options.accessMinutes ?? defaultAccessMinutes,
     excludeUnverified: options.excludeUnverified ?? false,
+    arriveOnFirstMile: options.arriveOnFirstMile ?? false,
     modeWeights: options.modeWeights ?? {},
     at: options.at ?? new Date(),
   };

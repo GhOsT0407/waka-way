@@ -607,11 +607,14 @@ function buildGraphOptions(
   origin: Location, destination: Location, pref?: ConnectorPrefs, at: Date = new Date(),
   /** How far a first/last-mile connector may reach, km. An okada goes further than a keke. */
   reachKm?: number,
+  /** Widened search only: the first-mile ride may itself be the whole trip. */
+  arriveOnFirstMile = false,
 ): RouteOption[] {
   const traffic = trafficFactor(at);
   const paths = searchGraph(origin, destination, {
     allowTimetabled: redLineRunningAt(at), accessMinutes: accessMinutes(pref, traffic), at,
     ...(reachKm ? { reachKm } : {}),
+    arriveOnFirstMile,
   });
   return paths.map((path) => {
     const legs: RouteLeg[] = [];
@@ -631,7 +634,11 @@ function buildGraphOptions(
       legs.push(buildCorridorLeg(gl));
     });
     if (path.egressKm >= 0.05) legs.push(buildConnector(alight, destination, pref, traffic));
-    const { name, tags } = optionNameFor(path);
+    // A trip that is only the first-mile ride is named for that vehicle.
+    const firstMile = legs[0];
+    const { name, tags } = path.legs.length
+      ? optionNameFor(path)
+      : { name: firstMile?.mode === 'okada' ? 'Okada' : firstMile?.mode === 'keke' ? 'Keke' : 'Bus', tags: ['Budget'] };
     const lowest = path.legs.reduce((c, l) => (l.corridor.confidence === 'likely' ? 'likely' : c), 'local' as string);
     if (lowest === 'likely') tags.push('Unverified');
     const via = path.legs.map((l) => l.to.name);
@@ -643,17 +650,18 @@ function buildGraphOptions(
  * Nothing in the corridor data reaches one end of this trip. Say so, with the
  * nearest known park, rather than draw a line no bus follows.
  */
-function buildUnknownRoute(origin: Location, destination: Location, pref?: ConnectorPrefs): RouteOption {
+/**
+ * A short trip the network does not reach: one keke, okada or walk, which
+ * really does go door to door. Anything longer gets no route at all — this
+ * used to print one imaginary danfo for the whole trip ("ask at the nearest
+ * park for a bus toward Computer Village", 17.7 km, with a fare and a
+ * conductor script), which read as a real bus.
+ */
+function buildUnknownRoute(origin: Location, destination: Location, pref?: ConnectorPrefs): RouteOption | null {
   const totalDist = calculateDistance(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
-  if (totalDist <= OKADA_MAX) {
-    const leg = buildConnector(origin, destination, pref);
-    return assembleOption(uid(), 'direct', 'Direct', `${leg.mode === 'walk' ? 'Walk' : 'Ride'} direct`, [leg], ['Short Trip']);
-  }
-  const leg = buildLeg('danfo', origin, destination, true);
-  leg.instruction = `Ask at the nearest park for a bus toward ${destination.name}`;
-  leg.localInstruction = `Go the nearest park, ask conductor wey dey go ${destination.name} side`;
-  leg.confidence = 'likely';
-  return assembleOption(uid(), 'direct', 'Ask at the park', 'No known bus line for this trip yet', [leg], ['Unverified']);
+  if (totalDist > OKADA_MAX) return null;
+  const leg = buildConnector(origin, destination, pref);
+  return assembleOption(uid(), 'direct', 'Direct', `${leg.mode === 'walk' ? 'Walk' : 'Ride'} direct`, [leg], ['Short Trip']);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -705,8 +713,35 @@ export function calculateSmartRoute(
     const name = label === 'Walk' ? 'Walk it' : `${label} all the way`;
     options.push(assembleOption(uid(), 'direct', name, `${label} direct`, [leg], ['Short Trip']));
   }
-  if (totalDist > WALK_MAX) options.push(...buildGraphOptions(origin, destination, pref, preferences?.departAt ?? new Date()));
-  if (options.length === 0) options.push(buildUnknownRoute(origin, destination, pref));
+  if (totalDist > WALK_MAX) {
+    const at = preferences?.departAt ?? new Date();
+    let graph = buildGraphOptions(origin, destination, pref, at);
+    // Off the network at one end: reach further before giving up. The first
+    // or last mile becomes a keke, okada or bus hop to the nearest stop we
+    // actually know — a short, named guess — and the rest rides real lines.
+    // About half of Lagos is more than 3 km from any stop we have, and every
+    // such trip used to get one invented bus for the whole journey.
+    for (const reach of [6, 10]) {
+      if (graph.length) break;
+      graph = buildGraphOptions(origin, destination, pref, at, reach, true);
+      for (const o of graph) o.tags.push('Far from known stops');
+    }
+    options.push(...graph);
+  }
+  if (options.length === 0) {
+    const short = buildUnknownRoute(origin, destination, pref);
+    if (short) options.push(short);
+  }
+  // Nothing connects: say so. An empty answer reaches the rider as "we no
+  // sabi this road yet", which is true; a made-up bus is not.
+  if (options.length === 0) {
+    return {
+      origin, destination, tripBand, originNearestStop, destinationNearestStop,
+      options: [], recommendedOptionId: '',
+      comparison: { priceDifference: 0, priceDifferencePercent: 0, timeDifference: 0, shouldLetUserChoose: false, comparisonText: '' },
+      computedAt: new Date().toISOString(),
+    };
+  }
 
   // Remove near-duplicate routes (same legs count & similar price). Confirmed
   // options go first so a confirmed line is never dropped as a duplicate of
@@ -811,7 +846,13 @@ export function calculateSmartRoute(
   // a penalty for what we are not sure about. The best score wins, so a pick
   // can no longer lose to something that beats it on every axis.
   const MINUTES_PER_NAIRA = 0.05;             // ₦200 ≈ 10 minutes
-  const UNVERIFIED_PENALTY = 25;              // a line we have not confirmed
+  // A line we have not confirmed may not be running at all — the Badagry-
+  // expressway BRT is 'likely' for exactly that reason — and if it is not,
+  // the rider is stranded and has to find another way back. At 25 that line
+  // beat the Mile 2 → Oshodi danfos for ₦480 and eight minutes. An hour's
+  // worth means doubt only wins when the confirmed way is far worse (it
+  // still does for Allen → Epe, 82 minutes and ₦1,060 better).
+  const UNVERIFIED_PENALTY = 60;
   const MAYBE_GONE_PENALTY = 12;              // per leg that may not be running
   // A ride leg with no corridor behind it is the engine guessing that some
   // bus covers this gap. A keke or okada will in fact go anywhere, so only a
