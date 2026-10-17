@@ -1,4 +1,3 @@
-import './utils/mapboxInit'; // Initialize MapLibre (setAccessToken) before any map renders
 import React, { useState, useEffect, useCallback } from 'react';
 import { View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
@@ -14,6 +13,7 @@ import {
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -21,14 +21,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { OfflineBanner } from './components/ui/OfflineBanner';
 import ErrorBoundary from './components/ui/ErrorBoundary';
+import TabBar from './components/ui/TabBar';
 import HomeScreen from './screens/HomeScreen';
 import YouScreen from './screens/YouScreen';
-import ContributionScreen from './screens/ContributionScreen';
-import SearchScreen from './screens/SearchScreen';
+import LiveScreen from './screens/LiveScreen';
+import ReportScreen from './screens/ReportScreen';
 import RouteDetailScreen from './screens/RouteDetailScreen';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
-import NotificationsScreen from './screens/NotificationsScreen';
 import PreferencesScreen from './screens/PreferencesScreen';
 import OnboardingScreen, { ONBOARDING_DONE_KEY } from './screens/OnboardingScreen';
 import NavigationScreen from './screens/NavigationScreen';
@@ -36,45 +36,54 @@ import WakaWaySplash from './screens/WakaWaySplash';
 import { ThemeProvider, useAppTheme } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
-import { wireAuthToken } from './services/api';
+import { initSentry } from './lib/sentry';
 
 SplashScreen.preventAutoHideAsync();
+initSentry();
+
+const HAS_LAUNCHED_KEY = 'wakaway_has_launched';
 
 const Stack = createNativeStackNavigator();
+const Tab   = createBottomTabNavigator();
 
-function AuthStack() {
+// Home · Live · Report · You (WakaWay Mobile canvas). Search lives inside
+// Home as an overlay, so it has no tab; Live is the community map.
+function MainTabs() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-      }}
+    <Tab.Navigator
+      tabBar={(props) => <TabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+      backBehavior="initialRoute"
     >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Signup" component={SignupScreen} />
-    </Stack.Navigator>
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Live" component={LiveScreen} />
+      <Tab.Screen name="Report" component={ReportScreen} />
+      <Tab.Screen name="You" component={YouScreen} />
+    </Tab.Navigator>
   );
 }
 
 function AppNavigator() {
-  const { isAuthenticated, isLoading, firebaseUser } = useAuth();
-  const { theme, isDark } = useAppTheme();
-
-  // Keep Django API client in sync with Firebase ID token
-  useEffect(() => {
-    if (!firebaseUser) { wireAuthToken(null); return; }
-    firebaseUser.getIdToken().then(token => wireAuthToken(token)).catch(() => wireAuthToken(null));
-  }, [firebaseUser]);
+  const { isLoading } = useAuth();
+  const { WW, isDark } = useAppTheme();
   const { isOnline } = useNetworkStatus();
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const [splashDone, setSplashDone] = useState(false);
+  // First launch gets the full brand sequence; every launch after that gets
+  // the ~1.2s brief version, so the splash stops being a daily 4-second tax.
+  const [hasLaunched, setHasLaunched] = useState<boolean | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDING_DONE_KEY).then((val) => {
       setOnboardingDone(val === 'true');
     });
+    AsyncStorage.getItem(HAS_LAUNCHED_KEY).then((val) => {
+      setHasLaunched(val === 'true');
+      if (val !== 'true') AsyncStorage.setItem(HAS_LAUNCHED_KEY, 'true').catch(() => {});
+    });
   }, []);
 
-  const appReady = !isLoading && onboardingDone !== null;
+  const appReady = !isLoading && onboardingDone !== null && hasLaunched !== null;
 
   // Hide native splash as soon as fonts + auth + onboarding state are ready
   useEffect(() => {
@@ -88,31 +97,31 @@ function AppNavigator() {
         ...DarkTheme,
         colors: {
           ...DarkTheme.colors,
-          background: theme.BACKGROUND,
-          card: theme.CARD_BACKGROUND,
-          text: theme.TEXT,
-          border: theme.BORDER,
-          primary: theme.PRIMARY,
-          notification: theme.ACCENT,
+          background: WW.bg,
+          card: WW.bgSurface,
+          text: WW.text,
+          border: WW.border,
+          primary: WW.orange,
+          notification: WW.orange,
         },
       }
     : {
         ...DefaultTheme,
         colors: {
           ...DefaultTheme.colors,
-          background: theme.BACKGROUND,
-          card: theme.CARD_BACKGROUND,
-          text: theme.TEXT,
-          border: theme.BORDER,
-          primary: theme.PRIMARY,
-          notification: theme.ACCENT,
+          background: WW.bg,
+          card: WW.bgSurface,
+          text: WW.text,
+          border: WW.border,
+          primary: WW.orange,
+          notification: WW.orange,
         },
       };
 
   if (!appReady) return null;
 
   if (!splashDone) {
-    return <WakaWaySplash onDone={() => setSplashDone(true)} />;
+    return <WakaWaySplash brief={hasLaunched === true} onDone={() => setSplashDone(true)} />;
   }
 
   if (!onboardingDone) {
@@ -134,79 +143,38 @@ function AppNavigator() {
           animationDuration: 250,
           gestureEnabled: true,
           gestureDirection: 'horizontal',
-          contentStyle: { backgroundColor: theme.BACKGROUND },
+          contentStyle: { backgroundColor: WW.bg },
         }}
       >
-        {isAuthenticated ? (
-          <>
-            <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen
-              name="You"
-              component={YouScreen}
-              options={{
-                animation: 'slide_from_bottom',
-                gestureEnabled: true,
-                gestureDirection: 'vertical',
-                contentStyle: { backgroundColor: theme.BACKGROUND },
-              }}
-            />
-            <Stack.Screen
-              name="Contribution"
-              component={ContributionScreen}
-              options={{
-                animation: 'slide_from_bottom',
-                gestureEnabled: true,
-                gestureDirection: 'vertical',
-                contentStyle: { backgroundColor: theme.BACKGROUND },
-              }}
-            />
-            <Stack.Screen
-              name="Search"
-              component={SearchScreen}
-              options={{
-                animation: 'slide_from_bottom',
-                gestureEnabled: true,
-                gestureDirection: 'vertical',
-                contentStyle: { backgroundColor: theme.BACKGROUND },
-              }}
-            />
-            <Stack.Screen
-              name="RouteDetail"
-              component={RouteDetailScreen}
-              options={{
-                animation: 'slide_from_bottom',
-                gestureEnabled: true,
-                gestureDirection: 'vertical',
-                contentStyle: { backgroundColor: theme.BACKGROUND },
-              }}
-            />
-            <Stack.Screen
-              name="Notifications"
-              component={NotificationsScreen}
-              options={{ animation: 'slide_from_right', gestureEnabled: true }}
-            />
-            <Stack.Screen
-              name="Preferences"
-              component={PreferencesScreen}
-              options={{ animation: 'slide_from_right', gestureEnabled: true }}
-            />
-            <Stack.Screen
-              name="Navigation"
-              component={NavigationScreen}
-              options={{
-                animation: 'slide_from_bottom',
-                gestureEnabled: false,
-                contentStyle: { backgroundColor: theme.BACKGROUND },
-              }}
-            />
-          </>
-        ) : (
-          <Stack.Screen
-            name="Auth"
-            component={AuthStack}
-            options={{ animation: 'fade' }}
-          />
-        )}
+        {/* Finding a route needs no account. Login/Signup are reached from the
+            moment an action needs them (save, report, vote), never before. */}
+        <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen
+          name="RouteDetail"
+          component={RouteDetailScreen}
+          options={{
+            animation: 'slide_from_bottom',
+            gestureEnabled: true,
+            gestureDirection: 'vertical',
+            contentStyle: { backgroundColor: WW.bg },
+          }}
+        />
+        <Stack.Screen
+          name="Navigation"
+          component={NavigationScreen}
+          options={{
+            animation: 'slide_from_bottom',
+            gestureEnabled: false,
+            contentStyle: { backgroundColor: WW.bg },
+          }}
+        />
+        <Stack.Screen
+          name="Preferences"
+          component={PreferencesScreen}
+          options={{ animation: 'slide_from_right', gestureEnabled: true }}
+        />
+        <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: true, gestureDirection: 'vertical' }} />
+        <Stack.Screen name="Signup" component={SignupScreen} options={{ animation: 'slide_from_right' }} />
       </Stack.Navigator>
     </NavigationContainer>
     <OfflineBanner isOnline={isOnline} />

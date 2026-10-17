@@ -1,15 +1,26 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform } from 'react-native';
+import MapView, { PROVIDER_GOOGLE, Marker, Circle } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useContributions, Contribution } from '../../hooks/useContributions';
 import { AlertBottomSheet } from './AlertBottomSheet';
-import { configureProximityNotifications, calculateDistance } from '../../services/proximityAlertService';
+import { haversineKm } from '../../utils/geo';
+import { useAuth } from '../../context/AuthContext';
+import { useRequireSignIn } from '../../hooks/useRequireSignIn';
+import { useToast } from '../../context/ToastContext';
 import { useAppTheme } from '../../context/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES, MAPTILER_DARK_STYLE } from '../../utils/constants';
-import { circlePolygon } from '../../utils/mapboxInit';
-import { WW } from '../../theme/colors';
+import type { WWColors } from '../../theme/colors';
+import { Fonts, Typography, Tracking } from '../../theme/typography';
+import { Space, Radius, HIT } from '../../theme/spacing';
+import { kindMeta, freshnessOf } from '../../utils/reportKinds';
+import { GOOGLE_MAPS_DARK_STYLE, GOOGLE_MAPS_LIGHT_STYLE } from '../../utils/constants';
+
+// The Live map (WakaWay Mobile canvas): community reports as glyph pins on
+// the map, a "LIVE · N reports near you" pill up top, and the report sheet
+// when a pin is tapped. Kinds, colours and glyphs come from utils/reportKinds
+// so a pin here matches its chip on Report and its row in Notifications.
 
 export interface Region {
   latitude: number;
@@ -18,18 +29,16 @@ export interface Region {
   longitudeDelta: number;
 }
 
-const DEFAULT_CENTER: [number, number] = [3.3792, 6.5244]; // Lagos [lng, lat]
-
-const MARKER_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons.glyphMap; circleRadius: number }> = {
-  security:    { color: '#D32F2F', icon: 'shield-outline',       circleRadius: 500 },
-  danger_zone: { color: '#D32F2F', icon: 'warning-outline',      circleRadius: 300 },
-  traffic:     { color: '#FF9800', icon: 'car-sport-outline',    circleRadius: 0   },
-  hazard:      { color: '#FF5722', icon: 'alert-circle-outline', circleRadius: 200 },
-  construction:{ color: '#FFC107', icon: 'construct-outline',    circleRadius: 0   },
-  bus_stop:    { color: WW.brt,    icon: 'bus-outline',          circleRadius: 0   },
-  taxi_stand:  { color: '#9C27B0', icon: 'car-outline',          circleRadius: 0   },
-  other:       { color: '#607D8B', icon: 'help-circle-outline',  circleRadius: 0   },
+const DEFAULT_REGION: Region = {
+  latitude: 6.5244,
+  longitude: 3.3792,
+  latitudeDelta: 0.12,
+  longitudeDelta: 0.12,
 };
+
+// Kinds that mean "avoid this area" get a radius so the danger reads at a glance.
+const RADIUS_M: Partial<Record<string, number>> = { security: 500, danger_zone: 300, hazard: 200 };
+const NOOP = () => {};
 
 interface CommunityMapViewProps {
   initialRegion?: Region;
@@ -37,6 +46,8 @@ interface CommunityMapViewProps {
   proximityRadius?: number;
   filterTypes?: string[];
   style?: any;
+  /** Rendered inside the top pill's row, before the pill (e.g. a back button). */
+  leading?: React.ReactNode;
 }
 
 export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
@@ -45,224 +56,190 @@ export const CommunityMapView: React.FC<CommunityMapViewProps> = ({
   proximityRadius = 2,
   filterTypes,
   style,
+  leading,
 }) => {
-  useAppTheme();
-  const cameraRef = useRef<MapLibreGL.Camera>(null);
+  const { WW, isDark } = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const s = useMemo(() => makeStyles(WW), [WW]);
+  const mapRef = useRef<MapView>(null);
 
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [loading, setLoading]           = useState(true);
-  const [selectedContribution, setSelectedContribution] = useState<Contribution | null>(null);
-  const [showBottomSheet, setShowBottomSheet]           = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Contribution | null>(null);
 
   const { alerts, loading: alertsLoading, vote, getUserVote, refetch } = useContributions({
     userLocation,
     enableProximityAlerts,
     proximityRadius,
     filterTypes,
-    onNewContribution: () => {},
-    onProximityAlert:  () => {},
+    onNewContribution: NOOP,
+    onProximityAlert: NOOP,
   });
+  const { user } = useAuth();
+  const requireSignIn = useRequireSignIn();
+  const { showError } = useToast();
+
+  // Voting needs an account (the RPC checks auth.uid()); a failed vote says so
+  // instead of leaving the button unchanged.
+  const castVote = useCallback(async (id: string, type: 'CONFIRM' | 'DISMISS') => {
+    if (!user) { requireSignIn('say whether this is still happening'); return false; }
+    const ok = await vote(id, type);
+    if (!ok) showError('Vote no send', 'Check your connection and try again.');
+    return ok;
+  }, [user, requireSignIn, vote, showError]);
 
   useEffect(() => {
     (async () => {
-      if (enableProximityAlerts) await configureProximityNotifications();
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
-          const loc    = await Location.getCurrentPositionAsync({});
+          const loc = await Location.getCurrentPositionAsync({});
           const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
           setUserLocation(coords);
-          cameraRef.current?.setCamera({
-            centerCoordinate: [coords.longitude, coords.latitude],
-            zoomLevel: 14,
-            animationDuration: 1000,
-            animationMode: 'flyTo',
-          });
+          mapRef.current?.animateToRegion({ ...coords, latitudeDelta: 0.03, longitudeDelta: 0.03 }, 1000);
         }
       } catch {}
       setLoading(false);
     })();
   }, [enableProximityAlerts]);
 
-  const handleMarkerPress = useCallback((contribution: Contribution) => {
-    setSelectedContribution(contribution);
-    setShowBottomSheet(true);
-  }, []);
-
-  const handleCloseBottomSheet = useCallback(() => {
-    setShowBottomSheet(false);
-    setSelectedContribution(null);
-  }, []);
-
-  const handleCenterUser = useCallback(() => {
+  const recenter = useCallback(() => {
     if (!userLocation) return;
-    cameraRef.current?.setCamera({
-      centerCoordinate: [userLocation.longitude, userLocation.latitude],
-      zoomLevel: 14,
-      animationDuration: 800,
-      animationMode: 'easeTo',
-    });
+    mapRef.current?.animateToRegion({ ...userLocation, latitudeDelta: 0.03, longitudeDelta: 0.03 }, 800);
   }, [userLocation]);
 
-  const getDistance = useCallback((c: Contribution): number | undefined => {
+  const distanceTo = useCallback((c: Contribution): number | undefined => {
     if (!userLocation) return undefined;
-    return calculateDistance(userLocation.latitude, userLocation.longitude, c.latitude, c.longitude);
+    return haversineKm(userLocation, c);
   }, [userLocation]);
-
-  const initialCenter: [number, number] = initialRegion
-    ? [initialRegion.longitude, initialRegion.latitude]
-    : DEFAULT_CENTER;
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.loadingContainer, style]}>
+      <View style={[s.container, s.center, style]}>
         <ActivityIndicator size="large" color={WW.orange} />
-        <Text style={[styles.loadingText, { color: WW.textSub }]}>Loading community map...</Text>
       </View>
     );
   }
 
+  const live = alerts.filter((a) => a.status !== 'rejected' && a.status !== 'expired');
+
   return (
-    <View style={[styles.container, style]}>
-      <MapLibreGL.MapView
-        style={styles.map}
-        styleURL={MAPTILER_DARK_STYLE}
-        logoEnabled={false}
-        attributionEnabled={false}
-        compassEnabled={false}
+    <View style={[s.container, style]}>
+      <MapView
+        ref={mapRef}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        style={StyleSheet.absoluteFill}
+        initialRegion={initialRegion ?? DEFAULT_REGION}
+        customMapStyle={isDark ? (GOOGLE_MAPS_DARK_STYLE as any) : (GOOGLE_MAPS_LIGHT_STYLE as any)}
+        showsUserLocation
+        showsMyLocationButton={false}
+        showsCompass={false}
+        onPress={() => setSelected(null)}
       >
-        <MapLibreGL.Camera
-          ref={cameraRef}
-          defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: 13 }}
-        />
-
-        <MapLibreGL.UserLocation visible />
-
-        {alerts.map((contribution) => {
-          const config    = MARKER_CONFIG[contribution.type] ?? MARKER_CONFIG.other;
-          const isVerified = contribution.verified || (contribution.confirm_count >= 5);
-
+        {live.map((c) => {
+          const meta = kindMeta(c.type);
+          const color = meta.color(WW);
+          const radius = RADIUS_M[c.type];
+          const fresh = freshnessOf(c);
+          // Green ring = riders confirmed it; yellow = one fresh voice; a faded
+          // pin = old, probably over. The validation doc's traffic light.
+          const ring = fresh === 'verified' ? WW.green : fresh === 'reported' ? WW.warning : WW.bg;
           return (
-            <React.Fragment key={contribution.id}>
-              {/* Danger zone radius polygon */}
-              {config.circleRadius > 0 && (
-                <MapLibreGL.ShapeSource
-                  id={`circle-src-${contribution.id}`}
-                  shape={circlePolygon(contribution.latitude, contribution.longitude, config.circleRadius)}
-                >
-                  <MapLibreGL.FillLayer
-                    id={`circle-fill-${contribution.id}`}
-                    style={{
-                      fillColor:         `${config.color}20`,
-                      fillOutlineColor:  config.color,
-                    }}
-                  />
-                </MapLibreGL.ShapeSource>
+            <React.Fragment key={c.id}>
+              {!!radius && (
+                <Circle
+                  center={{ latitude: c.latitude, longitude: c.longitude }}
+                  radius={radius}
+                  fillColor={`${color}22`}
+                  strokeColor={color}
+                  strokeWidth={1}
+                />
               )}
-
-              <MapLibreGL.PointAnnotation
-                id={`contrib-${contribution.id}`}
-                coordinate={[contribution.longitude, contribution.latitude]}
-                onSelected={() => handleMarkerPress(contribution)}
+              <Marker
+                coordinate={{ latitude: c.latitude, longitude: c.longitude }}
+                onPress={() => setSelected(c)}
+                anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
               >
-                <View style={styles.markerWrapper}>
-                  <View style={[styles.markerContainer, { backgroundColor: config.color }]}>
-                    <Ionicons name={config.icon} size={16} color="#FFFFFF" />
-                    {isVerified && (
-                      <View style={styles.verifiedBadge}>
-                        <Ionicons name="checkmark" size={8} color="#FFFFFF" />
-                      </View>
-                    )}
-                  </View>
-                  <View style={[styles.markerTip, { borderTopColor: config.color }]} />
+                <View style={[s.pin, { backgroundColor: color, borderColor: ring, opacity: fresh === 'stale' ? 0.55 : 1 }]}>
+                  <Text style={[s.pinGlyph, { color: meta.onColor(WW) }]}>{meta.glyph}</Text>
                 </View>
-              </MapLibreGL.PointAnnotation>
+              </Marker>
             </React.Fragment>
           );
         })}
-      </MapLibreGL.MapView>
+      </MapView>
 
-      {/* Floating controls */}
-      <View style={styles.controls}>
-        <TouchableOpacity style={[styles.controlButton, { backgroundColor: WW.bgElevated }]} onPress={handleCenterUser}>
-          <Ionicons name="locate" size={22} color={WW.orange} />
+      {/* Top row — optional leading control + the LIVE pill */}
+      <View style={[s.topRow, { top: insets.top + Space.xs }]} pointerEvents="box-none">
+        {leading}
+        <View style={s.livePill}>
+          <View style={s.liveDot} />
+          <Text style={s.liveText} numberOfLines={1}>
+            {live.length === 0
+              ? 'QUIET · NO REPORTS IN LAGOS IN THE LAST FEW HOURS'
+              : `LIVE · ${live.length} ${live.length === 1 ? 'REPORT' : 'REPORTS'} IN LAGOS`}
+          </Text>
+          {alertsLoading && <ActivityIndicator size="small" color={WW.textMuted} />}
+        </View>
+      </View>
+
+      <View style={s.controls}>
+        <TouchableOpacity style={s.control} onPress={recenter} accessibilityRole="button" accessibilityLabel="Recenter on my location">
+          <Ionicons name="navigate" size={20} color={WW.text} />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.controlButton, { backgroundColor: WW.bgElevated }]} onPress={refetch} disabled={alertsLoading}>
-          {alertsLoading
-            ? <ActivityIndicator size="small" color={WW.orange} />
-            : <Ionicons name="refresh" size={22} color={WW.orange} />}
+        <TouchableOpacity style={s.control} onPress={refetch} disabled={alertsLoading} accessibilityRole="button" accessibilityLabel="Refresh reports">
+          <Ionicons name="refresh" size={20} color={WW.text} />
         </TouchableOpacity>
       </View>
 
-      {alerts.length > 0 && (
-        <View style={[styles.alertBadge, { backgroundColor: WW.orange }]}>
-          <Ionicons name="warning" size={13} color={WW.danfoText} />
-          <Text style={[styles.alertBadgeText, { color: WW.danfoText }]}>
-            {alerts.length} active alert{alerts.length > 1 ? 's' : ''}
-          </Text>
-        </View>
-      )}
-
       <AlertBottomSheet
-        contribution={selectedContribution}
-        visible={showBottomSheet}
-        onClose={handleCloseBottomSheet}
-        userVote={selectedContribution ? getUserVote(selectedContribution.id) : null}
-        onVote={vote}
-        distance={selectedContribution ? getDistance(selectedContribution) : undefined}
+        contribution={selected ? (live.find((a) => a.id === selected.id) ?? selected) : null}
+        visible={!!selected}
+        onClose={() => setSelected(null)}
+        userVote={selected ? getUserVote(selected.id) : null}
+        onVote={castVote}
+        distance={selected ? distanceTo(selected) : undefined}
       />
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container:        { flex: 1 },
-  loadingContainer: { justifyContent: 'center', alignItems: 'center', backgroundColor: WW.bg },
-  loadingText:      { marginTop: SPACING.MD, fontSize: FONT_SIZES.BODY },
-  map:              { width: '100%', height: '100%' },
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: WW.bg },
+    center: { alignItems: 'center', justifyContent: 'center' },
 
-  markerWrapper:    { alignItems: 'center' },
-  markerContainer: {
-    width: 34, height: 34, borderRadius: 17,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2.5, borderColor: '#FFFFFF',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
-  },
-  verifiedBadge: {
-    position: 'absolute', top: -4, right: -4,
-    width: 14, height: 14, borderRadius: 7,
-    backgroundColor: WW.green,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: '#FFFFFF',
-  },
-  markerTip: {
-    width: 0, height: 0,
-    borderLeftWidth: 7, borderRightWidth: 7, borderTopWidth: 9,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent',
-    marginTop: -1,
-  },
+    pin: {
+      width: 34, height: 34, borderRadius: Radius.pill,
+      borderWidth: 2.5,
+      alignItems: 'center', justifyContent: 'center',
+      shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
+      elevation: 5,
+    },
+    pinGlyph: { fontFamily: Fonts.extrabold, fontSize: 13, marginTop: -1 },
 
-  controls: {
-    position: 'absolute', right: SPACING.MD, bottom: 100, gap: SPACING.SM,
-  },
-  controlButton: {
-    width: 46, height: 46, borderRadius: 23,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: WW.border,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2, shadowRadius: 4, elevation: 4,
-  },
+    topRow: {
+      position: 'absolute', left: Space.lg, right: Space.lg,
+      flexDirection: 'row', alignItems: 'center', gap: Space.md,
+    },
+    livePill: {
+      flex: 1, height: HIT, borderRadius: Radius.pill,
+      backgroundColor: WW.frosted, borderWidth: 1, borderColor: WW.border,
+      flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: Space.lg,
+    },
+    liveDot: { width: 8, height: 8, borderRadius: Radius.pill, backgroundColor: WW.greenGlow },
+    liveText: { flex: 1, fontFamily: Fonts.bold, fontSize: Typography.sm, letterSpacing: 0.4, color: WW.text },
 
-  alertBadge: {
-    position: 'absolute', top: SPACING.LG, left: SPACING.MD, right: SPACING.MD,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: SPACING.SM, paddingHorizontal: SPACING.MD,
-    borderRadius: BORDER_RADIUS.MEDIUM, gap: SPACING.XS,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2, shadowRadius: 4, elevation: 4,
-  },
-  alertBadgeText: { fontSize: FONT_SIZES.SMALL, fontWeight: '600' },
-});
+    controls: { position: 'absolute', right: Space.lg, bottom: Space.xl, gap: Space.sm },
+    control: {
+      width: HIT, height: HIT, borderRadius: Radius.pill,
+      backgroundColor: WW.frosted, borderWidth: 1, borderColor: WW.border,
+      alignItems: 'center', justifyContent: 'center',
+      shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+      elevation: 3,
+    },
+  });
+}
 
 export default CommunityMapView;

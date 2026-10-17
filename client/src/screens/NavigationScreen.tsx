@@ -1,745 +1,472 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Platform,
-  Animated,
-  PanResponder,
-  ActivityIndicator,
-} from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, Platform, Pressable, Alert, Vibration, ScrollView } from 'react-native';
+import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useKeepAwake } from 'expo-keep-awake';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../theme/colors';
-import { Typography } from '../theme/typography';
-import type { RouteOption, RouteLeg } from '../services/smartRoutingService';
-import {
-  getActiveIncidents,
-  getIncidentsOnRoute,
-  getRerouteDecision,
-  incidentSummaryText,
-  incidentColor,
-  ScoredIncident,
-  RerouteDecision,
-} from '../services/incidentService';
-import { searchRoutes } from '../services/api';
-import { fetchAllLegGeometries, LatLng } from '../services/directionsService';
-import { MAPTILER_DARK_STYLE } from '../utils/constants';
-import { WW } from '../theme/colors';
+import { WW_DARK, type WWColors } from '../theme/colors';
+import { Fonts, Typography, Tracking } from '../theme/typography';
+import { Space, Radius, HIT } from '../theme/spacing';
+import type { RouteOption, RouteLeg, SmartRouteResult } from '../services/smartRoutingService';
+import { vehicleWord } from '../services/smartRoutingService';
+import { journeySteps, type JourneyStep } from '../services/explainJourney';
+import { legStops, legGeometry } from '../services/routeGeometry';
+import { confirmRouteWorked, reportFarePaid, fareChoices } from '../services/contribute';
+import { useAuth } from '../context/AuthContext';
+import { useRequireSignIn } from '../hooks/useRequireSignIn';
+import { haversineM, formatMeters, type LatLng } from '../utils/geo';
+import { GOOGLE_MAPS_DARK_STYLE } from '../utils/constants';
 
-const ADVANCE_THRESHOLD_M = 80;
-const PEEK_HEIGHT = 72;
-const NAV_ZOOM   = 17;
-const NAV_PITCH  = 50;
+// Wakaway Mode — a human transport guide in your pocket. The instruction is
+// the screen; the map is under it for bearings. One step at a time: walk
+// here, take this, get down there, cross over, walk the last bit. Steps
+// advance from GPS when they can and from a thumb when they can't.
 
-const SPRING = { tension: 100, friction: 20, useNativeDriver: true } as const;
-
-const LEG_COLORS: Record<string, string> = {
-  walk:  '#29B6F6',
-  keke:  '#FFA726',
-  okada: '#FF7043',
-  danfo: '#FFCA28',
-  brt:   '#26A69A',
-  ferry: '#1E88E5',
-  rail:  '#AB47BC',
-  uber:  '#1C1C1C',
-  bolt:  '#34C759',
-};
-
-function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function formatDist(meters: number): string {
-  return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
-}
-
-function modeIcon(mode?: string): any {
-  const icons: Record<string, string> = {
-    walk: 'walk', keke: 'car', okada: 'bicycle',
-    danfo: 'bus', brt: 'bus', ferry: 'boat', rail: 'train',
-  };
-  return icons[mode ?? ''] ?? 'navigate';
-}
-
-let _smoothedHeading = 0;
-function smoothHeading(raw: number): number {
-  let diff = raw - _smoothedHeading;
-  if (diff > 180) diff -= 360;
-  if (diff < -180) diff += 360;
-  _smoothedHeading = (_smoothedHeading + 0.25 * diff + 360) % 360;
-  return _smoothedHeading;
-}
-
-function turnIcon(instruction: string): { name: string; color: string } {
-  const t = instruction.toLowerCase();
-  if (t.includes('turn left') || t.includes('go left') || t.includes('left at'))
-    return { name: 'arrow-back',    color: '#22C55E' };
-  if (t.includes('turn right') || t.includes('go right') || t.includes('right at'))
-    return { name: 'arrow-forward', color: '#22C55E' };
-  if (t.includes('u-turn'))
-    return { name: 'return-down-back', color: '#FBBF24' };
-  if (t.includes('board') || t.includes('take') || t.includes('enter'))
-    return { name: 'arrow-up',      color: '#60A5FA' };
-  if (t.includes('exit') || t.includes('alight') || t.includes('get off') || t.includes('owa'))
-    return { name: 'exit',          color: '#F97316' };
-  return { name: 'arrow-up',        color: '#22C55E' };
-}
-
-function formatETA(remainingMins: number): string {
-  const now = new Date();
-  now.setMinutes(now.getMinutes() + remainingMins);
-  return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
+// Advance thresholds, in metres. Reasoned, not yet tuned on a real ride —
+// change them here only, after one trip on the Ikorodu Road BRT.
+const ARRIVE_M      = 50;    // destination reached
+const WALK_DONE_M   = 60;    // reached the stop on foot
+const NEAR_STOP_M   = 150;   // came at least this close to the boarding stop…
+const BOARDED_M     = 300;   // …then moved this far from it: you're on the vehicle
+const ALIGHT_M: Record<string, number> = { brt: 120, rail: 150, danfo: 80, keke: 60, okada: 60 };
+const ALIGHT_DEFAULT_M = 80; // a mode not listed above
+const APPROACH_M    = 450;   // "get ready" cue
+const NAV_ZOOM      = 16.5;
 
 type Coord = { latitude: number; longitude: number };
 
+function bearingWord(from: LatLng, to: LatLng): string {
+  const y = Math.sin((to.longitude - from.longitude) * Math.PI / 180) * Math.cos(to.latitude * Math.PI / 180);
+  const x = Math.cos(from.latitude * Math.PI / 180) * Math.sin(to.latitude * Math.PI / 180)
+    - Math.sin(from.latitude * Math.PI / 180) * Math.cos(to.latitude * Math.PI / 180) * Math.cos((to.longitude - from.longitude) * Math.PI / 180);
+  const deg = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  const words = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  return words[Math.round(deg / 45) % 8];
+}
+
+function legColor(WW: WWColors, mode: string): string {
+  switch (mode) {
+    case 'danfo': return WW.danfo;
+    case 'brt':   return WW.brt;
+    case 'rail':  return WW.rail;
+    case 'keke':  return WW.keke;
+    case 'okada': return WW.okada;
+    default:      return WW.textSub;
+  }
+}
+
+function formatETA(remainingMins: number): string {
+  const t = new Date(Date.now() + remainingMins * 60_000);
+  return `${t.getHours()}:${t.getMinutes().toString().padStart(2, '0')}`;
+}
+
+/** What the step is waiting for, on the ground. */
+function targetOf(step: JourneyStep, legs: RouteLeg[], dest: LatLng): LatLng {
+  const leg = legs[step.legIndex];
+  if (step.kind === 'board') return leg.from;
+  if (step.kind === 'arrive') return dest;
+  return leg.to;
+}
+
+function doneLabel(step: JourneyStep): string {
+  switch (step.kind) {
+    case 'walk':  return "I'm here";
+    case 'board': return "I'm on board";
+    case 'alight': return "I've got down";
+    default:      return "I've arrived";
+  }
+}
+
 export default function NavigationScreen({ route, navigation }: any) {
+  useKeepAwake();
+  const WW = WW_DARK;
+  const s = useMemo(() => makeStyles(WW), [WW]);
   const insets = useSafeAreaInsets();
-  const { option, destinationName } = route.params as {
-    option: RouteOption;
-    destinationName: string;
-  };
+  const { option, result } = route.params as { option: RouteOption; result: SmartRouteResult };
+  const { user } = useAuth();
+  const requireSignIn = useRequireSignIn();
 
-  const legs: RouteLeg[] = option.legs;
-  const cameraRef = useRef<MapLibreGL.Camera>(null);
-  const locationSubRef = useRef<Location.LocationSubscription | null>(null);
-  const currentLegRef = useRef(0);
+  const legs = option.legs;
+  const dest: LatLng = { latitude: result.destination.latitude, longitude: result.destination.longitude };
+  const steps = useMemo(() => journeySteps(option), [option]);
+  const lastStep = steps.length - 1; // 'arrive'
 
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const sheetY = useRef(new Animated.Value(0)).current;
-  const sheetHeightRef = useRef(200);
-  const gestureStartY = useRef(0);
+  const mapRef = useRef<MapView>(null);
+  const locationSub = useRef<Location.LocationSubscription | null>(null);
+  const stepRef = useRef(0);
+  const followRef = useRef(true);
+  const boardMinRef = useRef(Infinity);
+  const cuedRef = useRef<Record<number, boolean>>({});
 
-  const expandSheet = (velocity = 0) => {
-    Animated.spring(sheetY, { toValue: 0, velocity, ...SPRING }).start();
-  };
-
-  const collapseSheet = (velocity = 0) => {
-    Animated.spring(sheetY, {
-      toValue: sheetHeightRef.current - PEEK_HEIGHT,
-      velocity,
-      ...SPRING,
-    }).start();
-  };
-
-  const sheetPan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        gestureStartY.current = (sheetY as any)._value;
-      },
-      onPanResponderMove: (_, g) => {
-        const maxY = sheetHeightRef.current - PEEK_HEIGHT;
-        sheetY.setValue(Math.max(0, Math.min(maxY, gestureStartY.current + g.dy)));
-      },
-      onPanResponderRelease: (_, g) => {
-        const maxY = sheetHeightRef.current - PEEK_HEIGHT;
-        const current = (sheetY as any)._value;
-        if (g.vy < -0.3 || g.dy < -30) {
-          expandSheet(g.vy * 1000);
-        } else if (g.vy > 0.3 || g.dy > 30) {
-          collapseSheet(g.vy * 1000);
-        } else {
-          current < maxY / 2 ? expandSheet() : collapseSheet();
-        }
-      },
-    })
-  ).current;
-
-  const [currentLegIndex, setCurrentLegIndex] = useState(0);
+  const [stepIdx, setStepIdx] = useState(0);
   const [userCoords, setUserCoords] = useState<Coord | null>(null);
-  const [distanceToNext, setDistanceToNext] = useState<number | null>(null);
+  const [distToTarget, setDistToTarget] = useState<number | null>(null);
+  const [stopsToGo, setStopsToGo] = useState<{ n: number; next?: string } | null>(null);
+  const [approach, setApproach] = useState(false);
   const [arrived, setArrived] = useState(false);
-  const [speedKmh, setSpeedKmh]     = useState<number>(0);
-  const [isTracking, setIsTracking] = useState(true);
-  const [navMode, setNavMode]           = useState<'overview' | 'tracking'>('overview');
-  const [legGeometries, setLegGeometries] = useState<(LatLng[] | null)[]>([]);
-  const [geometriesLoaded, setGeometriesLoaded] = useState(false);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const [asked, setAsked] = useState(false);
+  const [fareLeg, setFareLeg] = useState<RouteLeg | null>(null);
+  const [thanks, setThanks] = useState<string | null>(null);
 
-  const [liveIncidents, setLiveIncidents]       = useState<ScoredIncident[]>([]);
-  const [liveDecision, setLiveDecision]         = useState<RerouteDecision>('none');
-  const [incidentDismissed, setIncidentDismissed] = useState(false);
-  const [reroutingLive, setReroutingLive]       = useState(false);
-  const [activeLeg, setActiveLeg]               = useState(option);
-  const activeLegRef = useRef(option);
-  const incidentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const step = steps[Math.min(stepIdx, lastStep)];
+  const leg = legs[step.legIndex];
+  const nextStep = steps[stepIdx + 1];
+  const remainingMins = legs.slice(step.legIndex).reduce((m, l) => m + l.durationMins, 0);
 
-  const currentLeg = legs[currentLegIndex];
-  const nextLeg = legs[currentLegIndex + 1];
-  const remainingMins = legs
-    .slice(currentLegIndex)
-    .reduce((sum, l) => sum + l.durationMins, 0);
+  // ── Geometry: the corridor's own stop chain, drawn from the data we ride on (ADR 0014) ──
+  const geometries = useMemo<LatLng[][]>(() => legs.map(legGeometry), [legs]);
 
   useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.6, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
+    const all = geometries.flat();
+    if (all.length > 1 && mapRef.current) {
+      mapRef.current.fitToCoordinates(all, { edgePadding: { top: 40, right: 40, bottom: 40, left: 40 }, animated: false });
+    }
+  }, [geometries]);
 
-  // Fetch road-following geometry from OpenRouteService
-  useEffect(() => {
-    (async () => {
-      const geometries = await fetchAllLegGeometries(
-        legs.map(leg => ({
-          from: { latitude: leg.from.latitude, longitude: leg.from.longitude },
-          to:   { latitude: leg.to.latitude,   longitude: leg.to.longitude },
-          mode: leg.mode,
-        }))
-      );
-      setLegGeometries(geometries);
-      setGeometriesLoaded(true);
+  // ── Advancing ──────────────────────────────────────────────────────────────
+  const goTo = useCallback((idx: number) => {
+    const clamped = Math.max(0, Math.min(idx, lastStep));
+    stepRef.current = clamped;
+    boardMinRef.current = Infinity;
+    setApproach(false);
+    setStopsToGo(null);
+    setStepIdx(clamped);
+    if (clamped === lastStep) { setArrived(true); locationSub.current?.remove(); }
+  }, [lastStep]);
 
-      // Fit camera to full route once geometry is ready
-      const allCoords = geometries.flatMap(g => g ?? []);
-      if (allCoords.length > 1 && cameraRef.current) {
-        const lngs = allCoords.map(c => c.longitude);
-        const lats  = allCoords.map(c => c.latitude);
-        cameraRef.current.fitBounds(
-          [Math.max(...lngs), Math.max(...lats)],
-          [Math.min(...lngs), Math.min(...lats)],
-          [80, 80, 260, 80],
-          500,
-        );
-      }
+  const advance = useCallback(() => goTo(stepRef.current + 1), [goTo]);
+  const back = useCallback(() => goTo(stepRef.current - 1), [goTo]);
 
-      setTimeout(() => setNavMode('tracking'), 3000);
-    })();
-  }, []);
-
-  // Poll for incidents on remaining legs every 90 seconds
-  useEffect(() => {
-    const checkIncidents = async () => {
-      const remainingLegs = activeLegRef.current.legs.slice(currentLegRef.current);
-      if (remainingLegs.length === 0) return;
-      const all      = await getActiveIncidents();
-      const onRoute  = getIncidentsOnRoute(remainingLegs, all);
-      const decision = getRerouteDecision(onRoute);
-      setLiveIncidents(onRoute);
-      setLiveDecision(decision);
-      if (decision === 'auto' && !incidentDismissed) {
-        doLiveReroute(onRoute);
-      }
-    };
-
-    checkIncidents();
-    incidentPollRef.current = setInterval(checkIncidents, 90_000);
-    return () => {
-      if (incidentPollRef.current) clearInterval(incidentPollRef.current);
-    };
-  }, []);
-
-  const doLiveReroute = async (incidents: ScoredIncident[]) => {
-    if (reroutingLive || incidents.length === 0) return;
-    setReroutingLive(true);
-    try {
-      const firstLeg  = activeLegRef.current.legs[0];
-      const lastLeg   = activeLegRef.current.legs[activeLegRef.current.legs.length - 1];
-      const avoidPoints = incidents.map((i) => ({
-        latitude:  i.latitude,
-        longitude: i.longitude,
-        radiusKm:  i.avoidRadiusKm,
-      }));
-      const result = await searchRoutes({
-        origin:          { latitude: firstLeg.from.latitude,  longitude: firstLeg.from.longitude },
-        destination:     { latitude: lastLeg.to.latitude,     longitude: lastLeg.to.longitude },
-        destinationName,
-        avoidPoints,
-      });
-      if (result?.smartRoute) {
-        const newOption =
-          result.smartRoute.options.find((o) => o.id === result.smartRoute.recommendedOptionId) ??
-          result.smartRoute.options[0];
-        if (newOption) {
-          activeLegRef.current = newOption;
-          setActiveLeg(newOption);
-          setLiveIncidents([]);
-          setLiveDecision('none');
-          setIncidentDismissed(false);
-        }
-      }
-    } catch {}
-    setReroutingLive(false);
-  };
-
+  // ── GPS ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-
-      locationSubRef.current = await Location.watchPositionAsync(
+      if (status !== 'granted') { setLocationDenied(true); return; }
+      locationSub.current = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 8, timeInterval: 2000 },
         (loc) => {
-          const coord: Coord = {
-            latitude:  loc.coords.latitude,
-            longitude: loc.coords.longitude,
-          };
-          setUserCoords(coord);
+          const me: Coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+          setUserCoords(me);
 
-          const rawSpeed = loc.coords.speed ?? 0;
-          setSpeedKmh(rawSpeed > 0 ? Math.round(rawSpeed * 3.6) : 0);
+          const i = stepRef.current;
+          const st = steps[i];
+          if (!st) return;
+          const lg = legs[st.legIndex];
+          const target = targetOf(st, legs, dest);
+          const d = haversineM(me, target);
+          setDistToTarget(d);
 
-          const legIdx = currentLegRef.current;
-          const leg = legs[legIdx];
-          if (!leg) return;
+          if (st.kind === 'walk' && d < WALK_DONE_M) return goTo(i + 1);
 
-          const dist = haversineMeters(
-            coord.latitude, coord.longitude,
-            leg.to.latitude, leg.to.longitude,
-          );
-          setDistanceToNext(dist);
-
-          if (dist < ADVANCE_THRESHOLD_M) {
-            if (legIdx >= legs.length - 1) {
-              setArrived(true);
-              locationSubRef.current?.remove();
-            } else {
-              currentLegRef.current = legIdx + 1;
-              setCurrentLegIndex(legIdx + 1);
-            }
+          if (st.kind === 'board') {
+            const fromStop = haversineM(me, lg.from);
+            boardMinRef.current = Math.min(boardMinRef.current, fromStop);
+            if (boardMinRef.current < NEAR_STOP_M && fromStop > BOARDED_M) return goTo(i + 1);
           }
 
-          if (isTracking && navMode === 'tracking') {
-            const rawBearing = loc.coords.heading ?? 0;
-            const heading    = rawBearing >= 0 ? smoothHeading(rawBearing) : _smoothedHeading;
-            cameraRef.current?.setCamera({
-              centerCoordinate: [coord.longitude, coord.latitude],
-              zoomLevel:        NAV_ZOOM,
-              heading,
-              pitch:            NAV_PITCH,
-              animationDuration: 800,
-              animationMode:    'easeTo',
-            });
+          if (st.kind === 'alight') {
+            const chain = legStops(lg);
+            if (chain.length > 2) {
+              let bi = 0, bd = Infinity;
+              chain.forEach((c, k) => { const dd = haversineM(me, c); if (dd < bd) { bd = dd; bi = k; } });
+              const n = chain.length - 1 - bi;
+              setStopsToGo({ n, next: chain[bi + 1]?.name });
+            }
+            if (d < APPROACH_M && !cuedRef.current[i]) {
+              cuedRef.current[i] = true;
+              setApproach(true);
+              Vibration.vibrate([0, 300, 150, 300]);
+            }
+            if (d < (ALIGHT_M[lg.mode] ?? ALIGHT_DEFAULT_M)) return goTo(i + 1);
+          }
+
+          if (st.kind === 'arrive' && d < ARRIVE_M) { setArrived(true); locationSub.current?.remove(); }
+
+          if (followRef.current && mapRef.current) {
+            mapRef.current.animateCamera({ center: me, zoom: NAV_ZOOM }, { duration: 700 });
           }
         },
       );
     })();
-
-    return () => locationSubRef.current?.remove();
+    return () => locationSub.current?.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const endJourney = () => {
-    locationSubRef.current?.remove();
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      navigation.navigate('Home' as never);
-    }
+  // ── After the trip ─────────────────────────────────────────────────────────
+  const endJourney = useCallback(() => {
+    locationSub.current?.remove();
+    if (navigation.canGoBack()) navigation.popToTop(); else navigation.navigate('Main');
+  }, [navigation]);
+
+  const toReport = useCallback((kind: 'route_down' | 'fare_change' | 'stop_moved') => {
+    const lead = legs.find((l) => l.mode !== 'walk');
+    navigation.navigate('Main', {
+      screen: 'Report',
+      params: {
+        kind,
+        origin: result.origin.name,
+        destination: result.destination.name,
+        mode: lead?.mode,
+        fare: lead?.priceMax,
+        corridorId: lead?.corridorId,
+        legFrom: lead?.fromStopId,
+        legTo: lead?.toStopId,
+        tripKey: `${result.origin.name} > ${result.destination.name}`.toLowerCase(),
+      },
+    });
+  }, [legs, navigation, result]);
+
+  // One question, one tap. A "yes" becomes route_ok rows; then one more tap
+  // for the fare on the main ride, if they feel like it.
+  const askIfItWorked = useCallback(() => {
+    if (asked) { endJourney(); return; }
+    setAsked(true);
+    Alert.alert(
+      'Did the route work?',
+      'Your answer fixes the map for the next person.',
+      [
+        {
+          text: 'Yes, e work',
+          onPress: async () => {
+            if (!user) {
+              if (!requireSignIn('help the next rider')) { endJourney(); }
+              return;
+            }
+            confirmRouteWorked(result, option).catch(() => {});
+            const ride = legs.find((l) => l.mode !== 'walk' && l.corridorId);
+            if (ride) { setFareLeg(ride); } else { endJourney(); }
+          },
+        },
+        { text: 'Wrong bus / stop', onPress: () => toReport('route_down') },
+        { text: 'Fare was different', onPress: () => toReport('fare_change') },
+      ],
+      { cancelable: true, onDismiss: endJourney },
+    );
+  }, [asked, endJourney, user, requireSignIn, result, option, legs, toReport]);
+
+  const sendFare = async (amount: number) => {
+    if (!fareLeg) return;
+    const ok = await reportFarePaid(result, fareLeg, amount);
+    setThanks(ok ? 'Thank you — the next rider sees this.' : 'Could not send — no wahala.');
+    setTimeout(endJourney, 1200);
   };
 
-  const legColor = (i: number) =>
-    i < currentLegIndex
-      ? '#bbb'
-      : `${LEG_COLORS[legs[i].mode] ?? Colors.blue}${i === currentLegIndex ? '' : '88'}`;
+  // ── Map pieces ─────────────────────────────────────────────────────────────
+  const target = targetOf(step, legs, dest);
+  const isRide = leg.mode !== 'walk';
+  const cardTint = approach ? WW.orange : step.kind === 'board' ? legColor(WW, leg.mode) : WW.bgSurface;
+  const cardInk = approach || step.kind === 'board' ? (leg.mode === 'brt' || leg.mode === 'rail' ? WW.brtText : WW.textOnOrange) : WW.text;
+  const cardSub = approach || step.kind === 'board' ? cardInk : WW.textSub;
 
   return (
-    <View style={styles.container}>
-      {/* Full-screen MapLibre map */}
-      <MapLibreGL.MapView
-        style={StyleSheet.absoluteFill}
-        styleURL={MAPTILER_DARK_STYLE}
-        logoEnabled={false}
-        attributionEnabled={false}
-        compassEnabled
-        onPress={() => { collapseSheet(); setIsTracking(false); }}
-      >
-        <MapLibreGL.Camera
-          ref={cameraRef}
-          defaultSettings={{
-            centerCoordinate: [legs[0]?.from.longitude ?? 3.3792, legs[0]?.from.latitude ?? 6.5244],
-            zoomLevel: 13,
-          }}
-        />
-
-        {/* Route polylines — rendered after ORS responds */}
-        {geometriesLoaded && legs.map((leg, i) => {
-          const coords = legGeometries[i];
-          if (!coords || coords.length < 2) return null;
-          const isCurrent = i === currentLegIndex;
-          const isPast    = i < currentLegIndex;
-          const color     = isPast ? '#555555' : (LEG_COLORS[leg.mode] ?? Colors.blue);
-
-          const geoJson: GeoJSON.Feature<GeoJSON.LineString> = {
-            type:       'Feature',
-            properties: {},
-            geometry:   {
-              type:        'LineString',
-              coordinates: coords.map(c => [c.longitude, c.latitude]),
-            },
-          };
-
-          return (
-            <React.Fragment key={`route-${i}`}>
-              {/* White casing for the active leg */}
-              {isCurrent && (
-                <MapLibreGL.ShapeSource id={`route-casing-src-${i}`} shape={geoJson}>
-                  <MapLibreGL.LineLayer
-                    id={`route-casing-${i}`}
-                    style={{ lineColor: '#FFFFFF', lineWidth: 12, lineCap: 'round', lineJoin: 'round' }}
-                  />
-                </MapLibreGL.ShapeSource>
-              )}
-              <MapLibreGL.ShapeSource id={`route-src-${i}`} shape={geoJson}>
-                <MapLibreGL.LineLayer
-                  id={`route-line-${i}`}
-                  style={{
-                    lineColor: color,
-                    lineWidth: isCurrent ? 7 : 4,
-                    lineCap:   'round',
-                    lineJoin:  'round',
-                  }}
-                />
-              </MapLibreGL.ShapeSource>
-            </React.Fragment>
-          );
-        })}
-
-        {/* Waypoint dots */}
-        {legs.map((leg, i) => {
-          const isCurrent = i === currentLegIndex;
-          const isFinal   = i === legs.length - 1;
-          return (
-            <MapLibreGL.PointAnnotation
-              key={`wp-${i}`}
-              id={`wp-${i}`}
-              coordinate={[leg.to.longitude, leg.to.latitude]}
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
-              <View style={[
-                styles.waypointDot,
-                isFinal   && styles.waypointFinal,
-                isCurrent && !isFinal && styles.waypointCurrent,
-              ]} />
-            </MapLibreGL.PointAnnotation>
-          );
-        })}
-
-        {/* User location dot */}
-        {userCoords && (
-          <MapLibreGL.PointAnnotation
-            id="user-loc"
-            coordinate={[userCoords.longitude, userCoords.latitude]}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <View style={styles.userOuter}>
-              <View style={styles.userPulseStatic} />
-              <View style={styles.userDot} />
-            </View>
-          </MapLibreGL.PointAnnotation>
-        )}
-      </MapLibreGL.MapView>
-
-      {/* Route loading indicator */}
-      {!geometriesLoaded && (
-        <View style={styles.routeLoadingBadge}>
-          <ActivityIndicator size="small" color="#fff" />
-          <Text style={styles.routeLoadingText}>Loading road route…</Text>
+    <View style={s.root}>
+      {/* ── Header ───────────────────────────────────────────────────────── */}
+      <View style={[s.header, { paddingTop: insets.top + Space.xs }]}>
+        <Pressable onPress={askIfItWorked} accessibilityRole="button" accessibilityLabel="End journey" style={s.headerBtn}>
+          <Ionicons name="close" size={22} color={WW.text} />
+        </Pressable>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={s.headerEyebrow}>WAKAWAY MODE</Text>
+          <Text style={s.headerSub} numberOfLines={1}>{result.destination.name} · about {formatETA(remainingMins)}</Text>
         </View>
-      )}
-
-      {/* Live incident banner */}
-      {liveDecision !== 'none' && !incidentDismissed && (
-        <View style={[
-          styles.incidentBanner,
-          { top: insets.top + 8, borderLeftColor: incidentColor(liveDecision), backgroundColor: incidentColor(liveDecision) + '22' },
-        ]}>
-          <Text style={styles.incidentBannerIcon}>
-            {liveDecision === 'auto' ? '🚨' : liveDecision === 'suggest' ? '⚠️' : 'ℹ️'}
-          </Text>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.incidentBannerTitle, { color: incidentColor(liveDecision) }]}>
-              {liveDecision === 'auto' ? 'Rerouting around traffic...' :
-               liveDecision === 'suggest' ? 'Congestion ahead' : 'Incident near route'}
-            </Text>
-            <Text style={styles.incidentBannerSub} numberOfLines={1}>
-              {incidentSummaryText(liveIncidents)}
-            </Text>
-          </View>
-          {liveDecision === 'suggest' && (
-            <TouchableOpacity
-              style={[styles.incidentRerouteBtn, { backgroundColor: incidentColor(liveDecision) }]}
-              onPress={() => doLiveReroute(liveIncidents)}
-              disabled={reroutingLive}
-            >
-              {reroutingLive
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={styles.incidentRerouteTxt}>Avoid</Text>}
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={() => setIncidentDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="close" size={16} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Top: back button + instruction card */}
-      <View style={[styles.topArea, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={endJourney}>
-          <Ionicons name="arrow-back" size={20} color="#fff" />
-        </TouchableOpacity>
-
-        {!arrived && currentLeg && (
-          <View style={styles.instructionCard}>
-            <View style={styles.instructionTop}>
-              <View style={[styles.turnArrow, { backgroundColor: LEG_COLORS[currentLeg.mode] ?? Colors.blue }]}>
-                <Ionicons name={turnIcon(currentLeg.instruction).name as any} size={26} color="#fff" />
-              </View>
-              <View style={styles.distBlock}>
-                {distanceToNext != null && (
-                  <Text style={styles.distText}>{formatDist(distanceToNext)}</Text>
-                )}
-                <Text style={styles.instructionText} numberOfLines={2}>
-                  {currentLeg.instruction}
-                </Text>
-              </View>
-            </View>
-
-            {nextLeg && (
-              <View style={styles.nextRow}>
-                <Ionicons name={turnIcon(nextLeg.instruction).name as any} size={13} color="rgba(255,255,255,0.6)" />
-                <Text style={styles.nextText} numberOfLines={1}>
-                  Then: {nextLeg.instruction}
-                </Text>
-                <Text style={styles.nextStep}>
-                  Step {currentLegIndex + 2}/{legs.length}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+        <Text style={s.headerCount}>{Math.min(stepIdx + 1, lastStep)}/{lastStep}</Text>
       </View>
 
-      {/* Arrived overlay */}
-      {arrived && (
-        <View style={styles.arrivedOverlay}>
-          <View style={styles.arrivedCard}>
-            <Ionicons name="checkmark-circle" size={64} color={Colors.blue} />
-            <Text style={styles.arrivedTitle}>You've arrived!</Text>
-            <Text style={styles.arrivedSub}>{destinationName}</Text>
-            <TouchableOpacity style={styles.doneBtn} onPress={endJourney}>
-              <Text style={styles.doneBtnText}>Done</Text>
-            </TouchableOpacity>
+      {/* ── The instruction ──────────────────────────────────────────────── */}
+      {!arrived && (
+        <View style={[s.card, { backgroundColor: cardTint }]}>
+          <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+            <Text style={[s.cardEyebrow, { color: cardSub }]}>
+              {approach ? 'GET READY' : step.kind === 'board' ? 'NOW' : step.kind === 'alight' ? 'STAY ON UNTIL' : 'NEXT'}
+              {distToTarget != null && !approach ? ` · ${formatMeters(distToTarget)}` : ''}
+            </Text>
+            <Text style={[s.cardTitle, { color: cardInk }]}>
+              {approach ? `${leg.to.name} is next — get ready to get down` : step.title}
+            </Text>
+            {approach && (leg.mode === 'danfo' || leg.mode === 'keke') && (
+              <Text style={[s.cardLine, s.cardStrong, { color: cardInk }]}>Say "O wa!" so the driver stops</Text>
+            )}
+            {!approach && !!step.detail && <Text style={[s.cardLine, { color: cardSub }]}>{step.detail}</Text>}
+            {step.kind === 'alight' && stopsToGo && stopsToGo.n > 0 && (
+              <Text style={[s.cardLine, s.cardStrong, { color: cardInk }]}>
+                {stopsToGo.n} stop{stopsToGo.n === 1 ? '' : 's'} to go{stopsToGo.next ? ` · next is ${stopsToGo.next}` : ''}
+              </Text>
+            )}
+            {!approach && !!step.boardAt && <Text style={[s.cardLine, { color: cardSub }]}>{step.boardAt}</Text>}
+            {!approach && !!step.lookFor && <Text style={[s.cardLine, { color: cardSub }]}>Look for: {step.lookFor}</Text>}
+            {!approach && !!step.listenFor && <Text style={[s.cardLine, s.cardStrong, { color: cardInk }]}>Listen for "{step.listenFor}!"</Text>}
+            {!approach && !!step.say && step.kind === 'board' && <Text style={[s.cardLine, s.cardStrong, { color: cardInk }]}>Tell the conductor: {step.say}</Text>}
+            {!approach && !!step.note && <Text style={[s.cardLine, { color: cardSub }]}>{step.note}</Text>}
+            {step.kind === 'board' && step.fare && step.fare.max > 0 && (
+              <Text style={[s.cardLine, { color: cardSub }]}>
+                Fare about ₦{step.fare.min === step.fare.max ? step.fare.max : `${step.fare.min}–${step.fare.max}`}{step.fare.source === 'band' ? ' (estimate)' : ''}
+              </Text>
+            )}
+            {locationDenied && <Text style={[s.cardLine, { color: cardSub }]}>Location is off — tap the button below as you complete each step.</Text>}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* ── Map — bearings, not the star ─────────────────────────────────── */}
+      <View style={s.mapWrap}>
+        <MapView
+          ref={mapRef}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+          style={StyleSheet.absoluteFill}
+          customMapStyle={GOOGLE_MAPS_DARK_STYLE as any}
+          initialRegion={{ latitude: legs[0].from.latitude, longitude: legs[0].from.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 }}
+          onPanDrag={() => { followRef.current = false; }}
+          showsUserLocation={false}
+          showsCompass
+        >
+          {geometries.map((coords, i) => {
+            const cur = i === step.legIndex;
+            const past = i < step.legIndex;
+            return (
+              <React.Fragment key={`g-${i}`}>
+                {cur && <Polyline coordinates={coords} strokeColor="#FFFFFF" strokeWidth={10} lineCap="round" lineJoin="round" />}
+                <Polyline coordinates={coords} strokeColor={past ? WW.textMuted : legColor(WW, legs[i].mode)} strokeWidth={cur ? 6 : 3} lineCap="round" lineJoin="round" />
+              </React.Fragment>
+            );
+          })}
+          {legs.map((l, i) => (
+            <Marker key={`stop-${i}`} coordinate={{ latitude: l.to.latitude, longitude: l.to.longitude }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+              <View style={[s.stopDot, i === legs.length - 1 && s.stopDotFinal, i === step.legIndex && s.stopDotCurrent]} />
+            </Marker>
+          ))}
+          <Marker coordinate={target} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+            <View style={s.targetRing}><View style={s.targetDot} /></View>
+          </Marker>
+          {userCoords && (
+            <Marker coordinate={userCoords} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+              <View style={s.userOuter}><View style={s.userDot} /></View>
+            </Marker>
+          )}
+        </MapView>
+        <Pressable
+          onPress={() => { followRef.current = true; if (userCoords) mapRef.current?.animateCamera({ center: userCoords, zoom: NAV_ZOOM }, { duration: 500 }); }}
+          accessibilityRole="button"
+          accessibilityLabel="Centre the map on me"
+          style={s.recenter}
+        >
+          <Ionicons name="navigate" size={18} color={WW.text} />
+        </Pressable>
+      </View>
+
+      {/* ── Then · controls ──────────────────────────────────────────────── */}
+      {!arrived && (
+        <View style={[s.bottom, { paddingBottom: Math.max(insets.bottom, Space.md) }]}>
+          {nextStep && nextStep.kind !== 'arrive' && (
+            <View style={s.thenRow}>
+              <Text style={s.thenEyebrow}>THEN</Text>
+              <Text style={s.thenText} numberOfLines={1}>{nextStep.title}</Text>
+            </View>
+          )}
+          <View style={s.controls}>
+            <Pressable onPress={back} disabled={stepIdx === 0} accessibilityRole="button" accessibilityLabel="Previous step" style={[s.roundBtn, stepIdx === 0 && { opacity: 0.35 }]}>
+              <Ionicons name="chevron-back" size={20} color={WW.text} />
+            </Pressable>
+            <Pressable onPress={advance} accessibilityRole="button" accessibilityLabel={doneLabel(step)} style={s.doneBtn}>
+              <Text style={s.doneText}>{doneLabel(step)}</Text>
+              <Ionicons name="chevron-forward" size={18} color={WW.textOnOrange} />
+            </Pressable>
           </View>
         </View>
       )}
 
-      {/* Bottom sheet */}
-      {!arrived && (
-        <Animated.View
-          style={[
-            styles.bottomBar,
-            {
-              paddingBottom: insets.bottom + 8,
-              transform: [{ translateY: sheetY }],
-            },
-          ]}
-          onLayout={(e) => { sheetHeightRef.current = e.nativeEvent.layout.height; }}
-        >
-          <View {...sheetPan.panHandlers} style={styles.dragHandleArea}>
-            <View style={styles.dragPill} />
-          </View>
-
-          <View style={styles.bottomContent}>
-            <View style={styles.speedPill}>
-              <Text style={styles.speedNum}>{speedKmh}</Text>
-              <Text style={styles.speedUnit}>km/h</Text>
+      {/* ── Arrived — and the last few hundred metres ────────────────────── */}
+      {arrived && (
+        <View style={[s.arrived, { paddingBottom: Math.max(insets.bottom, Space.lg) }]}>
+          <View style={s.arrivedDot}><Ionicons name="checkmark" size={34} color={WW.textOnGreen} /></View>
+          <Text style={s.arrivedTitle}>You made it</Text>
+          <Text style={s.arrivedSub}>{result.destination.name}</Text>
+          {userCoords && haversineM(userCoords, dest) > ARRIVE_M && (
+            <Text style={s.arrivedLine}>
+              {isRide ? `Your stop was ${leg.to.name}. ` : ''}{result.destination.name} is about {formatMeters(haversineM(userCoords, dest))} to the {bearingWord(userCoords, dest)}.
+            </Text>
+          )}
+          {!fareLeg && !thanks && (
+            <Pressable onPress={askIfItWorked} accessibilityRole="button" style={s.doneBtnWide}>
+              <Text style={s.doneText}>Done</Text>
+            </Pressable>
+          )}
+          {fareLeg && !thanks && (
+            <View style={s.fareAsk}>
+              <Text style={s.fareAskTitle}>How much did you pay for the {vehicleWord(fareLeg.mode)} to {fareLeg.to.name}?</Text>
+              <View style={s.chips}>
+                {fareChoices(fareLeg).map((v) => (
+                  <Pressable key={v} onPress={() => sendFare(v)} accessibilityRole="button" accessibilityLabel={`I paid ${v} naira`} style={s.chip}>
+                    <Text style={s.chipText}>₦{v}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable onPress={endJourney} accessibilityRole="button" style={s.skip}><Text style={s.skipText}>Skip</Text></Pressable>
             </View>
-
-            <View style={styles.bottomLeft}>
-              <Text style={styles.bottomDest} numberOfLines={1}>{destinationName}</Text>
-              <Text style={styles.bottomTime}>
-                {remainingMins} min · ETA {formatETA(remainingMins)}
-              </Text>
-            </View>
-
-            <View style={styles.bottomActions}>
-              {(!isTracking || navMode === 'overview') && (
-                <TouchableOpacity
-                  style={styles.recenterBtn}
-                  onPress={() => { setIsTracking(true); setNavMode('tracking'); }}
-                >
-                  <Ionicons name="navigate" size={18} color="#fff" />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.endBtn} onPress={endJourney}>
-                <Text style={styles.endBtnText}>End</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Animated.View>
+          )}
+          {!!thanks && <Text style={s.arrivedLine}>{thanks}</Text>}
+        </View>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.mapBackground },
-  topArea: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center', alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  instructionCard: {
-    borderRadius: 20,
-    backgroundColor: 'rgba(15,17,23,0.96)',
-    padding: 16,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.45, shadowRadius: 14 },
-      android: { elevation: 12 },
-    }),
-  },
-  instructionTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  turnArrow: {
-    width: 56, height: 56, borderRadius: 16,
-    justifyContent: 'center', alignItems: 'center',
-    flexShrink: 0,
-  },
-  distBlock: { flex: 1, gap: 2 },
-  distText: { color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  instructionText: { color: 'rgba(255,255,255,0.85)', fontSize: Typography.md, fontWeight: '500', flex: 1 },
-  nextRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-  },
-  nextText: { color: 'rgba(255,255,255,0.55)', fontSize: Typography.sm, flex: 1 },
-  nextStep: { color: 'rgba(255,255,255,0.3)', fontSize: 11 },
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: WW.bg },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Space.md, paddingBottom: Space.sm, gap: Space.sm },
+    headerBtn: { width: HIT, height: HIT, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.pill, backgroundColor: WW.bgElevated },
+    headerEyebrow: { fontFamily: Fonts.extrabold, fontSize: Typography.xs, letterSpacing: Tracking.eyebrow, color: WW.orange },
+    headerSub: { fontFamily: Fonts.medium, fontSize: Typography.sm, color: WW.textSub, marginTop: 2 },
+    headerCount: { width: HIT, textAlign: 'right', fontFamily: Fonts.bold, fontSize: Typography.sm, color: WW.textMuted },
 
-  waypointDot: {
-    width: 12, height: 12, borderRadius: 6,
-    backgroundColor: '#999', borderWidth: 2, borderColor: '#fff',
-  },
-  waypointCurrent: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#FF6B00' },
-  waypointFinal:   { width: 22, height: 22, borderRadius: 11, backgroundColor: '#EF4444' },
+    card: {
+      marginHorizontal: Space.md, borderRadius: Radius.xl, padding: Space.lg,
+      minHeight: 168, maxHeight: '42%',
+    },
+    cardEyebrow: { fontFamily: Fonts.extrabold, fontSize: Typography.xs, letterSpacing: Tracking.eyebrow },
+    cardTitle: { fontFamily: Fonts.extrabold, fontSize: 26, lineHeight: 31, letterSpacing: -0.3 },
+    cardLine: { fontFamily: Fonts.regular, fontSize: Typography.md, lineHeight: Typography.md * 1.4 },
+    cardStrong: { fontFamily: Fonts.bold },
 
-  userOuter: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
-  userPulseStatic: {
-    position: 'absolute', width: 28, height: 28, borderRadius: 14,
-    backgroundColor: Colors.blueLight, opacity: 0.45,
-  },
-  userDot: {
-    width: 14, height: 14, borderRadius: 7,
-    backgroundColor: Colors.blue, borderWidth: 3, borderColor: '#fff',
-  },
+    mapWrap: { flex: 1, marginTop: Space.md, overflow: 'hidden' },
+    recenter: {
+      position: 'absolute', right: Space.md, bottom: Space.md, width: HIT, height: HIT, borderRadius: Radius.pill,
+      backgroundColor: WW.bgElevated, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: WW.border,
+    },
+    stopDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: WW.textMuted, borderWidth: 2, borderColor: WW.bg },
+    stopDotCurrent: { width: 16, height: 16, borderRadius: 8, backgroundColor: WW.orange },
+    stopDotFinal: { width: 18, height: 18, borderRadius: 9, backgroundColor: WW.green },
+    targetRing: { width: 28, height: 28, borderRadius: 14, borderWidth: 3, borderColor: WW.orange, alignItems: 'center', justifyContent: 'center' },
+    targetDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: WW.orange },
+    userOuter: { width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+    userDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: WW.bg },
 
-  bottomBar: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: Colors.sheetBg,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    borderTopWidth: 1, borderColor: Colors.border,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.3, shadowRadius: 12 },
-      android: { elevation: 14 },
-    }),
-  },
-  dragHandleArea: {
-    width: '100%', paddingVertical: 10,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  dragPill: { width: 36, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.15)' },
-  bottomContent: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 4, gap: 12,
-  },
-  speedPill: {
-    width: 60, height: 60, borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center', alignItems: 'center',
-    flexShrink: 0,
-  },
-  speedNum: { color: '#fff', fontSize: 20, fontWeight: '800', lineHeight: 22 },
-  speedUnit: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '600' },
-  bottomLeft: { flex: 1 },
-  bottomDest: { fontSize: Typography.lg, fontWeight: Typography.bold, color: Colors.textPrimary },
-  bottomTime: { fontSize: Typography.sm, marginTop: 2, color: Colors.textSecondary },
-  bottomActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  recenterBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Colors.blue,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  endBtn: {
-    borderWidth: 1.5, borderRadius: 10, borderColor: '#EF4444',
-    paddingHorizontal: 14, paddingVertical: 8,
-  },
-  endBtnText: { fontWeight: Typography.bold, fontSize: Typography.md, color: '#EF4444' },
+    bottom: { paddingHorizontal: Space.md, paddingTop: Space.sm, gap: Space.sm, backgroundColor: WW.bg },
+    thenRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingHorizontal: 4 },
+    thenEyebrow: { fontFamily: Fonts.extrabold, fontSize: Typography.xs, letterSpacing: Tracking.eyebrow, color: WW.textMuted },
+    thenText: { flex: 1, fontFamily: Fonts.semibold, fontSize: Typography.sm, color: WW.textSub },
+    controls: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+    roundBtn: { width: 52, height: 52, borderRadius: Radius.pill, backgroundColor: WW.bgElevated, alignItems: 'center', justifyContent: 'center' },
+    doneBtn: {
+      flex: 1, height: 52, borderRadius: Radius.pill, backgroundColor: WW.orange,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    },
+    doneBtnWide: { height: 52, borderRadius: Radius.pill, backgroundColor: WW.orange, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', marginTop: Space.md },
+    doneText: { fontFamily: Fonts.extrabold, fontSize: Typography.lg, color: WW.textOnOrange },
 
-  arrivedOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.scrim,
-    justifyContent: 'center', alignItems: 'center',
-    padding: 24,
-  },
-  arrivedCard: {
-    width: '100%', borderRadius: 20,
-    backgroundColor: Colors.sheetBg,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: 32, alignItems: 'center', gap: 16,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 20 },
-      android: { elevation: 12 },
-    }),
-  },
-  arrivedTitle: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: Colors.textPrimary },
-  arrivedSub: { fontSize: Typography.lg, textAlign: 'center', color: Colors.textSecondary },
-  doneBtn: {
-    paddingHorizontal: 40, paddingVertical: 14,
-    borderRadius: 30, marginTop: 8, backgroundColor: Colors.blue,
-  },
-  doneBtnText: { color: '#fff', fontWeight: Typography.bold, fontSize: Typography.lg },
-
-  routeLoadingBadge: {
-    position: 'absolute', bottom: 130, alignSelf: 'center',
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-  },
-  routeLoadingText: { color: '#fff', fontSize: 13, fontWeight: '500' },
-
-  incidentBanner: {
-    position: 'absolute', left: 12, right: 12,
-    borderRadius: 12, borderLeftWidth: 4,
-    padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10,
-    zIndex: 20,
-    ...Platform.select({
-      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 },
-      android: { elevation: 10 },
-    }),
-  },
-  incidentBannerIcon:  { fontSize: 18 },
-  incidentBannerTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
-  incidentBannerSub:   { fontSize: 11, color: Colors.textSecondary },
-  incidentRerouteBtn:  { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, minWidth: 54, alignItems: 'center' },
-  incidentRerouteTxt:  { color: '#fff', fontSize: 12, fontWeight: '700' },
-});
+    arrived: { paddingHorizontal: Space.lg, paddingTop: Space.lg, alignItems: 'center', gap: Space.sm, backgroundColor: WW.bg },
+    arrivedDot: { width: 64, height: 64, borderRadius: 32, backgroundColor: WW.green, alignItems: 'center', justifyContent: 'center' },
+    arrivedTitle: { fontFamily: Fonts.extrabold, fontSize: 28, color: WW.text },
+    arrivedSub: { fontFamily: Fonts.semibold, fontSize: Typography.lg, color: WW.textSub },
+    arrivedLine: { fontFamily: Fonts.regular, fontSize: Typography.md, color: WW.textSub, textAlign: 'center', lineHeight: Typography.md * 1.4 },
+    fareAsk: { alignSelf: 'stretch', gap: Space.sm, marginTop: Space.sm },
+    fareAskTitle: { fontFamily: Fonts.bold, fontSize: Typography.md, color: WW.text, textAlign: 'center' },
+    chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Space.sm },
+    chip: { paddingHorizontal: 18, height: 44, borderRadius: Radius.pill, backgroundColor: WW.bgElevated, borderWidth: 1, borderColor: WW.borderStrong, alignItems: 'center', justifyContent: 'center' },
+    chipText: { fontFamily: Fonts.bold, fontSize: Typography.md, color: WW.text },
+    skip: { alignSelf: 'center', padding: Space.sm },
+    skipText: { fontFamily: Fonts.semibold, fontSize: Typography.sm, color: WW.textMuted },
+  });
+}

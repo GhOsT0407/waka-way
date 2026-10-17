@@ -1,868 +1,182 @@
-import React, { useEffect, useState, useRef } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    TouchableOpacity,
-    Dimensions,
-    Platform,
-    Animated,
-    ActivityIndicator,
-} from 'react-native';
-import { PanGestureHandler, State as GestureState } from 'react-native-gesture-handler';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Share } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { WakaWayMapView } from '../components/map/MapView';
-import { RouteStepCard } from '../components/RouteStepCard';
-import { FareEstimateCard } from '../components/FareEstimateCard';
-import { SmartRouteOptions } from '../components/SmartRouteOptions';
+import { JourneyExplainer, type RouteAlert } from '../components/journey/JourneyExplainer';
+import { explainJourney } from '../services/explainJourney';
+import { fetchCorridorSignals, type SignalMap } from '../services/signals';
+import { useLiveAlerts, alertsAlongRoute, voteOnAlert } from '../hooks/useLiveAlerts';
+import { useRequireSignIn } from '../hooks/useRequireSignIn';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZES } from '../utils/constants';
-import { getRoute } from '../services/api';
-import type { TransportMode } from '../types/routing';
-import { SmartRouteResult, RouteOption } from '../services/smartRoutingService';
+import { useToast } from '../context/ToastContext';
+import type { WWColors } from '../theme/colors';
+import { Fonts, Typography, Tracking } from '../theme/typography';
+import { Space, Radius, HIT } from '../theme/spacing';
+import type { SmartRouteResult, RouteOption } from '../services/smartRoutingService';
 import { addRouteHistory, saveRoute, deleteSavedRoute, getSavedRoutes } from '../services/supabaseDataService';
-import {
-  getActiveIncidents,
-  getIncidentsOnRoute,
-  getRerouteDecision,
-  incidentSummaryText,
-  incidentColor,
-  ScoredIncident,
-  RerouteDecision,
-} from '../services/incidentService';
-import { searchRoutes } from '../services/api';
+import { PREF_KEYS, getFlag } from '../utils/prefs';
 
-const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// Bottom sheet snap points
-const SNAP_POINTS = {
-    COLLAPSED: SCREEN_HEIGHT * 0.25,  // Show 25% of sheet (minimal peek for map view)
-    HALF: SCREEN_HEIGHT * 0.5,        // Show 50% of sheet
-    EXPANDED: SCREEN_HEIGHT * 0.85,   // Show 85% of sheet (almost full, leave room for status bar)
-};
+// The route screen is the answer to "how do I get there?": the journey,
+// explained (components/journey/JourneyExplainer), with what riders have
+// said about its fares and what is happening on it right now folded in.
+// One yellow button starts Wakaway Mode.
 
 export default function RouteDetailScreen({ route, navigation }: any) {
-    const { theme, isDark } = useAppTheme();
-    const { user } = useAuth();
-    const { routeId, routeData, smartRouteData } = route.params || {};
-    const [activeRoute, setActiveRoute] = useState<any>(routeData || null);
-    const [smartRoute, setSmartRoute] = useState<SmartRouteResult | null>(smartRouteData || null);
-    const [selectedOption, setSelectedOption] = useState<RouteOption | null>(null);
-    const [isSaved, setIsSaved] = useState(false);
-    const [savedRouteId, setSavedRouteId] = useState<string | null>(null);
-    const [showSmartOptions, setShowSmartOptions] = useState(true);
-    const [selectedTransportMode, setSelectedTransportMode] = useState<TransportMode | undefined>(undefined);
-    const [isRaining, setIsRaining] = useState(false);
-    const [isFuelScarce, setIsFuelScarce] = useState(false);
-    const [canScroll, setCanScroll] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { WW, isDark } = useAppTheme();
+  const { user } = useAuth();
+  const { showError } = useToast();
+  const requireSignIn = useRequireSignIn();
+  const s = useMemo(() => makeStyles(WW), [WW]);
 
-    // Incident intelligence
-    const [routeIncidents, setRouteIncidents]   = useState<ScoredIncident[]>([]);
-    const [rerouteDecision, setRerouteDecision] = useState<RerouteDecision>('none');
-    const [incidentDismissed, setIncidentDismissed] = useState(false);
-    const [reroutingActive, setReroutingActive] = useState(false);
+  const result: SmartRouteResult = route.params.result;
+  const [selectedId, setSelectedId] = useState<string>(result.recommendedOptionId);
+  const [signals, setSignals] = useState<SignalMap>({});
+  const [newcomer, setNewcomer] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savedRouteId, setSavedRouteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-    // Bottom sheet animation
-    const sheetHeight = useRef(new Animated.Value(SNAP_POINTS.COLLAPSED)).current;
-    const currentSnapPoint = useRef(SNAP_POINTS.COLLAPSED);
-    const scrollRef = useRef<ScrollView>(null);
+  const current: RouteOption = result.options.find((o) => o.id === selectedId) ?? result.options[0];
+  const originName = result.origin.name;
+  const destName = result.destination.name;
 
-    const dragBaseRef = useRef(SNAP_POINTS.COLLAPSED);
+  // What riders reported on every corridor this trip could use.
+  useEffect(() => {
+    const ids = result.options.flatMap((o) => o.legs.map((l) => l.corridorId).filter(Boolean) as string[]);
+    fetchCorridorSignals(ids).then(setSignals).catch(() => {});
+    getFlag(PREF_KEYS.newcomer).then(setNewcomer);
+  }, [result]);
 
-    const snapTo = (target: number) => {
-        currentSnapPoint.current = target;
-        setCanScroll(target === SNAP_POINTS.EXPANDED);
-        Animated.spring(sheetHeight, {
-            toValue: target,
-            friction: 8,
-            tension: 50,
-            useNativeDriver: false,
-        }).start();
-    };
+  // Live reports, scoped to the option on screen.
+  const { alerts: liveAlerts, refetch: refetchAlerts } = useLiveAlerts({ realtime: true });
+  const routeAlerts: RouteAlert[] = useMemo(() => alertsAlongRoute(liveAlerts, current), [liveAlerts, current]);
 
-    const onSheetGestureEvent = ({ nativeEvent }: any) => {
-        const next = Math.max(
-            SNAP_POINTS.COLLAPSED,
-            Math.min(SNAP_POINTS.EXPANDED, dragBaseRef.current - nativeEvent.translationY)
-        );
-        sheetHeight.setValue(next);
-    };
+  useEffect(() => {
+    if (!user) return;
+    getSavedRoutes(user.id).then((saved) => {
+      const match = saved.find((r) => r.origin_name === originName && r.destination_name === destName);
+      if (match) { setIsSaved(true); setSavedRouteId(match.id); }
+    }).catch(() => {});
+  }, [user, originName, destName]);
 
-    const onSheetHandlerStateChange = ({ nativeEvent }: any) => {
-        if (nativeEvent.state === GestureState.BEGAN) {
-            sheetHeight.stopAnimation();
-            dragBaseRef.current = currentSnapPoint.current;
-        }
-        if (nativeEvent.oldState === GestureState.ACTIVE) {
-            const vy  = nativeEvent.velocityY;
-            const cur = dragBaseRef.current - nativeEvent.translationY;
-            if (vy < -500) {
-                snapTo(SNAP_POINTS.EXPANDED);
-            } else if (vy > 500) {
-                snapTo(SNAP_POINTS.COLLAPSED);
-            } else {
-                const pts = [SNAP_POINTS.COLLAPSED, SNAP_POINTS.HALF, SNAP_POINTS.EXPANDED];
-                snapTo(pts.reduce((a, b) => Math.abs(cur - a) < Math.abs(cur - b) ? a : b));
-            }
-        }
-    };
-
-    useEffect(() => {
-        if (!activeRoute && routeId) {
-            loadRoute(routeId);
-        } else if (activeRoute) {
-            checkIfSaved();
-            checkRouteIncidents();
-            // Start in COLLAPSED so the map is visible; user swipes up to expand
-            Animated.spring(sheetHeight, {
-                toValue: SNAP_POINTS.COLLAPSED,
-                friction: 8,
-                tension: 50,
-                useNativeDriver: false,
-            }).start();
-            currentSnapPoint.current = SNAP_POINTS.COLLAPSED;
-            setCanScroll(false);
-        }
-    }, [routeId, activeRoute]);
-
-    const checkRouteIncidents = async () => {
-        const option =
-            smartRoute?.options.find((o) => o.id === smartRoute.recommendedOptionId) ??
-            smartRoute?.options[0];
-        if (!option) return;
-        const all = await getActiveIncidents();
-        const onRoute = getIncidentsOnRoute(option.legs, all);
-        setRouteIncidents(onRoute);
-        setRerouteDecision(getRerouteDecision(onRoute));
-    };
-
-    const handleReroute = async () => {
-        const option =
-            smartRoute?.options.find((o) => o.id === smartRoute.recommendedOptionId) ??
-            smartRoute?.options[0];
-        if (!option || routeIncidents.length === 0) return;
-        setReroutingActive(true);
-        try {
-            const avoidPoints = routeIncidents.map((i) => ({
-                latitude:  i.latitude,
-                longitude: i.longitude,
-                radiusKm:  i.avoidRadiusKm,
-            }));
-            const result = await searchRoutes({
-                origin:      activeRoute.origin_coords,
-                destination: activeRoute.destination_coords,
-                destinationName: activeRoute.destination,
-                avoidPoints,
-            });
-            if (result?.smartRoute) {
-                setSmartRoute(result.smartRoute);
-                setActiveRoute((prev: any) => ({ ...prev, ...result.legacyRoute }));
-                setRouteIncidents([]);
-                setRerouteDecision('none');
-                setIncidentDismissed(false);
-            }
-        } catch {}
-        setReroutingActive(false);
-    };
-
-    // Expand sheet to full height
-    const expandSheet = () => {
-        currentSnapPoint.current = SNAP_POINTS.EXPANDED;
-        setCanScroll(true);
-        Animated.spring(sheetHeight, {
-            toValue: SNAP_POINTS.EXPANDED,
-            friction: 8,
-            tension: 50,
-            useNativeDriver: false,
-        }).start();
-    };
-
-    // Collapse sheet to minimum
-    const collapseSheet = () => {
-        currentSnapPoint.current = SNAP_POINTS.COLLAPSED;
-        setCanScroll(false);
-        Animated.spring(sheetHeight, {
-            toValue: SNAP_POINTS.COLLAPSED,
-            friction: 8,
-            tension: 50,
-            useNativeDriver: false,
-        }).start();
-    };
-
-    const loadRoute = async (id: number) => {
-        try {
-            const data = await getRoute(id);
-            setActiveRoute(data);
-        } catch (e) {
-            console.error('Error loading route', e);
-        }
-    };
-
-    const checkIfSaved = async () => {
-        if (!user) return;
-        try {
-            const saved = await getSavedRoutes(user.id);
-            const match = saved.find(
-                (s) =>
-                    s.origin_name === (activeRoute?.origin ?? smartRoute?.origin.name) &&
-                    s.destination_name === (activeRoute?.destination ?? smartRoute?.destination.name)
-            );
-            if (match) { setIsSaved(true); setSavedRouteId(match.id); }
-        } catch {}
-    };
-
-    const saveJourney = async () => {
-        if (!user || !activeRoute) return;
-        try {
-            if (!isSaved) {
-                const saved = await saveRoute(user.id, activeRoute, smartRoute, selectedOption);
-                if (saved) { setIsSaved(true); setSavedRouteId(saved.id); }
-            } else if (savedRouteId) {
-                await deleteSavedRoute(savedRouteId);
-                setIsSaved(false);
-                setSavedRouteId(null);
-            }
-        } catch {}
-    };
-
-    const handleTransportModeSelect = (mode: TransportMode) => {
-        setSelectedTransportMode(mode);
-    };
-
-    const applyRouteOptionToActiveRoute = (option: RouteOption) => {
-        setSelectedOption(option);
-        setActiveRoute((prev: any) => ({
-            ...prev,
-            total_duration_mins: option.totalDurationMins,
-            total_distance_km: option.totalDistanceKm,
-            total_fare: option.totalPriceMax,
-            segments: option.legs.map((leg, index) => ({
-                id: index + 1,
-                mode: leg.mode.toUpperCase(),
-                instruction: leg.instruction,
-                duration_mins: leg.durationMins,
-                distance_km: leg.distanceKm,
-                fare: leg.priceMax,
-                from_stop: leg.from.name,
-                to_stop: leg.to.name,
-            })),
-        }));
-    };
-
-    const startJourney = async (option?: RouteOption) => {
-        const optionToStart = option
-            || selectedOption
-            || smartRoute?.options.find((o) => o.id === smartRoute.recommendedOptionId)
-            || smartRoute?.options[0]
-            || null;
-
-        if (optionToStart) {
-            applyRouteOptionToActiveRoute(optionToStart);
-        }
-
-        // Auto-save to route history
-        if (user && activeRoute) {
-            addRouteHistory(user.id, activeRoute, smartRoute, optionToStart).catch(() => {});
-        }
-
-        if (optionToStart) {
-            navigation.navigate('Navigation', {
-                option: optionToStart,
-                destinationName: smartRoute?.destination.name ?? activeRoute?.destination ?? 'Destination',
-            });
-        }
-    };
-
-    if (!activeRoute) {
-        return (
-            <View style={styles.loadingContainer}>
-                <Text>Loading route...</Text>
-            </View>
-        );
+  const toggleSave = async () => {
+    if (!requireSignIn('save this route') || !user || saving) return;
+    setSaving(true);
+    try {
+      if (!isSaved) {
+        const saved = await saveRoute(user.id, result, current);
+        if (saved) { setIsSaved(true); setSavedRouteId(saved.id); }
+        else showError('Could not save', 'Check your connection and try again.');
+      } else if (savedRouteId) {
+        await deleteSavedRoute(savedRouteId);
+        setIsSaved(false);
+        setSavedRouteId(null);
+      }
+    } finally {
+      setSaving(false);
     }
+  };
 
-    return (
-        <View style={styles.container}>
-            <StatusBar style={isDark ? 'light' : 'dark'} />
+  const shareJourney = () => {
+    Share.share({ message: explainJourney(current, originName, destName) }).catch(() => {});
+  };
 
-            {/* Full Screen Map */}
-            <View style={styles.mapContainer}>
-                <WakaWayMapView
-                    style={StyleSheet.absoluteFill}
-                    initialRegion={{
-                        latitude: activeRoute.origin_coords?.latitude ?? 6.5244,
-                        longitude: activeRoute.origin_coords?.longitude ?? 3.3792,
-                        latitudeDelta: 0.05,
-                        longitudeDelta: 0.05,
-                    }}
-                    markers={[
-                        { id: 'origin', coordinate: activeRoute.origin_coords, title: 'Start', icon: 'location' },
-                        { id: 'destination', coordinate: activeRoute.destination_coords, title: 'Destination', icon: 'flag' }
-                    ]}
-                    routePolyline={
-                        activeRoute.origin_coords && activeRoute.destination_coords
-                            ? [activeRoute.origin_coords, activeRoute.destination_coords]
-                            : undefined
-                    }
-                />
+  const startJourney = () => {
+    if (user) addRouteHistory(user.id, result, current).catch(() => {});
+    navigation.navigate('Navigation', { option: current, result });
+  };
 
-                {/* Header Gradient */}
-                <LinearGradient
-                    colors={['rgba(0,0,0,0.65)', 'rgba(0,0,0,0.15)', 'transparent']}
-                    style={styles.headerGradient}
-                />
+  const onVoteAlert = useCallback(async (id: string, vote: 'CONFIRM' | 'DISMISS') => {
+    if (!requireSignIn('say whether this is still happening')) return false;
+    const ok = await voteOnAlert(id, vote);
+    if (!ok) showError('Vote no send', 'Check your connection and try again.');
+    else refetchAlerts();
+    return ok;
+  }, [requireSignIn, showError, refetchAlerts]);
 
-                {/* Back Button + Destination label */}
-                <SafeAreaView style={styles.safeAreaProps}>
-                    <View style={styles.mapHeaderRow}>
-                        <TouchableOpacity
-                            style={styles.backButton}
-                            onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')}
-                        >
-                            <Ionicons name="chevron-back" size={22} color="white" />
-                        </TouchableOpacity>
-                        {(smartRoute?.destination.name || activeRoute?.destination) ? (
-                            <View style={styles.destinationPill}>
-                                <Ionicons name="location" size={13} color="#22C55E" />
-                                <Text style={styles.destinationPillText} numberOfLines={1}>
-                                    {smartRoute?.destination.name ?? activeRoute?.destination}
-                                </Text>
-                            </View>
-                        ) : null}
-                    </View>
-                </SafeAreaView>
-            </View>
+  return (
+    <View style={s.root}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
-            {/* Draggable Bottom Sheet */}
-            <Animated.View 
-                style={[
-                    styles.bottomSheet,
-                    { 
-                        backgroundColor: theme.CARD_BACKGROUND,
-                        height: sheetHeight,
-                    }
-                ]}
-            >
-                {/* Drag Handle */}
-                <PanGestureHandler onGestureEvent={onSheetGestureEvent} onHandlerStateChange={onSheetHandlerStateChange}>
-                    <Animated.View style={styles.dragHandleArea}>
-                        <TouchableOpacity
-                            onPress={() => {
-                                if (currentSnapPoint.current === SNAP_POINTS.EXPANDED) {
-                                    collapseSheet();
-                                } else {
-                                    expandSheet();
-                                }
-                            }}
-                            activeOpacity={1}
-                            style={styles.dragHandleTouchArea}
-                        >
-                            <View style={[styles.dragHandle, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
-                        </TouchableOpacity>
-                    </Animated.View>
-                </PanGestureHandler>
-
-                {/* Content area — pan gesture active only when not fullscreen */}
-                <PanGestureHandler
-                    enabled={!canScroll}
-                    onHandlerStateChange={({ nativeEvent }) => {
-                        if (nativeEvent.oldState === GestureState.ACTIVE) {
-                            snapTo(SNAP_POINTS.EXPANDED);
-                        }
-                    }}
-                >
-                <Animated.View style={{ flex: 1 }}>
-                    <ScrollView
-                        ref={scrollRef}
-                        style={{ flex: 1 }}
-                        contentContainerStyle={styles.sheetContentContainer}
-                        showsVerticalScrollIndicator={canScroll}
-                        scrollEnabled={canScroll}
-                        bounces={canScroll}
-                        nestedScrollEnabled={true}
-                    >
-                    {/* ── Incident alert banner ───────────────────────── */}
-                    {rerouteDecision !== 'none' && !incidentDismissed && (
-                        <View style={[
-                            styles.incidentBanner,
-                            { borderLeftColor: incidentColor(rerouteDecision), backgroundColor: incidentColor(rerouteDecision) + '18' },
-                        ]}>
-                            <View style={styles.incidentBannerLeft}>
-                                <Text style={[styles.incidentIcon]}>
-                                    {rerouteDecision === 'auto' ? '🚨' : rerouteDecision === 'suggest' ? '⚠️' : 'ℹ️'}
-                                </Text>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[styles.incidentTitle, { color: incidentColor(rerouteDecision) }]}>
-                                        {rerouteDecision === 'auto'    ? 'Heavy traffic on your route'   :
-                                         rerouteDecision === 'suggest' ? 'Congestion reported ahead'     :
-                                         'Minor incident near your route'}
-                                    </Text>
-                                    <Text style={styles.incidentSub} numberOfLines={2}>
-                                        {incidentSummaryText(routeIncidents)}
-                                    </Text>
-                                </View>
-                            </View>
-                            <View style={styles.incidentActions}>
-                                {(rerouteDecision === 'auto' || rerouteDecision === 'suggest') && (
-                                    <TouchableOpacity
-                                        style={[styles.rerouteBtn, { backgroundColor: incidentColor(rerouteDecision) }]}
-                                        onPress={handleReroute}
-                                        disabled={reroutingActive}
-                                    >
-                                        {reroutingActive
-                                            ? <ActivityIndicator size="small" color="#fff" />
-                                            : <Text style={styles.rerouteBtnText}>Reroute</Text>
-                                        }
-                                    </TouchableOpacity>
-                                )}
-                                <TouchableOpacity onPress={() => setIncidentDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                    <Ionicons name="close" size={18} color={theme.TEXT_SECONDARY} />
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Smart Route Options - Show multiple route choices */}
-                    {smartRoute && showSmartOptions ? (
-                        <SmartRouteOptions
-                            routeResult={smartRoute}
-                            onSelectOption={(option) => {
-                                applyRouteOptionToActiveRoute(option);
-                            }}
-                            onStartJourney={(option) => {
-                                startJourney(option);
-                            }}
-                        />
-                    ) : (
-                        <>
-                            {/* Legacy Summary Header */}
-                            <View style={styles.summaryContainer}>
-                                <View style={styles.routeHeader}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexWrap: 'wrap' }}>
-                                        <Text style={[styles.routeTitle, { color: theme.TEXT }]}>{activeRoute.origin || 'Origin'}</Text>
-                                        <Ionicons name="arrow-forward" size={16} color={theme.TEXT} style={{ marginHorizontal: 8 }} />
-                                        <Text style={[styles.routeTitle, { color: theme.TEXT }]}>{activeRoute.destination || 'Destination'}</Text>
-                                    </View>
-                                    <View style={[styles.ratingContainer, { backgroundColor: 'rgba(245,158,11,0.15)' }]}>
-                                        <Ionicons name="star" size={14} color="#F59E0B" />
-                                        <Text style={[styles.ratingText, { color: theme.TEXT }]}>{activeRoute.rating}</Text>
-                                    </View>
-                                </View>
-
-                                <View style={[styles.statsRow, { backgroundColor: theme.SURFACE }]}>
-                                    <View style={styles.statItem}>
-                                        <Text style={[styles.statLabel, { color: theme.TEXT_SECONDARY }]}>Duration</Text>
-                                        <Text style={[styles.statValue, { color: theme.TEXT }]}>{activeRoute.total_duration_mins} min</Text>
-                                    </View>
-                                    <View style={[styles.divider, { backgroundColor: theme.BORDER }]} />
-                                    <View style={styles.statItem}>
-                                        <Text style={[styles.statLabel, { color: theme.TEXT_SECONDARY }]}>Distance</Text>
-                                        <Text style={[styles.statValue, { color: theme.TEXT }]}>{activeRoute.total_distance_km} km</Text>
-                                    </View>
-                                </View>
-
-                                {/* Fare Estimates */}
-                                <FareEstimateCard
-                                    distanceInKm={activeRoute.total_distance_km}
-                                    isRaining={isRaining}
-                                    isFuelScarce={isFuelScarce}
-                                    onModeSelect={handleTransportModeSelect}
-                                    selectedMode={selectedTransportMode}
-                                />
-
-                                {/* Tags */}
-                                <View style={styles.tagsRow}>
-                                    {activeRoute.is_fastest && (
-                                        <View style={[styles.tag, { backgroundColor: 'rgba(34,197,94,0.15)' }]}>
-                                            <Text style={[styles.tagText, { color: theme.SUCCESS }]}>Fastest</Text>
-                                        </View>
-                                    )}
-                                    {activeRoute.is_cheapest && (
-                                        <View style={[styles.tag, { backgroundColor: 'rgba(59,130,246,0.15)' }]}>
-                                            <Text style={[styles.tagText, { color: '#60A5FA' }]}>Cheapest</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-
-                            <View style={[styles.sectionDivider, { backgroundColor: theme.BORDER }]} />
-
-                            {/* Steps List */}
-                            <View style={styles.stepsContainer}>
-                                <Text style={[styles.stepsTitle, { color: theme.TEXT }]}>Directions</Text>
-                                {activeRoute.segments?.map((step: any, index: number) => (
-                                    <RouteStepCard
-                                        key={step.id}
-                                        step={step}
-                                        isLast={index === activeRoute.segments.length - 1}
-                                    />
-                                ))}
-                            </View>
-                        </>
-                    )}
-
-                    {/* Spacer for safe area */}
-                    <View style={{ height: 100 }} />
-                    </ScrollView>
-                </Animated.View>
-                </PanGestureHandler>
-            </Animated.View>
-
-            {/* Bottom action bar — hide Start Journey when SmartRouteOptions shows its own */}
-            {!(smartRoute && showSmartOptions) && (
-                <View style={[styles.fabContainer, { backgroundColor: theme.CARD_BACKGROUND, borderTopColor: theme.BORDER }]}>
-                    <TouchableOpacity
-                        style={[styles.saveFab, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: theme.BORDER }]}
-                        onPress={saveJourney}
-                        accessibilityLabel={isSaved ? 'Unsave route' : 'Save route'}
-                    >
-                        <Ionicons name={isSaved ? 'heart' : 'heart-outline'} size={22} color={isSaved ? '#EF4444' : theme.TEXT_SECONDARY} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.fab, { backgroundColor: theme.PRIMARY }]}
-                        onPress={() => startJourney()}
-                    >
-                        <Ionicons name="navigate" size={18} color="#fff" />
-                        <Text style={styles.fabText}>Start Journey</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
+      {/* Header — back · FROM → · destination · share · save */}
+      <View style={[s.header, { paddingTop: insets.top + Space.sm }]}>
+        <Pressable
+          onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          style={({ pressed }) => [s.roundBtn, pressed && s.pressed]}
+        >
+          <Ionicons name="arrow-back" size={20} color={WW.text} />
+        </Pressable>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={s.eyebrow} numberOfLines={1}>{originName.toUpperCase()} →</Text>
+          <Text style={s.dest} numberOfLines={1}>{destName}</Text>
         </View>
-    );
+        <Pressable onPress={shareJourney} accessibilityRole="button" accessibilityLabel="Share this journey" style={({ pressed }) => [s.roundBtn, pressed && s.pressed]}>
+          <Ionicons name="share-outline" size={20} color={WW.text} />
+        </Pressable>
+        <Pressable
+          onPress={toggleSave}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel={isSaved ? 'Unsave route' : 'Save route'}
+          style={({ pressed }) => [s.roundBtn, pressed && s.pressed]}
+        >
+          <Ionicons name={isSaved ? 'heart' : 'heart-outline'} size={20} color={isSaved ? WW.error : WW.text} />
+        </Pressable>
+      </View>
+
+      <ScrollView contentContainerStyle={{ paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
+        <JourneyExplainer
+          routeResult={result}
+          signals={signals}
+          alerts={routeAlerts}
+          newcomer={newcomer}
+          selectedId={current.id}
+          onSelectOption={(o) => setSelectedId(o.id)}
+          onVoteAlert={onVoteAlert}
+          onAddRoute={() => navigation.navigate('Main', {
+            screen: 'Report',
+            params: { kind: 'new_route', origin: originName, destination: destName },
+          })}
+        />
+      </ScrollView>
+
+      {/* Start waka */}
+      <View style={[s.startWrap, { paddingBottom: Math.max(insets.bottom, Space.lg) }]}>
+        <Pressable onPress={startJourney} accessibilityRole="button" accessibilityLabel="Start journey" style={({ pressed }) => [s.start, pressed && s.pressed]}>
+          <Text style={s.startText}>Start waka · {current.totalDurationMins} min</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: WW.bg },
+    header: {
+      flexDirection: 'row', alignItems: 'center', gap: Space.md,
+      paddingHorizontal: Space.lg, paddingBottom: 10,
     },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
+    roundBtn: {
+      width: HIT, height: HIT, borderRadius: Radius.pill,
+      backgroundColor: WW.bgElevated, borderWidth: 1, borderColor: WW.border,
+      alignItems: 'center', justifyContent: 'center',
     },
-    mapHeader: {
-        height: '35%',
-        width: '100%',
-        position: 'relative',
+    eyebrow: { fontFamily: Fonts.bold, fontSize: Typography.xs, letterSpacing: Tracking.eyebrow, color: WW.textMuted },
+    dest: { fontFamily: Fonts.extrabold, fontSize: Typography.xl, color: WW.text, letterSpacing: Tracking.tight / 2, marginTop: 2 },
+    startWrap: { position: 'absolute', left: Space.lg, right: Space.lg, bottom: 0 },
+    start: {
+      height: 56, borderRadius: Radius.pill, backgroundColor: WW.orange,
+      alignItems: 'center', justifyContent: 'center',
+      shadowColor: WW.orange, shadowOpacity: 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 12 },
+      elevation: 6,
     },
-    headerGradient: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 100,
-    },
-    safeAreaProps: {
-        position: 'absolute',
-        top: Platform.OS === 'android' ? 36 : 6,
-        left: 0,
-        right: 0,
-    },
-    mapHeaderRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        gap: 12,
-    },
-    backButton: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
-        backgroundColor: 'rgba(0,0,0,0.45)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.12)',
-    },
-    destinationPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 5,
-        backgroundColor: 'rgba(0,0,0,0.45)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.12)',
-        borderRadius: 20,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        maxWidth: 240,
-    },
-    destinationPillText: {
-        color: '#F1F5F9',
-        fontSize: 13,
-        fontWeight: '600',
-        letterSpacing: -0.2,
-    },
-    detailsSheet: {
-        flex: 1,
-        borderTopLeftRadius: BORDER_RADIUS.XL,
-        borderTopRightRadius: BORDER_RADIUS.XL,
-        marginTop: -20,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: -2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 10,
-            },
-            android: { elevation: 10 },
-        }),
-    },
-    handleContainer: {
-        alignItems: 'center',
-        paddingVertical: SPACING.SM,
-    },
-    handle: {
-        width: 40,
-        height: 4,
-        borderRadius: 2,
-    },
-    handleText: {
-        fontSize: FONT_SIZES.SMALL,
-        fontWeight: '500',
-        marginTop: 4,
-    },
-    contentContainer: {
-        paddingHorizontal: SPACING.LG,
-    },
-    mapContainer: {
-        flex: 1,
-    },
-    swipeIndicator: {
-        position: 'absolute',
-        bottom: 20,
-        left: 0,
-        right: 0,
-        alignItems: 'center',
-    },
-    swipeText: {
-        fontSize: FONT_SIZES.SMALL,
-        fontWeight: '600',
-        marginTop: 4,
-    },
-    directionsSheet: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        borderTopLeftRadius: BORDER_RADIUS.XL,
-        borderTopRightRadius: BORDER_RADIUS.XL,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: -2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 10,
-            },
-            android: { elevation: 10 },
-        }),
-    },
-    directionsSheetExpanded: {
-        top: '35%',
-    },
-    directionsSheetCollapsed: {
-        top: 0,
-        height: 120, // Just show the handle area when collapsed
-    },
-    summaryContainer: {
-        marginTop: SPACING.SM,
-    },
-    routeHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACING.MD,
-    },
-    routeTitle: {
-        fontSize: FONT_SIZES.HEADING_3,
-        fontWeight: '700',
-    },
-    ratingContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    ratingText: {
-        fontSize: FONT_SIZES.CAPTION,
-        fontWeight: '700',
-    },
-    statsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: SPACING.MD,
-        borderRadius: BORDER_RADIUS.LARGE,
-    },
-    statItem: {
-        alignItems: 'center',
-    },
-    statLabel: {
-        fontSize: FONT_SIZES.CAPTION,
-        marginBottom: 4,
-    },
-    statValue: {
-        fontSize: FONT_SIZES.BODY_LARGE,
-        fontWeight: '700',
-    },
-    divider: {
-        width: 1,
-        height: 24,
-    },
-    tagsRow: {
-        flexDirection: 'row',
-        gap: SPACING.SM,
-        marginTop: SPACING.MD,
-    },
-    tag: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-    },
-    tagText: {
-        fontSize: FONT_SIZES.SMALL,
-        fontWeight: '600',
-    },
-    sectionDivider: {
-        height: 1,
-        marginVertical: SPACING.LG,
-    },
-    stepsContainer: {
-        marginBottom: SPACING.LG,
-    },
-    stepsTitle: {
-        fontSize: FONT_SIZES.HEADING_3,
-        fontWeight: '700',
-        marginBottom: SPACING.MD,
-    },
-    fabContainer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-        paddingHorizontal: 16,
-        paddingTop: 14,
-        paddingBottom: Platform.OS === 'ios' ? 32 : 18,
-        borderTopWidth: StyleSheet.hairlineWidth,
-    },
-    saveFab: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        flexShrink: 0,
-    },
-    fab: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        height: 50,
-        borderRadius: 25,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#22C55E',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.35,
-                shadowRadius: 10,
-            },
-            android: { elevation: 6 },
-        }),
-    },
-    fabText: {
-        fontWeight: '700',
-        fontSize: 16,
-        color: '#fff',
-        letterSpacing: -0.2,
-    },
-    bottomSheet: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderLeftWidth: StyleSheet.hairlineWidth,
-        borderRightWidth: StyleSheet.hairlineWidth,
-        borderColor: 'rgba(255,255,255,0.07)',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: -6 },
-                shadowOpacity: 0.25,
-                shadowRadius: 20,
-            },
-            android: { elevation: 20 },
-        }),
-    },
-    dragHandleArea: {
-        alignItems: 'center',
-        paddingTop: 10,
-        paddingBottom: 4,
-    },
-    dragHandleTouchArea: {
-        alignItems: 'center',
-        paddingHorizontal: 48,
-        paddingVertical: 8,
-    },
-    dragHandle: {
-        width: 36,
-        height: 4,
-        borderRadius: 2,
-    },
-    sheetContent: {
-        flex: 1,
-    },
-    sheetContentContainer: {
-        paddingBottom: 120,
-    },
-
-    // Incident banner
-    incidentBanner: {
-        marginHorizontal: 16,
-        marginBottom: 12,
-        borderRadius: 12,
-        borderLeftWidth: 4,
-        padding: 12,
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        gap: 10,
-    },
-    incidentBannerLeft: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        gap: 10,
-    },
-    incidentIcon:  { fontSize: 20, marginTop: 1 },
-    incidentTitle: { fontSize: 13, fontWeight: '700', marginBottom: 3 },
-    incidentSub:   { fontSize: 12, color: '#94A3B8', lineHeight: 16 },
-    incidentActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        flexShrink: 0,
-    },
-    rerouteBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        minWidth: 70,
-        alignItems: 'center',
-    },
-    rerouteBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-});
+    startText: { fontFamily: Fonts.extrabold, fontSize: Typography.lg, color: WW.textOnOrange },
+    pressed: { opacity: 0.85 },
+  });
+}

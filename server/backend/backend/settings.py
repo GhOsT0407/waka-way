@@ -115,3 +115,15 @@ CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     'exp://localhost:19000',
 ])
 CORS_ALLOW_CREDENTIALS = True
+
+# Railway (and similar PaaS) terminate TLS at the edge and forward plain HTTP,
+# so SECURE_SSL_REDIRECT needs SECURE_PROXY_SSL_HEADER to avoid redirect loops.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True

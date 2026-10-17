@@ -7,11 +7,14 @@ import {
   Easing,
   Dimensions,
   TouchableWithoutFeedback,
+  AccessibilityInfo,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { WW } from '../theme/colors';
+// The splash is deliberately dark in both themes (see the redesign canvas), so it
+// reads the dark palette directly rather than the live theme.
+import { WW_DARK as WW } from '../theme/colors';
 import { Fonts } from '../theme/typography';
 
 const { width: SW } = Dimensions.get('window');
@@ -25,7 +28,12 @@ interface VehicleAnim {
   delay: number;
 }
 
-export default function WakaWaySplash({ onDone }: { onDone?: () => void }) {
+export default function WakaWaySplash({ onDone, brief = false }: { onDone?: () => void; brief?: boolean }) {
+  // brief: returning launches skip the wordmark/route-line prologue and land
+  // on the tile straight away (~1.2s, the canvas's timing). The full sequence
+  // plays on first launch only. Reduce Motion replaces both with the end
+  // state and a 200ms hand-off.
+  const reduceMotion = useRef(false);
   // ── Animation values ──────────────────────────────────────────
   const stripeX    = useRef(new Animated.Value(0)).current;
   const wmOp       = useRef(new Animated.Value(0)).current;
@@ -79,6 +87,31 @@ export default function WakaWaySplash({ onDone }: { onDone?: () => void }) {
     sheenX.setValue(-TILE);
     vehicles.forEach(v => v.x.setValue(-26));
 
+    if (reduceMotion.current) {
+      // End state, no motion.
+      stripeX.setValue(1); wmOutOp.setValue(0); routeOp.setValue(0);
+      tileScale.setValue(1); tileOp.setValue(1);
+      glowOp.setValue(0.4); glowSc.setValue(1);
+      tagOp.setValue(1); tagY.setValue(0); ulSc.setValue(1);
+      if (onDone) setTimeout(onDone, 200);
+      return;
+    }
+
+    if (brief) {
+      stripeX.setValue(1); wmOutOp.setValue(0); routeOp.setValue(0);
+      Animated.parallel([
+        Animated.spring(tileScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
+        Animated.timing(tileOp,    { toValue: 1, duration: 220, useNativeDriver: true }),
+        Animated.timing(glowOp,    { toValue: 0.45, duration: 600, useNativeDriver: true }),
+        Animated.timing(glowSc,    { toValue: 1,    duration: 600, useNativeDriver: true }),
+        Animated.timing(tagOp,     { toValue: 1, duration: 420, delay: 250, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(tagY,      { toValue: 0, duration: 420, delay: 250, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(ulSc,      { toValue: 1, duration: 600, delay: 250, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
+      if (onDone) setTimeout(onDone, 1200);
+      return;
+    }
+
     // stripe
     Animated.timing(stripeX, {
       toValue: 1, duration: 1000, delay: 200,
@@ -129,7 +162,7 @@ export default function WakaWaySplash({ onDone }: { onDone?: () => void }) {
 
     // tile sheen loop
     Animated.sequence([
-      Animated.delay(3000),
+      Animated.delay(2600),
       Animated.loop(
         Animated.sequence([
           Animated.timing(sheenX, { toValue: TILE * 2, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -141,25 +174,31 @@ export default function WakaWaySplash({ onDone }: { onDone?: () => void }) {
 
     // tagline
     Animated.parallel([
-      Animated.timing(tagOp, { toValue: 1, duration: 600, delay: 3000, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(tagY,  { toValue: 0, duration: 600, delay: 3000, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(ulSc,  { toValue: 1, duration: 800, delay: 3000, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(tagOp, { toValue: 1, duration: 600, delay: 2600, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(tagY,  { toValue: 0, duration: 600, delay: 2600, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(ulSc,  { toValue: 1, duration: 800, delay: 2600, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
 
     // loader
     Animated.parallel([
-      Animated.timing(loadOp, { toValue: 1, duration: 600, delay: 3200, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(loadY,  { toValue: 0, duration: 600, delay: 3200, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(loadOp, { toValue: 1, duration: 600, delay: 2800, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(loadY,  { toValue: 0, duration: 600, delay: 2800, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
 
     // vehicles (start immediately, rail becomes visible at 3.2s)
     vehicles.forEach(startVehicle);
 
     // auto-dismiss after full sequence
-    if (onDone) setTimeout(onDone, 4200);
-  }, [onDone]);
+    if (onDone) setTimeout(onDone, 3400);
+  }, [onDone, brief]);
 
-  useEffect(() => { play(); }, [play]);
+  useEffect(() => {
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((rm) => { if (!cancelled) { reduceMotion.current = rm; play(); } })
+      .catch(() => { if (!cancelled) play(); });
+    return () => { cancelled = true; };
+  }, [play]);
 
   // Combined wordmark opacity/transform
   const wordmarkStyle = {
