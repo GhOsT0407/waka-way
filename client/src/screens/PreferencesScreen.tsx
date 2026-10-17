@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,25 +9,20 @@ import {
   TextInput,
   ActivityIndicator,
   Modal,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
-import { Colors } from '../theme/colors';
+import { useAppTheme } from '../context/ThemeContext';
+import type { WWColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 import { updateUserProfile } from '../services/supabaseDataService';
 
-const TRANSPORT_PREF_KEY = 'preferredFirstLegTransportMode';
+import { PREF_KEYS, getFlag, setFlag } from '../utils/prefs';
 
-const MODE_LABELS: Record<string, string> = {
-  keke:  'Keke (Tricycle)',
-  danfo: 'Danfo (Yellow bus)',
-  okada: 'Okada (Motorbike)',
-  brt:   'BRT / LAGBUS',
-  walk:  'Walk',
-};
 
 interface SettingRowProps {
   icon: string;
@@ -40,6 +35,8 @@ interface SettingRowProps {
 }
 
 function SettingRow({ icon, iconColor, iconBg, title, subtitle, onPress, rightElement }: SettingRowProps) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   return (
     <TouchableOpacity
       style={styles.row}
@@ -54,42 +51,34 @@ function SettingRow({ icon, iconColor, iconBg, title, subtitle, onPress, rightEl
         <Text style={styles.rowTitle}>{title}</Text>
         {!!subtitle && <Text style={styles.rowSub}>{subtitle}</Text>}
       </View>
-      {rightElement ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} /> : null)}
+      {rightElement ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={WW.textSub} /> : null)}
     </TouchableOpacity>
   );
 }
 
 export default function PreferencesScreen({ navigation }: any) {
-  const { user } = useAuth();
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
+  const { user, deleteAccount } = useAuth();
 
-  const [savedMode, setSavedMode]           = useState<string | null>(null);
+  const [newcomer, setNewcomer]             = useState(false);
+  const [okadaOk, setOkadaOk]               = useState(false);
   const [showNameModal, setShowNameModal]   = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [newName, setNewName]               = useState('');
   const [displayName, setDisplayName]       = useState(user?.name ?? '');
   const [savingName, setSavingName]         = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm]   = useState('');
+  const [deleting, setDeleting]             = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(TRANSPORT_PREF_KEY).then((v) => setSavedMode(v));
+    getFlag(PREF_KEYS.newcomer).then(setNewcomer);
+    getFlag(PREF_KEYS.okadaOk).then(setOkadaOk);
   }, []);
 
-  const handleTransportPress = () => {
-    const modes = Object.keys(MODE_LABELS);
-    Alert.alert(
-      'Default Transport Mode',
-      'Choose your preferred first-leg transport',
-      [
-        ...modes.map((m) => ({
-          text: MODE_LABELS[m],
-          onPress: async () => {
-            await AsyncStorage.setItem(TRANSPORT_PREF_KEY, m);
-            setSavedMode(m);
-          },
-        })),
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
+  const toggleNewcomer = async (v: boolean) => { setNewcomer(v); await setFlag(PREF_KEYS.newcomer, v); await setFlag(PREF_KEYS.newcomerAsked, true); };
+  const toggleOkada = async (v: boolean) => { setOkadaOk(v); await setFlag(PREF_KEYS.okadaOk, v); };
 
   const handleClearHistory = () => {
     Alert.alert(
@@ -101,12 +90,37 @@ export default function PreferencesScreen({ navigation }: any) {
           text: 'Clear',
           style: 'destructive',
           onPress: async () => {
-            await AsyncStorage.removeItem('recentSearches');
+            await AsyncStorage.removeItem(PREF_KEYS.recentSearches);
             Alert.alert('Done', 'Search history cleared.');
           },
         },
       ]
     );
+  };
+
+  const openDeleteModal = () => {
+    setDeleteConfirm('');
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirm.trim().toUpperCase() !== 'DELETE') {
+      Alert.alert('Type DELETE to confirm', 'Enter DELETE in the box to confirm you want to remove your account.');
+      return;
+    }
+
+    setDeleting(true);
+    const result = await deleteAccount();
+    setDeleting(false);
+
+    if (!result.success) {
+      Alert.alert('Something went wrong', result.error ?? 'Could not delete your account.');
+      return;
+    }
+
+    // No navigation needed -- the auth state listener drops the app back to the
+    // sign-in stack the moment the session clears.
+    setShowDeleteModal(false);
   };
 
   const openNameModal = () => {
@@ -144,7 +158,7 @@ export default function PreferencesScreen({ navigation }: any) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+          <Ionicons name="arrow-back" size={24} color={WW.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Preferences</Text>
         <View style={{ width: 24 }} />
@@ -153,15 +167,25 @@ export default function PreferencesScreen({ navigation }: any) {
       <ScrollView contentContainerStyle={styles.content}>
 
         {/* Transport */}
-        <Text style={styles.section}>TRANSPORT</Text>
+        <Text style={styles.section}>HOW WE PLAN YOUR ROUTES</Text>
         <View style={styles.group}>
           <SettingRow
-            icon="car-outline"
-            iconColor="#F97316"
-            iconBg="rgba(249,115,22,0.15)"
-            title="Default Transport Mode"
-            subtitle={savedMode ? MODE_LABELS[savedMode] : 'Ask me each time'}
-            onPress={handleTransportPress}
+            icon="compass-outline"
+            iconColor={WW.green}
+            iconBg={WW.greenDim}
+            title="New to this area"
+            subtitle="Fewer changes of vehicle, more explanation at each step"
+            onPress={() => toggleNewcomer(!newcomer)}
+            rightElement={<Switch value={newcomer} onValueChange={toggleNewcomer} trackColor={{ true: WW.orange, false: WW.borderStrong }} thumbColor={WW.bgSurface} accessibilityLabel="New to this area" />}
+          />
+          <SettingRow
+            icon="bicycle-outline"
+            iconColor={WW.okada}
+            iconBg={WW.errorDim}
+            title="Prefer okada"
+            subtitle="On: wherever it is legal. Off: only when no keke can reach and it is too far to walk"
+            onPress={() => toggleOkada(!okadaOk)}
+            rightElement={<Switch value={okadaOk} onValueChange={toggleOkada} trackColor={{ true: WW.orange, false: WW.borderStrong }} thumbColor={WW.bgSurface} accessibilityLabel="Prefer okada" />}
           />
         </View>
 
@@ -170,8 +194,8 @@ export default function PreferencesScreen({ navigation }: any) {
         <View style={styles.group}>
           <SettingRow
             icon="time-outline"
-            iconColor={Colors.blue}
-            iconBg={Colors.blueLight}
+            iconColor={WW.orange}
+            iconBg={WW.orangeDim}
             title="Clear Search History"
             subtitle="Remove recent searches from this device"
             onPress={handleClearHistory}
@@ -193,10 +217,18 @@ export default function PreferencesScreen({ navigation }: any) {
               />
               <SettingRow
                 icon="mail-outline"
-                iconColor={Colors.blue}
-                iconBg={Colors.blueLight}
+                iconColor={WW.orange}
+                iconBg={WW.orangeDim}
                 title="Email"
                 subtitle={user.email}
+              />
+              <SettingRow
+                icon="trash-outline"
+                iconColor={WW.error}
+                iconBg="rgba(255,68,68,0.12)"
+                title="Delete Account"
+                subtitle="Permanently remove your account and data"
+                onPress={openDeleteModal}
               />
             </View>
           </>
@@ -207,8 +239,8 @@ export default function PreferencesScreen({ navigation }: any) {
         <View style={styles.group}>
           <SettingRow
             icon="information-circle-outline"
-            iconColor={Colors.blue}
-            iconBg={Colors.blueLight}
+            iconColor={WW.orange}
+            iconBg={WW.orangeDim}
             title="App Version"
             subtitle="WakaWay v1.0.0"
           />
@@ -243,11 +275,11 @@ export default function PreferencesScreen({ navigation }: any) {
             <View style={styles.privacyHeader}>
               <Text style={styles.modalTitle}>Privacy Policy</Text>
               <TouchableOpacity onPress={() => setShowPrivacyModal(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close" size={22} color={Colors.textSecondary} />
+                <Ionicons name="close" size={22} color={WW.textSub} />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.privacyScroll} showsVerticalScrollIndicator={false}>
-              <Text style={styles.privacySection}>Last updated: May 2025</Text>
+              <Text style={styles.privacySection}>Last updated: 22 September 2026</Text>
 
               <Text style={styles.privacyHeading}>1. Data We Collect</Text>
               <Text style={styles.privacyBody}>
@@ -256,32 +288,37 @@ export default function PreferencesScreen({ navigation }: any) {
 
               <Text style={styles.privacyHeading}>2. How We Use Your Data</Text>
               <Text style={styles.privacyBody}>
-                Location is used solely to calculate routes and show your position on the map. Your email is used for authentication. We do not sell your personal data to third parties.
+                Location is used solely to calculate routes and show your position on the map. Your email is used for authentication. We do not sell your personal data and we do not run ads or third-party trackers.
               </Text>
 
               <Text style={styles.privacyHeading}>3. Search History</Text>
               <Text style={styles.privacyBody}>
-                Recent searches are stored locally on your device only. You can clear them at any time from Preferences → Clear Search History.
+                Recent searches and app preferences are stored locally on your device only. You can clear them at any time from Preferences → Clear Search History.
               </Text>
 
-              <Text style={styles.privacyHeading}>4. Third-Party Services</Text>
+              <Text style={styles.privacyHeading}>4. Community Reports</Text>
               <Text style={styles.privacyBody}>
-                WakaWay uses Google Maps for geocoding and map display, and Supabase for authentication and route data storage. Both services operate under their own privacy policies.
+                Reports you submit are visible to other users on the map, showing the type, description, location and time — never your name or email. They expire automatically, typically within 1–6 hours.
               </Text>
 
-              <Text style={styles.privacyHeading}>5. Data Security</Text>
+              <Text style={styles.privacyHeading}>5. Third-Party Services</Text>
+              <Text style={styles.privacyBody}>
+                WakaWay uses Supabase for sign-in and data storage, and MapTiler for map tiles and place search. Each operates under its own privacy policy. Routes and directions are computed on your phone from WakaWay's own corridor data.
+              </Text>
+
+              <Text style={styles.privacyHeading}>6. Data Security</Text>
               <Text style={styles.privacyBody}>
                 All data transmitted between your device and our servers is encrypted using HTTPS/TLS. Passwords are never stored in plain text.
               </Text>
 
-              <Text style={styles.privacyHeading}>6. Your Rights</Text>
+              <Text style={styles.privacyHeading}>7. Deleting Your Account</Text>
               <Text style={styles.privacyBody}>
-                You may request deletion of your account and associated data at any time by contacting us at support@wakaway.app.
+                You can delete your account at any time from Preferences → Account → Delete Account. This permanently removes your profile, saved places, saved routes and trip history. Reports you submitted are unlinked from you but stay on the map until they expire, so other travellers relying on a live alert are not left without it.
               </Text>
 
-              <Text style={styles.privacyHeading}>7. Contact</Text>
+              <Text style={styles.privacyHeading}>8. Contact</Text>
               <Text style={styles.privacyBody}>
-                Questions about this policy? Email us at support@wakaway.app.
+                Questions about this policy? Email us at wakawaytechnologies@gmail.com.
               </Text>
               <View style={{ height: 20 }} />
             </ScrollView>
@@ -291,6 +328,63 @@ export default function PreferencesScreen({ navigation }: any) {
             >
               <Text style={styles.modalBtnPrimaryText}>Close</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Account Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deleting && setShowDeleteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={[styles.modalTitle, { color: WW.error }]}>Delete Account</Text>
+
+            <Text style={styles.deleteBody}>
+              This permanently deletes your account, saved places, saved routes and trip
+              history. It cannot be undone.
+            </Text>
+            <Text style={styles.deleteBody}>
+              Reports you submitted stay on the map until they expire, but are no longer
+              linked to you.
+            </Text>
+
+            <Text style={styles.deleteLabel}>Type DELETE to confirm</Text>
+            <TextInput
+              style={[styles.modalInput, { borderColor: WW.error }]}
+              value={deleteConfirm}
+              onChangeText={setDeleteConfirm}
+              placeholder="DELETE"
+              placeholderTextColor={WW.textMuted}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              editable={!deleting}
+              returnKeyType="done"
+              onSubmitEditing={handleDeleteAccount}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalBtn}
+                onPress={() => setShowDeleteModal(false)}
+                disabled={deleting}
+              >
+                <Text style={styles.modalBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnDanger]}
+                onPress={handleDeleteAccount}
+                disabled={deleting}
+              >
+                {deleting
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.modalBtnPrimaryText}>Delete</Text>
+                }
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -310,7 +404,7 @@ export default function PreferencesScreen({ navigation }: any) {
               value={newName}
               onChangeText={setNewName}
               placeholder="Enter your name"
-              placeholderTextColor={Colors.textTertiary}
+              placeholderTextColor={WW.textMuted}
               autoFocus
               maxLength={40}
               returnKeyType="done"
@@ -338,8 +432,9 @@ export default function PreferencesScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.mapBackground },
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: WW.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -347,10 +442,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-    backgroundColor: Colors.sheetBg,
+    borderBottomColor: WW.border,
+    backgroundColor: WW.bgSurface,
   },
-  headerTitle: { fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.textPrimary },
+  headerTitle: { fontSize: Typography.xl, fontWeight: Typography.bold, color: WW.text },
   content:     { paddingTop: 8 },
   section: {
     fontSize: Typography.xs,
@@ -359,15 +454,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     marginTop: 16,
-    color: Colors.textSecondary,
+    color: WW.textSub,
     textTransform: 'uppercase',
   },
   group: {
     marginHorizontal: 16,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.sheetBg,
+    borderColor: WW.border,
+    backgroundColor: WW.bgSurface,
     overflow: 'hidden',
   },
   row: {
@@ -377,16 +472,16 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.divider,
+    borderBottomColor: WW.divider,
   },
   rowIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   rowText: { flex: 1 },
-  rowTitle: { fontSize: Typography.md, fontWeight: Typography.semibold, color: Colors.textPrimary },
-  rowSub:   { fontSize: Typography.sm, marginTop: 2, color: Colors.textSecondary },
+  rowTitle: { fontSize: Typography.md, fontWeight: Typography.semibold, color: WW.text },
+  rowSub:   { fontSize: Typography.sm, marginTop: 2, color: WW.textSub },
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: Colors.scrim,
+    backgroundColor: WW.scrim,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -396,25 +491,25 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     gap: 14,
-    backgroundColor: Colors.sheetBg,
+    backgroundColor: WW.bgSurface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
   },
   modalTitle: {
     fontSize: Typography.xl,
     fontWeight: Typography.bold,
     marginBottom: 4,
-    color: Colors.textPrimary,
+    color: WW.text,
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: Typography.lg,
-    backgroundColor: Colors.surfaceElevated,
-    color: Colors.textPrimary,
+    backgroundColor: WW.bgElevated,
+    color: WW.text,
   },
   modalActions: {
     flexDirection: 'row',
@@ -426,12 +521,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
     alignItems: 'center',
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: WW.bgElevated,
   },
-  modalBtnPrimary: { borderWidth: 0, backgroundColor: Colors.blue },
-  modalBtnText: { fontSize: Typography.md, fontWeight: Typography.semibold, color: Colors.textSecondary },
+  modalBtnPrimary: { borderWidth: 0, backgroundColor: WW.orange },
+  modalBtnDanger:  { borderWidth: 0, backgroundColor: WW.error },
+  deleteBody: {
+    fontSize: Typography.sm,
+    lineHeight: 20,
+    color: WW.textSub,
+    marginBottom: 10,
+  },
+  deleteLabel: {
+    fontSize: Typography.xs,
+    fontWeight: Typography.bold,
+    letterSpacing: 0.6,
+    color: WW.textSub,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  modalBtnText: { fontSize: Typography.md, fontWeight: Typography.semibold, color: WW.textSub },
   modalBtnPrimaryText: { fontSize: Typography.md, fontWeight: Typography.semibold, color: '#fff' },
   // Privacy modal
   privacyCard: {
@@ -439,9 +549,9 @@ const styles = StyleSheet.create({
     maxHeight: '85%',
     borderRadius: 20,
     padding: 20,
-    backgroundColor: Colors.sheetBg,
+    backgroundColor: WW.bgSurface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: WW.border,
   },
   privacyHeader: {
     flexDirection: 'row',
@@ -450,7 +560,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   privacyScroll: { flex: 1 },
-  privacySection: { fontSize: Typography.sm, marginBottom: 16, color: Colors.textSecondary },
-  privacyHeading: { fontSize: Typography.md, fontWeight: Typography.bold, marginTop: 16, marginBottom: 6, color: Colors.textPrimary },
-  privacyBody: { fontSize: Typography.md, lineHeight: 22, color: Colors.textSecondary },
+  privacySection: { fontSize: Typography.sm, marginBottom: 16, color: WW.textSub },
+  privacyHeading: { fontSize: Typography.md, fontWeight: Typography.bold, marginTop: 16, marginBottom: 6, color: WW.text },
+  privacyBody: { fontSize: Typography.md, lineHeight: 22, color: WW.textSub },
 });
+}

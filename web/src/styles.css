@@ -1,0 +1,935 @@
+/*
+ * Palette: the WakaWay landing page, exactly.
+ *
+ * This deliberately diverges from WW_DARK in client/src/theme/colors.ts. The
+ * app's canvas is #14161A on a violet rail; the landing page's is a green-black
+ * #0B0F0C with cream text and a cyan rail, and the brief was to match the
+ * landing page so the two web surfaces read as one site. The engine and the
+ * corridor data stay shared — only the paint differs.
+ *
+ * If the two ever need to converge, this block is the only thing to change.
+ */
+:root {
+  color-scheme: dark;
+
+  --ink: #0b0f0c;
+  --panel: #121815;
+  --panel-2: #1a211c;
+  --line: rgba(244, 239, 225, 0.09);
+  --line-strong: rgba(244, 239, 225, 0.2);
+
+  --cream: #f4efe1;
+  --cream-sub: rgba(244, 239, 225, 0.66);
+  --cream-mute: rgba(244, 239, 225, 0.42);
+
+  --danfo: #f5c518;
+  --danfo-glow: #ffd84d;
+  --danfo-dim: rgba(245, 197, 24, 0.14);
+
+  --green: #2fa867;
+  --green-dim: rgba(47, 168, 103, 0.16);
+
+  /* Transport modes. `lagbus` is the landing page's; the engine never emits it.
+     `ferry` is the engine's and the landing page has none — it borrows the
+     lagbus teal, and is moot anyway since ferry left the engine at 76ca3e7. */
+  --brt: #2f6bff;
+  --keke: #4fbf6a;
+  --okada: #ef4444;
+  --rail: #22b8e6;
+  --lagbus: #14b8a6;
+  --ferry: #14b8a6;
+  --walk: #d9d2bf;
+
+  --display: 'Big Shoulders Display', 'Arial Narrow', Impact, sans-serif;
+  --sans: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'DM Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --gutter: clamp(16px, 4.5vw, 32px);
+  --r: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--ink);
+  color: var(--cream);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--r);
+}
+
+:focus-visible {
+  outline: 2px solid var(--danfo);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Danfo livery — yellow body, black hatch. The cheapest, most recognisable
+   thing WakaWay owns. */
+.stripe {
+  height: 10px;
+  background: repeating-linear-gradient(115deg, var(--danfo) 0 22px, #111 22px 30px);
+}
+
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.shell {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 28px var(--gutter) 64px;
+}
+
+/* ── Masthead ─────────────────────────────────────────────────────────────── */
+
+.wordmark {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 40px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  margin: 0;
+}
+
+.wordmark b {
+  color: var(--danfo);
+  font-weight: 900;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--danfo);
+  margin: 10px 0 24px;
+}
+
+/* ── Trip input ───────────────────────────────────────────────────────────── */
+
+.search {
+  display: flex;
+  gap: 8px;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  height: 54px;
+  padding: 0 16px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--cream);
+  font: inherit;
+}
+
+.search input::placeholder {
+  color: var(--cream-mute);
+}
+
+.search input:focus-within,
+.search input:focus {
+  border-color: var(--line-strong);
+}
+
+.go {
+  min-width: 104px;
+  height: 54px;
+  padding: 0 20px;
+  background: var(--danfo);
+  color: #111;
+  font-weight: 700;
+  transition: background-color 0.14s ease, transform 0.14s ease;
+}
+
+.go:hover:not([disabled]) {
+  background: var(--danfo-glow);
+  transform: translateY(-1px);
+}
+
+.go[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.hint {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--cream-mute);
+  margin: 12px 2px 0;
+}
+
+/* Where the trip will start — always said before the rider commits. */
+.locline {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--cream-sub);
+  margin: 12px 2px 0;
+}
+
+.locline.bad {
+  color: var(--danfo);
+}
+
+/* ── What we understood ───────────────────────────────────────────────────── */
+
+/* The places the search settled on, always visible, so a wrong guess is
+   caught before anyone follows the route. */
+.resolved {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 16px 0 0;
+}
+
+.pick {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pick-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cream-mute);
+}
+
+.pick-current {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed var(--line-strong);
+  border-radius: 0;
+  padding: 2px 0;
+  min-height: 32px;
+  color: var(--cream);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.pick-current:not([disabled]):hover {
+  color: var(--danfo);
+  border-bottom-color: var(--danfo);
+}
+
+.pick-static,
+.pick-current[disabled] {
+  cursor: default;
+  border-bottom-color: transparent;
+}
+
+.pick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.pick-option {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 14px;
+  border-radius: 12px;
+  text-align: left;
+  white-space: normal;
+}
+
+.pick-sub {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--cream-mute);
+}
+
+/* ── Messages ─────────────────────────────────────────────────────────────── */
+
+.notice {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--cream-sub);
+  font-size: 14px;
+}
+
+.notice.bad {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--cream);
+}
+
+/* ── Option tabs ──────────────────────────────────────────────────────────── */
+
+.options {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 26px 0 14px;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.options::-webkit-scrollbar {
+  display: none;
+}
+
+.chip-btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--cream-sub);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+  transition: border-color 0.14s, color 0.14s;
+}
+
+.chip-btn:hover {
+  border-color: var(--line-strong);
+  color: var(--cream);
+}
+
+.chip-btn[aria-pressed='true'] {
+  border-color: var(--danfo);
+  color: var(--danfo);
+}
+
+/* ── Journey headline ─────────────────────────────────────────────────────── */
+
+.route {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0.001;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.route-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  padding: 16px 18px 12px;
+  align-items: start;
+}
+
+.tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tag {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--cream-sub);
+}
+
+.tag-rec {
+  color: #111;
+  background: var(--danfo);
+  border-color: var(--danfo);
+}
+
+.tag-easy {
+  color: var(--green);
+  border-color: rgba(47, 168, 103, 0.45);
+  background: var(--green-dim);
+}
+
+.tag-moderate {
+  color: var(--danfo);
+  border-color: rgba(245, 197, 24, 0.4);
+  background: var(--danfo-dim);
+}
+
+.tag-complex {
+  color: var(--okada);
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+/* The fare leads the card, as a range. Never a single counted-up number. */
+.fare {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1;
+  color: var(--danfo);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  margin: 0;
+}
+
+.fare small {
+  display: block;
+  font-family: var(--mono);
+  font-weight: 400;
+  font-size: 10.5px;
+  color: var(--cream-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+/* The journey's shape in one glance: each leg weighted by its minutes. */
+.modebar {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+  margin: 4px 18px 0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.modebar span {
+  min-width: 4px;
+}
+
+.route-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 18px 12px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--cream-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+.reasons {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--cream-mute);
+  margin: 0;
+  padding: 0 18px 14px;
+}
+
+/* ── Steps ────────────────────────────────────────────────────────────────── */
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.step:last-child {
+  border-bottom: 0;
+}
+
+/* Mode colour is the one place saturation is allowed to be loud — it marks the
+   vehicle, never a category or a piece of chrome. */
+.chip {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 0;
+  border-radius: 6px;
+  text-align: center;
+  align-self: start;
+  color: #111;
+  background: var(--walk);
+}
+
+.chip-danfo { background: var(--danfo); }
+.chip-brt { background: var(--brt); color: #fff; }
+.chip-keke { background: var(--keke); color: #0b0f0c; }
+.chip-okada { background: var(--okada); color: #fff; }
+.chip-rail { background: var(--rail); color: #0b0f0c; }
+.chip-ferry { background: var(--ferry); color: #0b0f0c; }
+.chip-walk { background: rgba(244, 239, 225, 0.14); color: var(--cream); }
+
+.step-body {
+  min-width: 0;
+}
+
+.step-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.step-title .n {
+  font-family: var(--mono);
+  color: var(--cream-mute);
+  font-weight: 400;
+  margin-right: 8px;
+}
+
+.step-detail {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--cream-mute);
+  margin: 3px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The sentence that actually works at the park. */
+.step-say {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--keke);
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.aside {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  color: var(--cream-sub);
+}
+
+.aside .label {
+  font-family: var(--mono);
+  color: var(--cream-mute);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: block;
+}
+
+.step-fare {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  color: var(--cream-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+.step-note {
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--danfo-dim);
+  border: 1px solid rgba(245, 197, 24, 0.3);
+  color: var(--danfo);
+  font-size: 12.5px;
+}
+
+/* ── What the conductor will say ──────────────────────────────────────────── */
+
+.fare-talk {
+  margin: 14px 18px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: var(--danfo-dim);
+  border: 1px dashed rgba(245, 197, 24, 0.35);
+  font-size: 13.5px;
+  color: var(--cream);
+}
+
+.fare-talk b {
+  color: var(--danfo);
+}
+
+/* ── Footer actions ───────────────────────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn-ghost {
+  min-height: 48px;
+  padding: 0 18px;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--cream);
+  font-size: 15px;
+  font-weight: 600;
+  transition: border-color 0.14s, color 0.14s, transform 0.14s;
+}
+
+.btn-ghost:hover {
+  border-color: var(--danfo);
+  transform: translateY(-1px);
+}
+
+.btn-ghost.worked:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.signin {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.signin input {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0 14px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--cream);
+  font: inherit;
+}
+
+.foot {
+  font-family: var(--mono);
+  margin-top: 40px;
+  color: var(--cream-mute);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ── What WakaWay is (before the first search) ────────────────────────────── */
+
+.about {
+  margin-top: 36px;
+  color: var(--cream-sub);
+  font-size: 14.5px;
+}
+
+.about-h {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--cream);
+  margin: 0 0 10px;
+}
+
+.about p {
+  margin: 0 0 12px;
+}
+
+/* ── "Confirm with someone who knows" ─────────────────────────────────────── */
+
+.caution {
+  margin: 0 18px 12px;
+  font-size: 13px;
+  color: var(--cream-sub);
+}
+
+.caution.strong {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--danfo-dim);
+  border: 1px solid rgba(245, 197, 24, 0.3);
+  color: var(--cream);
+}
+
+.caution b {
+  color: var(--danfo);
+  font-weight: 600;
+}
+
+/* ── "Did this route work?" ───────────────────────────────────────────────── */
+
+.feedback {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.feedback-q {
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+
+.feedback-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.btn-ghost.yes:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.btn-ghost.no:hover {
+  border-color: var(--okada);
+  color: var(--okada);
+}
+
+.feedback-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.field-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cream-mute);
+  margin: 12px 0 6px;
+}
+
+.feedback-form textarea,
+.feedback-form input,
+.admin-note {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--ink);
+  color: var(--cream);
+  font: inherit;
+  font-size: 15px;
+  resize: vertical;
+}
+
+.feedback-form textarea:focus,
+.feedback-form input:focus,
+.admin-note:focus {
+  border-color: var(--line-strong);
+}
+
+.feedback-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 380px) {
+  .feedback-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--danfo);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ── Admin ────────────────────────────────────────────────────────────────── */
+
+.admin .label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cream-mute);
+  margin-bottom: 4px;
+}
+
+.admin-card {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.admin-h {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 20px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.admin-stats .stat {
+  background: var(--ink);
+  padding: 14px;
+}
+
+.stat-n {
+  display: block;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.admin-lines li:last-child {
+  border-bottom: 0;
+}
+
+.admin-lines b {
+  color: var(--okada);
+}
+
+.admin-filters {
+  margin-top: 16px;
+}
+
+.admin-filters .options {
+  margin: 8px 0;
+}
+
+.admin-row {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.admin-row.verdict-wrong {
+  border-left: 3px solid var(--okada);
+}
+
+.admin-row.verdict-correct {
+  border-left: 3px solid var(--green);
+}
+
+.admin-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-when {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--cream-mute);
+}
+
+.admin-trip {
+  margin: 10px 0;
+}
+
+.admin-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  font-size: 14px;
+}
+
+@media (max-width: 520px) {
+  .admin-compare {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-compare p {
+  margin: 0 0 4px;
+}
+
+.admin-meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--cream-mute);
+}
+
+.admin-quote {
+  color: var(--keke);
+}
+
+.admin-note {
+  margin-top: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route {
+    animation: none;
+  }
+  .go:hover:not([disabled]),
+  .btn-ghost:hover {
+    transform: none;
+  }
+}

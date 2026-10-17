@@ -1,24 +1,11 @@
 
 # Directions Service
 
-`client/src/services/directionsService.ts` — wraps the OpenRouteService (ORS) Directions API for real road-following polyline geometry. The functional replacement for [[Google Directions Service (Deprecated)]].
+**Retired 2026-09-22** — see [[0014-draw-legs-from-the-corridor-not-a-directions-api]].
 
-## What it does
+`client/src/services/directionsService.ts` wrapped the OpenRouteService Directions API for road-following polylines in Wakaway Mode. The key died in September 2026 and the API drew a car's road rather than the danfo's corridor, so the file, `ORS_API_KEY` and `EXPO_PUBLIC_ORS_API_KEY` were removed.
 
-Fetches route geometry for a single leg (`fetchLegGeometry`) or a batch of legs (`fetchAllLegGeometries`), converting ORS's `[lng,lat]` output to `{latitude, longitude}` arrays. Free tier, requires `EXPO_PUBLIC_ORS_API_KEY`. Fails gracefully — returns `null` on missing key or fetch error, letting the caller fall back to straight lines.
-
-## Key exports
-
-- `fetchLegGeometry(fromLat, fromLng, toLat, toLng, mode): Promise<LatLng[] | null>`
-- `fetchAllLegGeometries(legs[]): Promise<(LatLng[] | null)[]>`
-
-## Dependencies
-
-Only `ORS_API_KEY` from `utils/constants` — no cross-service imports.
-
-## Used by
-
-`client/src/screens/NavigationScreen.tsx` (`fetchAllLegGeometries`) — draws road-accurate polylines for [[Smart Routing Engine]]-produced routes on the [[Map Layer]].
+Leg geometry now comes from `client/src/services/routeGeometry.ts` — `legGeometry(leg)` chains the corridor's stops from `data/lagosRoutes.ts`, the same data the engine routed on. Used by `screens/NavigationScreen.tsx` (polylines) and `hooks/useLiveAlerts.ts` (route-scoped alert matching).
 
 ## Related
 [[Architecture]] · [[Map Layer]] · [[Smart Routing Engine]] · [[Google Directions Service (Deprecated)]]

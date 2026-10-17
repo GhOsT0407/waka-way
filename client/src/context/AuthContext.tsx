@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 
 interface User {
   id: string;
@@ -11,16 +12,13 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  firebaseUser: FirebaseAuthTypes.User | null;
+  session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  // Email/password
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (email: string, password: string, name: string) => Promise<{ success: boolean; needsConfirmation: boolean; error?: string }>;
-  // Phone OTP
-  sendOTP: (phoneNumber: string) => Promise<{ success: boolean; confirmation?: FirebaseAuthTypes.ConfirmationResult; error?: string }>;
-  verifyOTP: (confirmation: FirebaseAuthTypes.ConfirmationResult, code: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<{ success: boolean; error?: string }>;
   updateProfile: (name: string) => Promise<void>;
 }
 
@@ -32,93 +30,99 @@ export const useAuth = () => {
   return context;
 };
 
-const transformUser = (fbUser: FirebaseAuthTypes.User): User => ({
-  id:         fbUser.uid,
-  email:      fbUser.email ?? '',
-  name:       fbUser.displayName ?? fbUser.email?.split('@')[0] ?? fbUser.phoneNumber ?? 'User',
-  avatar_url: fbUser.photoURL ?? undefined,
-  phone:      fbUser.phoneNumber ?? undefined,
+const transformUser = (sbUser: SupabaseUser): User => ({
+  id:         sbUser.id,
+  email:      sbUser.email ?? '',
+  name:       sbUser.user_metadata?.full_name ?? sbUser.email?.split('@')[0] ?? sbUser.phone ?? 'User',
+  avatar_url: sbUser.user_metadata?.avatar_url ?? undefined,
+  phone:      sbUser.phone ?? undefined,
 });
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseAuthTypes.User | null>(null);
-  const [user, setUser]                 = useState<User | null>(null);
-  const [isLoading, setIsLoading]       = useState(true);
+  const [session, setSession]     = useState<Session | null>(null);
+  const [user, setUser]           = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = auth().onAuthStateChanged((fbUser) => {
-      setFirebaseUser(fbUser);
-      setUser(fbUser ? transformUser(fbUser) : null);
+    // Restore any persisted session first, then follow auth state changes.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ? transformUser(session.user) : null);
       setIsLoading(false);
     });
-    return unsubscribe;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ? transformUser(session.user) : null);
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   // ── Email / Password ────────────────────────────────────────────────────────
 
   const login = async (email: string, password: string) => {
-    try {
-      await auth().signInWithEmailAndPassword(email, password);
-      return { success: true };
-    } catch (error: any) {
-      const msg = firebaseErrorMessage(error.code);
-      return { success: false, error: msg };
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { success: false, error: friendlyError(error.message) };
+    return { success: true };
   };
 
   const signup = async (email: string, password: string, name: string) => {
-    try {
-      const { user: fbUser } = await auth().createUserWithEmailAndPassword(email, password);
-      await fbUser.updateProfile({ displayName: name });
-      return { success: true, needsConfirmation: false };
-    } catch (error: any) {
-      const msg = firebaseErrorMessage(error.code);
-      return { success: false, needsConfirmation: false, error: msg };
-    }
-  };
+    // full_name lands in raw_user_meta_data, which the handle_new_user trigger
+    // reads to populate the profiles row.
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    });
+    if (error) return { success: false, needsConfirmation: false, error: friendlyError(error.message) };
 
-  // ── Phone OTP ───────────────────────────────────────────────────────────────
-
-  const sendOTP = async (phoneNumber: string) => {
-    try {
-      // Ensure number is in international format e.g. +2348012345678
-      const formatted = phoneNumber.startsWith('+') ? phoneNumber : `+234${phoneNumber.replace(/^0/, '')}`;
-      const confirmation = await auth().signInWithPhoneNumber(formatted);
-      return { success: true, confirmation };
-    } catch (error: any) {
-      return { success: false, error: firebaseErrorMessage(error.code) };
-    }
-  };
-
-  const verifyOTP = async (confirmation: FirebaseAuthTypes.ConfirmationResult, code: string) => {
-    try {
-      await confirmation.confirm(code);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: 'Invalid code. Please try again.' };
-    }
+    // No session back means the project requires email confirmation first.
+    return { success: true, needsConfirmation: !data.session };
   };
 
   // ── Logout ──────────────────────────────────────────────────────────────────
 
   const logout = async () => {
-    await auth().signOut();
+    await supabase.auth.signOut();
+  };
+
+  // ── Delete account ──────────────────────────────────────────────────────────
+
+  // Removing a row from auth.users needs the service_role key, so the actual
+  // deletion happens in the delete-account edge function. invoke() attaches the
+  // current session's JWT, which is how the function identifies who to delete.
+  const deleteAccount = async () => {
+    const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
+
+    if (error) {
+      return { success: false, error: 'Could not delete your account. Please try again.' };
+    }
+
+    // The auth user no longer exists, so a server-side logout would 401. Clearing
+    // the session locally is enough -- onAuthStateChange then drops the app back
+    // to the auth stack on its own.
+    await supabase.auth.signOut({ scope: 'local' });
+    return { success: true };
   };
 
   // ── Update profile ──────────────────────────────────────────────────────────
 
   const updateProfile = async (name: string) => {
-    if (firebaseUser) {
-      await firebaseUser.updateProfile({ displayName: name });
-      setUser(transformUser({ ...firebaseUser, displayName: name } as any));
-    }
+    const { data, error } = await supabase.auth.updateUser({ data: { full_name: name } });
+    if (error || !data.user) return;
+
+    setUser(transformUser(data.user));
+    // Keep the profiles row in step with the auth metadata.
+    await supabase.from('profiles').update({ full_name: name }).eq('id', data.user.id);
   };
 
   return (
     <AuthContext.Provider value={{
-      user, firebaseUser, isLoading,
+      user, session, isLoading,
       isAuthenticated: !!user,
-      login, signup, sendOTP, verifyOTP, logout, updateProfile,
+      login, signup, logout, deleteAccount, updateProfile,
     }}>
       {children}
     </AuthContext.Provider>
@@ -127,27 +131,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 // ── Friendly error messages ───────────────────────────────────────────────────
 
-function firebaseErrorMessage(code: string): string {
-  switch (code) {
-    case 'auth/user-not-found':
-    case 'auth/wrong-password':
-    case 'auth/invalid-credential':
-      return 'Invalid email or password.';
-    case 'auth/email-already-in-use':
-      return 'An account with this email already exists.';
-    case 'auth/weak-password':
-      return 'Password must be at least 6 characters.';
-    case 'auth/invalid-email':
-      return 'Please enter a valid email address.';
-    case 'auth/too-many-requests':
-      return 'Too many attempts. Please try again later.';
-    case 'auth/invalid-phone-number':
-      return 'Invalid phone number. Use format: 08012345678';
-    case 'auth/quota-exceeded':
-      return 'SMS quota exceeded. Try again later.';
-    case 'auth/network-request-failed':
-      return 'No internet connection. Check your network.';
-    default:
-      return 'Something went wrong. Please try again.';
-  }
+function friendlyError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes('invalid login credentials'))     return 'Invalid email or password.';
+  if (m.includes('email not confirmed'))           return 'Please confirm your email address first.';
+  if (m.includes('already registered'))            return 'An account with this email already exists.';
+  if (m.includes('password should be at least'))   return 'Password must be at least 6 characters.';
+  if (m.includes('unable to validate email'))      return 'Please enter a valid email address.';
+  if (m.includes('rate limit') || m.includes('too many')) return 'Too many attempts. Please try again later.';
+  if (m.includes('network') || m.includes('fetch')) return 'No internet connection. Check your network.';
+  return 'Something went wrong. Please try again.';
 }

@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import type { ReportKind } from '../utils/reportKinds';
 
 // ============================================================
 // TYPES
@@ -12,7 +13,7 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 export interface Contribution {
   id: string;
   user_id: string | null;
-  type: 'bus_stop' | 'taxi_stand' | 'danger_zone' | 'construction' | 'traffic' | 'security' | 'hazard' | 'other';
+  type: ReportKind;
   title: string;
   description: string | null;
   latitude: number;

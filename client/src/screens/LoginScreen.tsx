@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { LightColors } from '../theme/colors';
+import { useAppTheme } from '../context/ThemeContext';
+import type { WWColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 
-const C = LightColors;
 
 // Pill button with subtle spring press-in scale
 function PressableButton({ onPress, disabled, style, children }: {
@@ -43,6 +43,8 @@ function PressableButton({ onPress, disabled, style, children }: {
 function FocusField({ icon, children }: {
   icon: string; children: React.ReactNode;
 }) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const [focused, setFocused] = useState(false);
   const borderAnim = useRef(new Animated.Value(0)).current;
 
@@ -57,7 +59,7 @@ function FocusField({ icon, children }: {
 
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [C.divider, C.accent],
+    outputRange: [WW.divider, WW.orange],
   });
 
   return (
@@ -65,7 +67,7 @@ function FocusField({ icon, children }: {
       <Ionicons
         name={icon as any}
         size={18}
-        color={focused ? C.accent : C.textMuted}
+        color={focused ? WW.orange : WW.textMuted}
       />
       {/* Clone children injecting focus/blur handlers */}
       {React.Children.map(children, child =>
@@ -78,6 +80,8 @@ function FocusField({ icon, children }: {
 }
 
 export default function LoginScreen({ navigation }: any) {
+  const { WW } = useAppTheme();
+  const styles = useMemo(() => makeStyles(WW), [WW]);
   const { login } = useAuth();
   const { showError, showWarning, showSuccess, showInfo } = useToast();
   const [email, setEmail] = useState('');
@@ -92,7 +96,9 @@ export default function LoginScreen({ navigation }: any) {
     try {
       const result = await login(email.trim(), password);
       if (result.success) {
-        showSuccess('Welcome Back!', 'You have successfully signed in');
+        showSuccess('Welcome back!', 'You are signed in');
+        // Back to whatever needed the account — a save, a report, a vote.
+        if (navigation.canGoBack()) navigation.goBack(); else navigation.navigate('Main');
       } else {
         showError('Login Failed', result.error || 'Invalid email or password');
       }
@@ -108,16 +114,26 @@ export default function LoginScreen({ navigation }: any) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
+          <TouchableOpacity
+            onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))}
+            style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Not now"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.closeText}>Not now</Text>
+          </TouchableOpacity>
+
           {/* Header with orange-accented brand mark */}
           <View style={styles.header}>
             <View style={styles.logoGlow} />
             <View style={styles.logoRing}>
               <View style={styles.logoInner}>
-                <Ionicons name="navigate" size={34} color={C.accent} />
+                <Ionicons name="navigate" size={34} color={WW.orange} />
               </View>
             </View>
             <Text style={styles.appName}>WakaWay</Text>
-            <Text style={styles.tagline}>Move Smart. Move Local.</Text>
+            <Text style={styles.tagline}>Sign in to save routes and help the next rider.</Text>
           </View>
 
           {/* Form card */}
@@ -127,7 +143,7 @@ export default function LoginScreen({ navigation }: any) {
             <FocusField icon="mail-outline">
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Email" placeholderTextColor={C.textMuted}
+                placeholder="Email" placeholderTextColor={WW.textMuted}
                 value={email} onChangeText={setEmail}
                 keyboardType="email-address" autoCapitalize="none" autoCorrect={false} returnKeyType="next"
               />
@@ -136,13 +152,13 @@ export default function LoginScreen({ navigation }: any) {
             <FocusField icon="lock-closed-outline">
               <TextInput
                 style={styles.fieldInput}
-                placeholder="Password" placeholderTextColor={C.textMuted}
+                placeholder="Password" placeholderTextColor={WW.textMuted}
                 value={password} onChangeText={setPassword}
                 secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false}
                 returnKeyType="done" onSubmitEditing={handleLogin}
               />
               <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={C.textMuted} />
+                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={WW.textMuted} />
               </TouchableOpacity>
             </FocusField>
 
@@ -172,16 +188,21 @@ export default function LoginScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
+function makeStyles(WW: WWColors) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: WW.bg },
   scroll: { flexGrow: 1, paddingBottom: 32 },
+
+  closeBtn: { alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 4 },
+
+  closeText: { color: WW.textSub, fontSize: Typography.md, fontWeight: '600' },
 
   header: {
     alignItems: 'center',
     paddingTop: 52,
     paddingBottom: 44,
     gap: 6,
-    backgroundColor: C.bg,
+    backgroundColor: WW.bg,
   },
   logoGlow: {
     position: 'absolute',
@@ -189,7 +210,7 @@ const styles = StyleSheet.create({
     width: 130,
     height: 130,
     borderRadius: 65,
-    backgroundColor: C.accentSubtle,
+    backgroundColor: WW.orangeDim,
   },
   logoRing: {
     width: 80,
@@ -210,8 +231,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  appName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: C.textPrimary, letterSpacing: -0.5 },
-  tagline: { fontSize: Typography.md, color: C.textSecondary },
+  appName: { fontSize: Typography.xxl, fontWeight: Typography.bold, color: WW.text, letterSpacing: -0.5 },
+  tagline: { fontSize: Typography.md, color: WW.textSub },
 
   card: {
     marginHorizontal: 20,
@@ -219,15 +240,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     gap: 14,
-    backgroundColor: C.surface,
+    backgroundColor: WW.bgSurface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: C.divider,
+    borderColor: WW.divider,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12 },
       android: { elevation: 3 },
     }),
   },
-  formHeading: { fontSize: Typography.xl, fontWeight: Typography.bold, marginBottom: 4, color: C.textPrimary },
+  formHeading: { fontSize: Typography.xl, fontWeight: Typography.bold, marginBottom: 4, color: WW.text },
 
   field: {
     flexDirection: 'row',
@@ -236,13 +257,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 13,
     gap: 10,
-    backgroundColor: C.surfaceSecondary,
+    backgroundColor: WW.bgElevated,
   },
   fieldInput: {
     flex: 1,
     fontSize: Typography.lg,
     paddingVertical: 0,
-    color: C.textPrimary,
+    color: WW.text,
   },
 
   primaryBtn: {
@@ -250,16 +271,16 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
     marginTop: 4,
-    backgroundColor: C.accent,
+    backgroundColor: WW.orange,
     ...Platform.select({
-      ios: { shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 },
+      ios: { shadowColor: WW.orange, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 },
       android: { elevation: 5 },
     }),
   },
-  primaryBtnText: { color: C.textOnAccent, fontSize: Typography.lg, fontWeight: Typography.semibold },
+  primaryBtnText: { color: WW.textOnOrange, fontSize: Typography.lg, fontWeight: Typography.semibold },
 
   textLink: { alignSelf: 'center', paddingVertical: 8 },
-  textLinkText: { fontSize: Typography.md, fontWeight: Typography.medium, color: C.accent },
+  textLinkText: { fontSize: Typography.md, fontWeight: Typography.medium, color: WW.orange },
 
   signupRow: {
     flexDirection: 'row',
@@ -268,6 +289,7 @@ const styles = StyleSheet.create({
     marginTop: 28,
     paddingHorizontal: 20,
   },
-  signupPrompt: { fontSize: Typography.md, color: C.textSecondary },
-  signupLink: { fontSize: Typography.md, fontWeight: Typography.semibold, color: C.accent },
+  signupPrompt: { fontSize: Typography.md, color: WW.textSub },
+  signupLink: { fontSize: Typography.md, fontWeight: Typography.semibold, color: WW.orange },
 });
+}

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, Easing, Platform } from 'react-native';
-import { WW } from '../theme/colors';
+// The brand accent is identical in both palettes, so a default prop can read it
+// statically without going through the theme hook.
+import { WW_LIGHT as BRAND } from '../theme/colors';
 import { Fonts } from '../theme/typography';
 
 // W-path: M14 20 L34 52 L50 30 L66 52 L86 20  (SVG 100×64 coordinate space)
@@ -63,7 +65,7 @@ interface WakaWaySpinnerProps {
 }
 
 export function WakaWaySpinner({
-  accent    = WW.orange,
+  accent    = BRAND.orange,
   size      = 84,
   onDark    = true,
   showLabel = true,
