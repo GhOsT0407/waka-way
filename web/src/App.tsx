@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { planJourney } from '@engine/services/journeyPlanner';
 import { journeySteps, explainJourney, type JourneyStep } from '@engine/services/explainJourney';
 import { searchPlaces, getPlaceDetails } from '@engine/services/placesService';
@@ -335,6 +336,7 @@ export default function App() {
       </main>
 
       <div className="stripe" role="presentation" />
+      <Analytics />
     </>
   );
 }
