@@ -3,7 +3,7 @@ import { planJourney } from '@engine/services/journeyPlanner';
 import { journeySteps, explainJourney, type JourneyStep } from '@engine/services/explainJourney';
 import { searchPlaces, getPlaceDetails, isWithinLagos } from '@engine/services/placesService';
 import { confirmRouteWorked } from '@engine/services/contribute';
-import { supabase } from '@engine/lib/supabase';
+import { supabase } from './supabase';
 import { GRAPH_STOPS } from '@engine/data/lagosRoutes';
 import { haversineKm } from '@engine/services/routeGraph';
 import type { SmartRouteResult, RouteOption, RouteLeg } from '@engine/services/smartRoutingService';
@@ -77,6 +77,16 @@ function nearestStopName(fix: { latitude: number; longitude: number }): string |
     if (!best || km < best.km) best = { name: s.name, km };
   }
   return best && best.km <= 2 ? best.name : null;
+}
+
+/** The nearest stop we know to a point, however far — for the "can't route" message. */
+function nearestKnownStop(p: { latitude: number; longitude: number }): { name: string; km: number } {
+  let best = { name: GRAPH_STOPS[0].name, km: Infinity };
+  for (const s of GRAPH_STOPS) {
+    const km = haversineKm(p, s);
+    if (km < best.km) best = { name: s.name, km };
+  }
+  return best;
 }
 
 const describeFix = (fix: Fix) => {
@@ -191,12 +201,204 @@ function FareTalk({ legs }: { legs: RouteLeg[] }) {
     (l.mode === 'danfo' || l.mode === 'keke' || l.mode === 'okada') && l.fareSource === 'band' && l.priceMax > 0);
   if (!flex) return null;
   const who = flex.mode === 'danfo' ? 'Conductor' : flex.mode === 'keke' ? 'Keke man' : 'Okada man';
+  // "Conductor for Your location" reads as nonsense; a place is only named
+  // when it is one a rider would recognise.
+  const where = flex.from.name === 'Your location' ? '' : ` for ${flex.from.name}`;
 
   return (
     <p className="fare-talk">
-      {who} for {flex.from.name} go call {fareRange(flex.priceMin, flex.priceMax)}. If e pass {NGN(flex.priceMax)}, tell am{' '}
+      {who}{where} go call {fareRange(flex.priceMin, flex.priceMax)}. If e pass {NGN(flex.priceMax)}, tell am{' '}
       <b>“e no reach, na {NGN(flex.priceMax)} I dey pay”</b>.
     </p>
+  );
+}
+
+/**
+ * The route can be right and still not be how a local would go — a shortcut,
+ * a better bus, a road that is never jammed. Always said; said louder when
+ * part of the route is something we have not confirmed.
+ */
+function Caution({ option }: { option: RouteOption }) {
+  const shaky = option.tags.includes('Unverified')
+    || option.tags.includes('Far from known stops')
+    || option.transfers >= 3
+    || option.legs.some((l) => l.mayBeUnavailable || l.confidence === 'likely');
+  return (
+    <p className={`caution${shaky ? ' strong' : ''}`}>
+      {shaky && <b>Parts of this route are not confirmed yet. </b>}
+      Locals sometimes know a quicker way. Before you go, confirm with a conductor or someone at the park.
+    </p>
+  );
+}
+
+// ─── "Did this route work?" ──────────────────────────────────────────────────
+
+type Reason = 'wrong_bus' | 'wrong_stop' | 'faster_way' | 'fare_wrong' | 'took_longer' | 'other';
+const REASONS: { id: Reason; label: string }[] = [
+  { id: 'wrong_bus', label: 'Wrong bus' },
+  { id: 'wrong_stop', label: 'Wrong stop' },
+  { id: 'faster_way', label: 'There’s a faster way' },
+  { id: 'fare_wrong', label: 'Fare was wrong' },
+  { id: 'took_longer', label: 'Took much longer' },
+  { id: 'other', label: 'Something else' },
+];
+
+const round = (n: number, places: number) => Math.round(n * 10 ** places) / 10 ** places;
+/** A whole number inside [min, max] from whatever was typed, or nothing. */
+const wholeIn = (text: string, min: number, max: number) => {
+  const n = parseInt(text.replace(/[^\d]/g, ''), 10);
+  return Number.isFinite(n) && n >= min && n <= max ? n : null;
+};
+
+/** What we suggested, in a shape the admin page can show and count by line. */
+function summarise(o: RouteOption) {
+  return {
+    option: o.name,
+    recommended: o.isRecommended,
+    modes: o.legs.map((l) => l.mode),
+    corridors: [...new Set(o.legs.map((l) => l.corridorId).filter((c): c is string => !!c))],
+    legs: o.legs.map((l) => ({ mode: l.mode, from: l.from.name, to: l.to.name, corridor: l.corridorId ?? null })),
+    fare: [o.totalPriceMin, o.totalPriceMax],
+    minutes: o.totalDurationMins,
+    transfers: o.transfers,
+    tags: o.tags,
+  };
+}
+
+/**
+ * The rider tells us whether the route worked, and if not, how they really
+ * go. No account: a correction is worth more than a sign-in it would never
+ * get past. Nothing sent here changes a route on its own — it lands in the
+ * admin page for a person to check.
+ */
+function Feedback({ result, option, signedIn }: { result: SmartRouteResult; option: RouteOption; signedIn: boolean }) {
+  const [stage, setStage] = useState<'ask' | 'no' | 'sending' | 'sent' | 'failed'>('ask');
+  const [reasons, setReasons] = useState<Reason[]>([]);
+  const [correction, setCorrection] = useState('');
+  const [minutes, setMinutes] = useState('');
+  const [fare, setFare] = useState('');
+  const [contact, setContact] = useState('');
+  const [why, setWhy] = useState('');
+
+  // A different route on screen deserves a fresh question.
+  useEffect(() => {
+    setStage('ask'); setReasons([]); setCorrection(''); setMinutes(''); setFare(''); setContact(''); setWhy('');
+  }, [option.id]);
+
+  const toggle = (r: Reason) => setReasons((rs) => (rs.includes(r) ? rs.filter((x) => x !== r) : [...rs, r]));
+  const canSendNo = reasons.length > 0 || correction.trim().length > 0;
+
+  const send = async (verdict: 'correct' | 'wrong') => {
+    setStage('sending');
+    const { error } = await supabase.from('route_feedback').insert({
+      verdict,
+      reasons: verdict === 'wrong' ? reasons : [],
+      correction: correction.trim().slice(0, 1000) || null,
+      minutes_taken: wholeIn(minutes, 1, 600),
+      fare_paid_ngn: wholeIn(fare, 0, 100000),
+      contact: contact.trim().slice(0, 120) || null,
+      from_name: result.origin.name.slice(0, 120),
+      // The start is often the rider's own location: rounded to ~110 m
+      // here, and again by the database, so it is never their exact door.
+      from_lat: round(result.origin.latitude, 3),
+      from_lng: round(result.origin.longitude, 3),
+      to_name: result.destination.name.slice(0, 120),
+      to_lat: round(result.destination.latitude, 4),
+      to_lng: round(result.destination.longitude, 4),
+      suggested: summarise(option),
+      depart_at: new Date().toISOString(),
+      source: 'web',
+    });
+    if (error) {
+      setWhy(/too much feedback/i.test(error.message)
+        ? 'Too many reports from this network in the last hour. Try again later.'
+        : 'That did not send. Check your connection and try again.');
+      setStage('failed');
+      return;
+    }
+    // Signed in, a "yes" also counts toward the line's trust badge, as in the app.
+    if (verdict === 'correct' && signedIn) confirmRouteWorked(result, option).catch(() => {});
+    setStage('sent');
+  };
+
+  return (
+    <section className="feedback" aria-live="polite">
+      {stage === 'ask' && (
+        <>
+          <p className="feedback-q">Did this route work for you?</p>
+          <div className="feedback-row">
+            <button className="btn-ghost yes" onClick={() => send('correct')}>Yes, e correct</button>
+            <button className="btn-ghost no" onClick={() => setStage('no')}>No, e no correct</button>
+          </div>
+          <p className="hint">Tell us after you ride. No account needed.</p>
+        </>
+      )}
+
+      {stage === 'no' && (
+        <form
+          className="feedback-form"
+          onSubmit={(e) => { e.preventDefault(); if (canSendNo) send('wrong'); }}
+        >
+          <p className="feedback-q">What was wrong?</p>
+          <div className="feedback-reasons" role="group" aria-label="What was wrong">
+            {REASONS.map((r) => (
+              <button
+                type="button"
+                key={r.id}
+                className="chip-btn"
+                aria-pressed={reasons.includes(r.id)}
+                onClick={() => toggle(r.id)}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          <label className="field-label" htmlFor="fb-correction">How do you actually go?</label>
+          <textarea
+            id="fb-correction"
+            value={correction}
+            onChange={(e) => setCorrection(e.target.value)}
+            maxLength={1000}
+            rows={3}
+            placeholder="From Berger, enter Ikeja bus, drop at Allen, then walk…"
+          />
+
+          <div className="feedback-pair">
+            <div>
+              <label className="field-label" htmlFor="fb-fare">What you paid (₦)</label>
+              <input id="fb-fare" inputMode="numeric" value={fare} onChange={(e) => setFare(e.target.value)} placeholder="Optional" />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="fb-minutes">How long it took (min)</label>
+              <input id="fb-minutes" inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="Optional" />
+            </div>
+          </div>
+
+          <label className="field-label" htmlFor="fb-contact">Phone or email, if we may ask you more</label>
+          <input id="fb-contact" value={contact} onChange={(e) => setContact(e.target.value)} maxLength={120} placeholder="Optional" />
+
+          <div className="feedback-row">
+            <button type="submit" className="go" disabled={!canSendNo}>Send</button>
+            <button type="button" className="btn-ghost" onClick={() => setStage('ask')}>Cancel</button>
+          </div>
+          {!canSendNo && <p className="hint">Pick what was wrong, or tell us how you go.</p>}
+        </form>
+      )}
+
+      {stage === 'sending' && <p className="hint">Sending…</p>}
+
+      {stage === 'sent' && (
+        <p className="notice">Thank you — we go check am. Every correction makes the next person’s route better.</p>
+      )}
+
+      {stage === 'failed' && (
+        <p className="notice bad">
+          {why}{' '}
+          <button className="link-btn" onClick={() => setStage(reasons.length || correction ? 'no' : 'ask')}>Try again</button>
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -223,8 +425,6 @@ export default function App() {
   const pendingFix = useRef<Promise<Fix> | null>(null);
 
   const [signedIn, setSignedIn] = useState(false);
-  const [email, setEmail] = useState('');
-  const [askEmail, setAskEmail] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
 
   useEffect(() => {
@@ -286,9 +486,16 @@ export default function App() {
       setResult(r);
       setOptionId(r.recommendedOptionId);
     } catch {
-      // planJourney throws rather than inventing a route — the honest failure
-      // the app shows on Home, in the same words.
-      setError('We no sabi this road yet. Ask at the park, and tell us what you find.');
+      // planJourney throws rather than inventing a route. Say which end is off
+      // our network and the nearest stop we do know, so the rider has
+      // something to type instead of a dead end.
+      const a = nearestKnownStop(from), b = nearestKnownStop(to);
+      const far = a.km >= b.km ? { end: 'where you are starting', ...a } : { end: to.name, ...b };
+      setError(
+        far.km > 1
+          ? `We no sabi road from ${far.end} yet — the nearest stop we know is ${far.name}, ${far.km.toFixed(1)} km away. Try searching from or to ${far.name}, and tell us how you go.`
+          : 'We no sabi this road yet. Ask at the park, and tell us what you find.',
+      );
     } finally {
       setBusy(false);
     }
@@ -369,24 +576,6 @@ export default function App() {
       /* dismissed the share sheet; nothing to report */
     }
   }, [result, option]);
-
-  const worked = useCallback(async () => {
-    if (!result || !option) return;
-    if (!signedIn) {
-      setAskEmail(true);
-      return;
-    }
-    const ok = await confirmRouteWorked(result, option);
-    setSaid(
-      ok ? 'Thank you — that corridor just got more trusted.' : 'Could not save that. Try again later.',
-    );
-  }, [result, option, signedIn]);
-
-  const sendLink = useCallback(async () => {
-    const { error: err } = await supabase.auth.signInWithOtp({ email: email.trim() });
-    setSaid(err ? 'That did not send. Check the address.' : 'Check your email for the sign-in link.');
-    if (!err) setAskEmail(false);
-  }, [email]);
 
   // Each leg weighted by its minutes — the shape of the journey in one glance.
   const totalMins = option ? option.legs.reduce((t, l) => t + l.durationMins, 0) || 1 : 1;
@@ -513,6 +702,8 @@ export default function App() {
                 <p className="reasons">{option.complexityReasons.join(' · ')}</p>
               )}
 
+              <Caution option={option} />
+
               <ol className="steps">
                 {steps.map((s) => (
                   <Step key={`${s.legIndex}-${s.kind}-${s.n}`} step={s} />
@@ -522,35 +713,12 @@ export default function App() {
               <FareTalk legs={option.legs} />
             </article>
 
+            <Feedback result={result} option={option} signedIn={signedIn} />
+
             <div className="actions">
               <button className="btn-ghost" onClick={share}>
                 Share these directions
               </button>
-              <button className="btn-ghost worked" onClick={worked}>
-                Yes, e work
-              </button>
-
-              {askEmail && (
-                <>
-                  <div className="signin">
-                    <input
-                      type="email"
-                      inputMode="email"
-                      autoComplete="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      aria-label="Email for the sign-in link"
-                    />
-                    <button className="btn-ghost" onClick={sendLink} disabled={!email.trim()}>
-                      Send link
-                    </button>
-                  </div>
-                  <p className="hint">
-                    Reports need a sign-in so one person cannot vote a corridor up a hundred times.
-                  </p>
-                </>
-              )}
             </div>
 
             {said && <p className="notice">{said}</p>}

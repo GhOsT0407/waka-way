@@ -19,18 +19,25 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
 
     resolve: {
-      alias: {
-        '@engine': here('../client/src'),
+      // Order matters: the specific supabase entries must win over '@engine'.
+      alias: [
+        // The app's Supabase client is built for a phone and cannot accept a
+        // sign-in link that returns as a URL. Every import of it — ours and
+        // the engine's relative "../lib/supabase" — gets the browser client.
+        { find: '@engine/lib/supabase', replacement: here('./src/supabase.ts') },
+        { find: /^(\.\.\/)+lib\/supabase$/, replacement: here('./src/supabase.ts') },
+
+        { find: '@engine', replacement: here('../client/src') },
 
         // The engine's only native dependency. AsyncStorage's surface is
         // async get/set/remove over string keys — localStorage with promises
         // around it is a faithful stand-in.
-        '@react-native-async-storage/async-storage': here('./src/shims/async-storage.ts'),
+        { find: '@react-native-async-storage/async-storage', replacement: here('./src/shims/async-storage.ts') },
 
         // Browsers have had a working URL for years; the RN polyfill is a
         // no-op here and would drag in React Native internals if left alone.
-        'react-native-url-polyfill/auto': here('./src/shims/empty.ts'),
-      },
+        { find: 'react-native-url-polyfill/auto', replacement: here('./src/shims/empty.ts') },
+      ],
     },
 
     // The engine lives outside this project's root, so Vite needs permission
