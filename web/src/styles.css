@@ -664,6 +664,22 @@ button {
 
 /* ── "Confirm with someone who knows" ─────────────────────────────────────── */
 
+/* The route on a map. The fallback shares the box, so nothing jumps when the
+   map arrives. */
+.route-map {
+  height: clamp(220px, 46vw, 320px);
+  margin: 0 18px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--ink);
+  overflow: hidden;
+}
+
+.route-map .maplibregl-ctrl-attrib {
+  font-family: var(--sans);
+  font-size: 11px;
+}
+
 .caution {
   margin: 0 18px 12px;
   font-size: 13px;

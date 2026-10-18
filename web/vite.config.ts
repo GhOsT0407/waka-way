@@ -67,6 +67,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), seoFiles()],
 
+    // MapLibre starts its worker as an ES module; build it as one.
+    worker: { format: 'es' },
+
     resolve: {
       // Order matters: the specific supabase entries must win over '@engine'.
       alias: [

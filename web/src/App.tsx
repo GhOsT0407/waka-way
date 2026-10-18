@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { planJourney } from '@engine/services/journeyPlanner';
 import { journeySteps, explainJourney, type JourneyStep } from '@engine/services/explainJourney';
 import { searchPlaces, getPlaceDetails, isWithinLagos } from '@engine/services/placesService';
@@ -13,8 +13,8 @@ import type { SmartRouteResult, RouteOption, RouteLeg } from '@engine/services/s
  *
  * The whole product thesis is that the explanation is the thing — where to
  * stand, what the conductor shouts, what it should cost (ADR 0013). None of
- * that needs a map, which is why this shell ships without one: no install,
- * no 40 MB download, a link you can paste into WhatsApp.
+ * that needs a map, so the map is extra: it loads only once a route is on
+ * screen, and the first page stays a light link you can paste into WhatsApp.
  *
  * Visual language follows the landing page — danfo livery stripe, condensed
  * display type, mono numerics — so the two web surfaces read as one site.
@@ -30,6 +30,10 @@ const NGN = (n: number) => '₦' + Math.round(n).toLocaleString('en-NG');
 const fareRange = (min: number, max: number) => (min === max ? NGN(max) : `${NGN(min)}–${NGN(max)}`);
 
 type Resolved = { name: string; address: string; latitude: number; longitude: number };
+
+// The map library is most of the page's weight; nobody pays for it until
+// there is a route to draw.
+const RouteMap = lazy(() => import('./RouteMap'));
 
 // ─── Where the rider is standing ─────────────────────────────────────────────
 
@@ -701,6 +705,10 @@ export default function App() {
               {option.complexityReasons.length > 0 && (
                 <p className="reasons">{option.complexityReasons.join(' · ')}</p>
               )}
+
+              <Suspense fallback={<div className="route-map" aria-hidden="true" />}>
+                <RouteMap option={option} label={`Map of the route from ${result.origin.name} to ${result.destination.name}`} />
+              </Suspense>
 
               <Caution option={option} />
 
