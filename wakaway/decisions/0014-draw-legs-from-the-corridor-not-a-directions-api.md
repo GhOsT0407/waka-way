@@ -1,7 +1,7 @@
 # 0014 — Draw legs from the corridor, not a directions API
 
 **Date:** 2026-09-22
-**Status:** Accepted
+**Status:** Accepted. Amended by [[0015-road-shapes-fetched-once-shipped-as-data]]: shapes between stops are now fetched once ahead of time and shipped as data.
 
 ## Context
 
