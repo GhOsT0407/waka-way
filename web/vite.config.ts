@@ -70,6 +70,21 @@ export default defineConfig(({ mode }) => {
     // MapLibre starts its worker as an ES module; build it as one.
     worker: { format: 'es' },
 
+    // Engine files live under ../client, whose tsconfig extends
+    // expo/tsconfig.base. That package only exists when the Expo app's
+    // node_modules are installed, which a web-only build (Vercel) never does.
+    // Handing esbuild its settings directly stops it looking for that file.
+    esbuild: {
+      tsconfigRaw: JSON.stringify({
+        compilerOptions: {
+          target: 'ES2022',
+          jsx: 'react-jsx',
+          useDefineForClassFields: true,
+          verbatimModuleSyntax: false,
+        },
+      }),
+    },
+
     resolve: {
       // Order matters: the specific supabase entries must win over '@engine'.
       alias: [
