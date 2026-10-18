@@ -46,16 +46,19 @@ const ROUGH_FIX_M = 500;
 
 const TYPE_START = 'Type where you are instead — like “Yaba to Ikeja”.';
 
-/** The browser's location, or a sentence saying plainly why we could not get it. */
+/**
+ * The browser's location, or a sentence saying plainly why we could not get
+ * it. The reason only: what to type instead depends on where it is shown.
+ */
 function locate(): Promise<Fix> {
   return new Promise((resolve, reject) => {
     if (!('geolocation' in navigator)) {
-      reject(new Error(`This browser cannot share your location. ${TYPE_START}`));
+      reject(new Error('This browser cannot share your location.'));
       return;
     }
     if (!window.isSecureContext) {
       // Browsers only hand out location over HTTPS (or localhost).
-      reject(new Error(`Location only works on a secure (https) link. ${TYPE_START}`));
+      reject(new Error('Location only works on a secure (https) link.'));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -66,7 +69,7 @@ function locate(): Promise<Fix> {
           : err.code === err.TIMEOUT
             ? 'Your phone took too long to find where you are.'
             : 'Your phone could not find where you are.';
-        reject(new Error(`${why} ${TYPE_START}`));
+        reject(new Error(why));
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
     );
@@ -450,7 +453,7 @@ export default function App() {
       pendingFix.current = locate()
         .then((f) => {
           if (!isWithinLagos(f.latitude, f.longitude)) {
-            throw new Error(`You look to be outside Lagos, so we can't start from where you are. ${TYPE_START}`);
+            throw new Error("You look to be outside Lagos, so we can't start from where you are.");
           }
           setFix(f);
           return f;
@@ -532,15 +535,17 @@ export default function App() {
       start = { kind: 'typed', list: fromList, index: 0 };
       toList = dest;
     } else {
-      const [here, dest] = await Promise.all([getFix().catch(() => null), candidates(text)]);
+      const [here, dest] = await Promise.all([getFix().catch((e: Error) => e), candidates(text)]);
       if (!dest.length) {
         // Guessing a place we do not know is how a route ends up at CMS.
         setError(`We no fit find "${text}". Try the bus stop or a landmark near it.`);
         setBusy(false);
         return;
       }
-      if (!here) {
-        // The location line already says why, and how to type a start instead.
+      if (here instanceof Error) {
+        // Said where the route would have been, in words they can copy: a
+        // grey hint under the box was missed, and the search looked broken.
+        setError(`${here.message} Type where you are starting from — like “Yaba to ${text}”.`);
         setBusy(false);
         return;
       }
@@ -622,7 +627,7 @@ export default function App() {
               : fix
                 ? <>Starting from your location · {describeFix(fix)}{fix.accuracy > ROUGH_FIX_M ? ' — that is rough; if the start looks wrong, type where you are' : ''}</>
                 : locError
-                  ? locError
+                  ? (error ? 'Type where you are starting from, then where you are going.' : `${locError} ${TYPE_START}`)
                   : 'Type where you are going. We start from where you are — or type “Yaba to Ikeja” to start somewhere else.'}
         </p>
 
